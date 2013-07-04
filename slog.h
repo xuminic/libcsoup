@@ -1,7 +1,7 @@
 /* README:
 Debug level is 0-7 using Bit2 to Bit0 in the control word
-  0: unmaskable, no buffer output (for show-off printf like information)
-  1: unmaskable error, buffered output (when error occur)
+  0: unmaskable, unbuffered output (for show-off printf like information)
+  1: unmaskable error, unbuffered output (when error occur)
   2: warning, buffered output (something might be functionably problem, 
      like server returned not-so-good results. the program itself should 
      be still intact)
@@ -13,7 +13,7 @@ Debug level is 0-7 using Bit2 to Bit0 in the control word
      running detailly inside a function)
 
 Module indicator uses Bit31 to Bit3 in the control word 
-(29 bits supports 29 modules at most)
+(29 bits supports 29 modules at most, reserved)
 
 
 slog_init(int default);
@@ -61,10 +61,24 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_LVL_INFO		3
 #define SLOG_LVL_DEBUG		4
 #define SLOG_LVL_PROGRAM	5
-#define SLOG_LVL_BLOCK		6
+#define SLOG_LVL_MODULE		6
 #define SLOG_LVL_FUNC		7
+#define SLOG_LVL_MASK		7
 
+#define SLOG_LEVEL(x)	((x) & SLOG_LVL_MASK)
+#define SLOG_MODULE(x)	((x) & ~SLOG_LVL_MASK)
 
+/* short name of slog debug level */
+#define SLSHOW		SLOG_LVL_SHOWOFF
+#define SLERR		SLOG_LVL_ERROR
+#define SLWARN		SLOG_LVL_WARNING
+#define SLINFO		SLOG_LVL_INFO
+#define SLDBG		SLOG_LVL_DEBUG
+#define SLPROG		SLOG_LVL_PROGRAM
+#define SLMOD		SLOG_LVL_MODULE
+#define SLFUNC		SLOG_LVL_FUNC
+
+/* device bit mask */
 #define SLOG_TO_STDOUT		1
 #define SLOG_TO_STDERR		2
 #define SLOG_TO_FILE		4
@@ -76,26 +90,24 @@ typedef	struct		{
 	unsigned	device;
 
 	char	*filename;
-	int	logd;
+	FILE	*logd;
 
 } SMMDBG;
 
-#define SLOG_LEVEL(x)	((x) & 7)
-#define SLOG_MODULE(x)	((x) & ~7)
 
+void *slog_open(int cword);
+int slog_close(void *control);
+unsigned slog_control_word_read(void *control);
+unsigned slog_control_word_write(void *control, unsigned cword);
+int slog_level_read(void *control);
+int slog_level_write(void *control, int dbg_lvl);
+int slog_bind_stdout(void *control);
+int slog_unbind_stdout(void *control);
+int slog_bind_stderr(void *control);
+int slog_unbind_stderr(void *control);
+int slog_bind_file(void *control, char *fname, int append);
+int slog_unbind_file(void *control);
 
-void slog_init(int cword);
-void slog_destroy(void);
-unsigned slog_control_word_read(void);
-unsigned slog_control_word_write(unsigned cword);
-int slog_level_read(void);
-int slog_level_write(int dbg_lvl);
-int slog_bind_stdout(void);
-int slog_unbind_stdout(void);
-int slog_bind_stderr(void);
-int slog_unbind_stderr(void);
-int slog_bind_file(char *fname, int append);
-int slog_unbind_file(void);
 int slog(int cw, char *fmt, ...);
 
 

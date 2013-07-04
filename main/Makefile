@@ -3,7 +3,7 @@ include ../Make.conf
 
 CFLAGS	+= -I..
 
-SRCS	= main.c fixtoken.c smm.c memdump.c
+SRCS	= main.c fixtoken.c smm.c memdump.c slog.c
 
 TARGET	= csoup
 
