@@ -8,7 +8,7 @@
 
 /*  smm.h - head file of the SMM library
 
-    Copyright (C) 2011  "Andy Xuming" <xuming@users.sourceforge.net>
+    Copyright (C) 2011-2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
     This file is part of LIBSMM, System Masquerade Module library
 

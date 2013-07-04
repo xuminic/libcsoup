@@ -1,5 +1,5 @@
 
-/* Copyright (C) 1998-2009  Xuming <xuming@users.sourceforge.net>
+/* Copyright (C) 1998-2013  Xuming <xuming@users.sourceforge.net>
    
    This program is free software; you can redistribute it and/or 
    modify it under the terms of the GNU General Public License as 

@@ -1,7 +1,7 @@
 
 /*  cliopt.h - command line option helps
 
-    Copyright (C) 2011  "Andy Xuming" <xuming@users.sourceforge.net>
+    Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
     This file is part of EZTHUMB, a utility to generate thumbnails
 
@@ -48,9 +48,18 @@ struct	cliopt	{
 	char	*comment;
 };
 
+struct	clirun	{
+	int	optind;
+	char	*optarg;
+	int	argc;
+	char	**argv;
+};
+
 char *cli_alloc_list(struct cliopt *optbl);
 void *cli_alloc_table(struct cliopt *optbl);
 int  cli_print(struct cliopt *optbl);
 
+void *cli_setopt(struct clirun *rtbuf, int argc, char **argv);
+int cli_getopt(struct clirun *rtbuf, struct cliopt *optbl);
 
 #endif	/* _CLI_OPTION_H_ */

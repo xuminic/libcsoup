@@ -1,5 +1,4 @@
-
-/*  main.c
+/*  memdump.c - test harness of memdump()
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -25,45 +24,21 @@
 #include "libcsoup.h"
 
 
-extern int fixtoken_main(int argc, char **argv);
-extern int smm_main(int argc, char **argv);
-extern int memdump_main(int argc, char **argv);
-
-static	struct	{
-	char	*cmd;
-	int	(*entry)(int argc, char **argv);
-	char	*comment;
-} cmdlist[] = {
-	{ "fixtoken", fixtoken_main, NULL },
-	{ "smm", smm_main, NULL },
-	{ "memdump", memdump_main, NULL },
-	{ NULL, NULL, NULL }
-};
-
-
-static void usage(void)
+int memdump_main(int argc, char **argv)
 {
+	char	user[384];
 	int	i;
 
-	printf("Usage: csoup COMMAND [args ...]\n");
-	for (i = 0; cmdlist[i].cmd; i++) {
-		printf("  %-20s %s\n", cmdlist[i].cmd,
-				cmdlist[i].comment ? cmdlist[i].comment : "");
-	}
-}
+	for (i = 0; i < sizeof(user); user[i] = i, i++);
 
-int main(int argc, char **argv)
-{
-	int	i;
-
-	if (argc > 1) {
-		for (i = 0; cmdlist[i].cmd; i++) {
-			if (!strcmp(argv[1], cmdlist[i].cmd)) {
-				return cmdlist[i].entry(--argc, ++argv);
-			}
-		}
-	}
-	usage();
-	return -1;
+	memdump(user, sizeof(user), 16, 7);
+	memdump(user, sizeof(user), 8, 16);
+	memdump(user, sizeof(user), 6, 32);
+	memdump(user, sizeof(user), 3, 64);
+	memdump(user+sizeof(user), -(int)(sizeof(user)), 6, 32);
+	memdump(user+sizeof(user), -(int)(sizeof(user)), 16, 8);
+	printf("sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld\n",
+			sizeof(int), sizeof(long), sizeof(short), sizeof(long long), sizeof(long int));
+	return 0;
 }
 

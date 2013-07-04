@@ -1,6 +1,6 @@
 /*  libcsoup.h - main head file for the CSOUP library
 
-    Copyright (C) 2011  "Andy Xuming" <xuming@users.sourceforge.net>
+    Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
     This file is part of CSOUP, Chicken Soup library
 
@@ -30,6 +30,18 @@ int fixtoken(char *sour, char **idx, int ids, char *delim);
 int ziptoken(char *sour, char **idx, int ids, char *delim);
 int isdelim(char *delim, int ch);
 int mkargv(char *sour, char **idx, int ids);
+
+/* see csoup_cmp_file_extname.c */
+int csoup_cmp_file_extname(char *fname, char *ext);
+int csoup_cmp_file_extlist(char *fname, char **ext);
+int csoup_cmp_file_extargs(char *fname, char *ext, ...);
+
+/* see csoup_strcmp_list.c */
+int csoup_strcmp_list(char *dest, char *src, ...);
+
+/* see memdump.c */
+int memdump(void *mem, int range, int column, int mode);
+
 
 #endif	/* _LIBCSOUP_H_ */
 
