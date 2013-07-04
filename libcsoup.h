@@ -21,6 +21,8 @@
 #ifndef	_LIBCSOUP_H_
 #define _LIBCSOUP_H_
 
+#define LIBCSOUP_VERSION	"1.0.0"
+
 #include "cliopt.h"
 #include "slog.h"
 #include "smm.h"

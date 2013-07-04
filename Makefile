@@ -1,6 +1,10 @@
 
 include Make.conf
 
+ifndef	RELCS
+RELCS	= libcsoup-`grep LIBCSOUP_VERSION libcsoup.h | cut -d\" -f 2`
+endif
+
 TARGET	= libcsoup.a
 
 %.o: %.c
@@ -30,5 +34,10 @@ clean:
 	make -C smm clean
 	$(RM) $(TARGET)
 
-
-
+release:
+	if [ -d $(RELCS) ]; then $(RM) -r $(RELCS); fi
+	-mkdir $(RELCS)
+	$(CP) *.h Make* $(RELCS)
+	$(CP) -a misc slog smm main $(RELCS)
+	make -C $(RELCS) clean
+	make -C $(RELCS)/main clean
