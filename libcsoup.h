@@ -28,6 +28,7 @@
 #include "smm.h"
 
 size_t strlcopy(char *dst, const char *src, size_t siz);
+char *strcpy_alloc(const char *src);
 int fixtoken(char *sour, char **idx, int ids, char *delim);
 int ziptoken(char *sour, char **idx, int ids, char *delim);
 int isdelim(char *delim, int ch);

@@ -15,6 +15,7 @@ SRCS	:= cli_alloc_getopt.c	\
 	  isdelim.c		\
 	  memdump.c		\
 	  mkargs.c		\
+	  strcpy_alloc.c	\
 	  strlcopy.c		\
 	  ziptoken.c
 

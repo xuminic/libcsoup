@@ -42,11 +42,10 @@ struct clirun *cli_alloc_getopt(struct cliopt *optbl)
 	rtbuf->optarg = (char*) &rtbuf->oplst[n];
 	for (n = k = 0; (rc = cli_type(optbl)) != CLI_EOL; optbl++) {
 		if (rc & CLI_SHORT) {
-			rtbuf->optarg[n*2] = optbl->opt_char;
+			rtbuf->optarg[n++] = optbl->opt_char;
 			if (optbl->param > 0) {
-				rtbuf->optarg[n*2+1] = ':';
+				rtbuf->optarg[n++] = ':';
 			}
-			n++;
 		}
 		if (rc & CLI_LONG) {
 			rtbuf->oplst[k].name    = optbl->opt_long;
