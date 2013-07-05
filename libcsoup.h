@@ -45,6 +45,16 @@ int csoup_strcmp_list(char *dest, char *src, ...);
 /* see memdump.c */
 int memdump(void *mem, int range, int column, int mode);
 
+/* see crc*.c */
+unsigned short crc16_byte(unsigned short crc, unsigned char data);
+unsigned short crc16(unsigned short crc, unsigned char *buf, size_t len);
+unsigned crc32_byte(unsigned crc, unsigned char data);
+unsigned crc32(unsigned crc, unsigned char *buf, size_t len);
+unsigned char crc8_byte(unsigned char crc, unsigned char data);
+unsigned char crc8(unsigned char crc, unsigned char *buf, size_t len);
+unsigned short crc_ccitt_byte(unsigned short crc, unsigned char c);
+unsigned short crc_ccitt(unsigned short crc, unsigned char *buf, size_t len);
+
 
 #endif	/* _LIBCSOUP_H_ */
 
