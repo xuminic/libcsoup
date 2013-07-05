@@ -24,18 +24,34 @@
 
 #include "libcsoup.h"
 
+extern SMMDBG  *tstdbg;
+FILE	*fp;
+
+static int my_stdout(int flush, char *buf, int len)
+{
+	if (fp == NULL) {
+		return 0;
+	}
+	if (buf) {
+		len = fwrite(buf, len, 1, fp);
+	}
+	if (flush) {
+		fflush(fp);
+	}
+	return len;
+}
 
 int slog_main(int argc, char **argv)
 {
 	int	i, level, control;
 
-	printf("## slog can be used before initialized\n");
+	slogc(tstdbg, SLINFO, "## slog can be used before initialized\n");
 	level = SLSHOW;
 	slog(level, "%d: this is a test before initialing\n", level);
 	level = SLFUNC;
 	slog(level, "%d: this is a test before initialing\n", level);
 
-	printf("## once opened the slog, it prints by debug level\n");
+	slogc(tstdbg, SLINFO, "## once opened the slog, it prints by debug level\n");
 	control = SLINFO;
 	slog_open(control);
 	for (i = 0; i < 8; i++) {
@@ -43,14 +59,14 @@ int slog_main(int argc, char **argv)
 	}
 
 	control = SLFUNC;
-	printf("## change debug level to %d\n", control);
+	slogc(tstdbg, SLINFO, "## change debug level to %d\n", control);
 	slog_level_write(NULL, control);
 	for (i = 0; i < 8; i++) {
 		slog(i, "%d/%d: debug level test\n", i, control);
 	}
 
-	/*
-	printf("## unbuffered mode test\n");
+#if 0
+	slogc(tstdbg, SLINFO, "## unbuffered mode test\n");
 	level = SLSHOW;
 	slog(level, "%d: unbuffered ", level);
 	for (i = 0; i < 4; i++) {
@@ -72,38 +88,56 @@ int slog_main(int argc, char **argv)
 		sleep(1);
 	}
 	slog(level, "\n");
-	*/
+#endif
 
-
-	printf("## slog binded to stdout by default. now bind to stderr\n");
-	slog_bind_stderr(NULL);
+	slogc(tstdbg, SLINFO, "## slog binded to stdout by default. now bind to stderr\n");
+	slog_bind_stderr(NULL, NULL);
 	level = SLINFO;
 	slog_level_write(NULL, level);
 	slog(level, "%d/%d: debug level test\n", level, slog_level_read(NULL));	
 
-	printf("## unbinded the stdout\n");
+	slogc(tstdbg, SLINFO, "## unbinded the stdout\n");
 	slog_unbind_stdout(NULL);
 	slog(level, "%d/%d: debug level test\n", level, slog_level_read(NULL));	
 
-	printf("## unbinded the stderr then save everything to file\n");
+	slogc(tstdbg, SLINFO, "## unbinded the stderr then save everything to file\n");
 	slog_unbind_stderr(NULL);
 	slog_bind_file(NULL, "logfile", 0);
 	for (i = 0; i < 8; i++) {
 		slog(i, "%d/%d: debug level test\n", i, slog_level_read(NULL));
 	}
 
-	printf("## unbinded the file and rebind the stdout\n");
+	slogc(tstdbg, SLINFO, "## unbinded the file and rebind the stdout\n");
 	slog_unbind_file(NULL);
-	slog_bind_stdout(NULL);
+	slog_bind_stdout(NULL, NULL);
 	for (i = 8; i >= 0; i--) {
 		slog(i, "%d/%d: debug level test\n", i, slog_level_read(NULL));
 	}
 
-	printf("## bind both file and the stdout\n");
+	slogc(tstdbg, SLINFO, "## bind both file and the stdout\n");
 	slog_bind_file(NULL, "logfile", 1);
 	for (i = 0; i < 8; i++) {
 		slog(i, "%d/%d: debug level test\n", i, slog_level_read(NULL));
 	}
+
+	slogc(tstdbg, SLINFO, "## unbind file and rebind stdout to file logfile2\n");
+	slog_unbind_file(NULL);
+	slog_bind_stdout(NULL, my_stdout);
+	for (i = 0; i < 8; i++) {
+		slog(i, "%d/%d: debug level test\n", i, slog_level_read(NULL));
+	}
+	slogc(tstdbg, SLINFO, "## then open logfile2\n");
+	fp = fopen("logfile2", "w");
+	for (i = 0; i < 8; i++) {
+		slog(i, "%d/%d: debug level test\n", i, slog_level_read(NULL));
+	}
+	fclose(fp);	/* must close it first before unbind it */
+	slogc(tstdbg, SLINFO, "## recover the default stdout\n");
+	slog_bind_stdout(NULL, (F_STD) -1);
+	for (i = 0; i < 8; i++) {
+		slog(i, "%d/%d: debug level test\n", i, slog_level_read(NULL));
+	}
+	
 
 	slog_close(NULL);
 	return 0;

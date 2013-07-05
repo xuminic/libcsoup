@@ -1,16 +1,16 @@
 
-/*  cliopt.h - command line option helps
+/*  cliopt.h - command line option utility
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
-    This file is part of EZTHUMB, a utility to generate thumbnails
+    This file is part of CSOUP, Chicken Soup library
 
-    EZTHUMB is free software: you can redistribute it and/or modify
+    CSOUP is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    EZTHUMB is distributed in the hope that it will be useful,
+    CSOUP is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -53,13 +53,28 @@ struct	clirun	{
 	char	*optarg;
 	int	argc;
 	char	**argv;
+	struct	option	oplst[1];
 };
 
-char *cli_alloc_list(struct cliopt *optbl);
-void *cli_alloc_table(struct cliopt *optbl);
-int  cli_print(struct cliopt *optbl);
 
+/* see cliopt.c */
+int cli_type(struct cliopt *optbl);
+int cli_table_size(struct cliopt *optbl);
+int cli_print(struct cliopt *optbl);
+
+/* see cli_alloc_getopt.c */
+struct clirun *cli_alloc_getopt(struct cliopt *optbl);
+
+/* see cli_alloc_list.c */
+char *cli_alloc_list(struct cliopt *optbl);
+
+/* see cli_alloc_table.c */
+void *cli_alloc_table(struct cliopt *optbl);
+
+/* see cli_getopt.c */
 void *cli_setopt(struct clirun *rtbuf, int argc, char **argv);
 int cli_getopt(struct clirun *rtbuf, struct cliopt *optbl);
 
 #endif	/* _CLI_OPTION_H_ */
+
+

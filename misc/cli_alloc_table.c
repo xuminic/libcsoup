@@ -1,6 +1,7 @@
-/*  memdump.c - test harness of memdump()
 
-    Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
+/*  cli_alloc_table.c- command line option utility
+
+    Copyright (C) 2011-2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
     This file is part of CSOUP, Chicken Soup library
 
@@ -18,28 +19,33 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include "libcsoup.h"
+#include "cliopt.h"
 
-extern SMMDBG  *tstdbg;
 
-int memdump_main(int argc, char **argv)
+void *cli_alloc_table(struct cliopt *optbl)
 {
-	char	user[384];
-	int	i;
+	struct	option	*table, *p;
+	int	rc;
 
-	for (i = 0; i < sizeof(user); user[i] = i, i++);
+	table = calloc(cli_table_size(optbl) + 1, sizeof(struct option));
+	if (table == NULL) {
+		return NULL;
+	}
 
-	memdump(user, sizeof(user), 16, 7);
-	memdump(user, sizeof(user), 8, 16);
-	memdump(user, sizeof(user), 6, 32);
-	memdump(user, sizeof(user), 3, 64);
-	memdump(user+sizeof(user), -(int)(sizeof(user)), 6, 32);
-	memdump(user+sizeof(user), -(int)(sizeof(user)), 16, 8);
-	slogc(tstdbg, SLINFO, "sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld\n",
-			sizeof(int), sizeof(long), sizeof(short), sizeof(long long), sizeof(long int));
-	return 0;
+	for (p = table; (rc = cli_type(optbl)) != CLI_EOL; optbl++) {
+		if (rc & CLI_LONG) {
+			p->name    = optbl->opt_long;
+			p->has_arg = optbl->param > 0 ? 1 : 0;
+			p->val     = optbl->opt_char;
+			p++;
+		}
+	}
+	return (void*) table;
 }
 

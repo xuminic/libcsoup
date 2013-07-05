@@ -32,13 +32,45 @@
 
 static	SMMDBG	*SlogCB = NULL;
 
+static int slog_def_stdout(int flush, char *buf, int len)
+{
+	if (buf) {
+		len = fwrite(buf, len, 1, stdout);
+	}
+	if (flush) {
+		fflush(stdout);
+	}
+	return len;
+}
+
+static int slog_def_stderr(int flush, char *buf, int len)
+{
+	if (buf) {
+		len = fwrite(buf, len, 1, stderr);
+	}
+	if (flush) {
+		fflush(stderr);
+	}
+	return len;
+}
+
+
+
 void *slog_open(int cword)
 {
-	if ((SlogCB = calloc(sizeof(SMMDBG), 1)) != NULL) {
-		SlogCB->control = (unsigned) cword;
-		SlogCB->device  = SLOG_TO_STDOUT;
+	SMMDBG	*dbgc;
+
+	if ((dbgc = calloc(sizeof(SMMDBG), 1)) != NULL) {
+		dbgc->control = (unsigned) cword;
+		dbgc->device  = SLOG_TO_STDOUT;
+
+		dbgc->stdoutput = slog_def_stdout;
+		dbgc->stderrput = slog_def_stderr;
 	}
-	return SlogCB;
+
+	SlogCB = dbgc;		/* so far so good ... */
+
+	return dbgc;
 }
 
 int slog_close(void *control)
@@ -52,10 +84,10 @@ int slog_close(void *control)
 	}
 
 	if (dbgc->device & SLOG_TO_STDOUT) {
-		fflush(stdout);
+		dbgc->stdoutput(1, NULL, 0);
 	}
 	if (dbgc->device & SLOG_TO_STDERR) {
-		fflush(stderr);
+		dbgc->stderrput(1, NULL, 0);
 	}
 	if (dbgc->device & SLOG_TO_FILE) {
 		fflush(dbgc->logd);
@@ -126,7 +158,7 @@ int slog_level_write(void *control, int dbg_lvl)
 	return tmp;
 }
 
-int slog_bind_stdout(void *control)
+int slog_bind_stdout(void *control, F_STD func)
 {
 	SMMDBG	*dbgc = control;
 
@@ -135,7 +167,13 @@ int slog_bind_stdout(void *control)
 			return -1;
 		}
 	}
+
 	dbgc->device |= SLOG_TO_STDOUT;
+	if (func == (F_STD) -1) {
+		dbgc->stdoutput = slog_def_stdout;
+	} else if (func) {
+		dbgc->stdoutput = func;
+	}
 	return 0;
 }
 
@@ -148,12 +186,13 @@ int slog_unbind_stdout(void *control)
 			return -1;
 		}
 	}
-	fflush(stdout);
+	
+	dbgc->stdoutput(1, NULL, 0);
 	dbgc->device &= ~SLOG_TO_STDOUT;
 	return 0;
 }
 
-int slog_bind_stderr(void *control)
+int slog_bind_stderr(void *control, F_STD func)
 {
 	SMMDBG	*dbgc = control;
 
@@ -162,7 +201,13 @@ int slog_bind_stderr(void *control)
 			return -1;
 		}
 	}
+
 	dbgc->device |= SLOG_TO_STDERR;
+	if (func == (F_STD) -1) {
+		dbgc->stderrput = slog_def_stderr;
+	} else if (func) {
+		dbgc->stderrput = func;
+	}
 	return 0;
 }
 
@@ -175,7 +220,8 @@ int slog_unbind_stderr(void *control)
 			return -1;
 		}
 	}
-	fflush(stderr);
+
+	dbgc->stderrput(1, NULL, 0);
 	dbgc->device &= ~SLOG_TO_STDERR;
 	return 0;
 }
@@ -269,6 +315,38 @@ int slog_unbind_window(void *control)
 	return 0;
 }
 
+
+int slog_output(SMMDBG *dbgc, int cw, char *buf, int len)
+{
+	if (dbgc == NULL) {	/* ignore the control */
+		len = slog_def_stdout(0, buf, len);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			slog_def_stdout(1, NULL, 0);
+		}
+		return len;
+	}
+
+	if (dbgc->device & SLOG_TO_STDOUT) {
+		len = dbgc->stdoutput(0, buf, len);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			dbgc->stdoutput(1, NULL, 0);
+		}
+	}
+	if (dbgc->device & SLOG_TO_STDERR) {
+		len = dbgc->stderrput(0, buf, len);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			dbgc->stderrput(1, NULL, 0);
+		}
+	}
+	if (dbgc->device & SLOG_TO_FILE) {
+		len = fwrite(buf, len, 1, dbgc->logd);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			fflush(dbgc->logd);
+		}
+	}
+	return len;
+}
+
 int slog(int cw, char *fmt, ...)
 {
 	SMMDBG	*dbgc = SlogCB;
@@ -286,33 +364,41 @@ int slog(int cw, char *fmt, ...)
 	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
 	va_end(ap);
 
-	if (dbgc == NULL) {	/* ignore the control */
-		fwrite(logbuf, n, 1, stdout);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			fflush(stdout);
+	return slog_output(dbgc, cw, logbuf, n);
+}
+
+int slogc(void *control, int cw, char *fmt, ...)
+{
+	SMMDBG	*dbgc = control;
+	char	logbuf[SLOG_BUFFER];
+	int	n;
+	va_list	ap;
+
+	if ((SLOG_LEVEL(cw) > SLOG_LVL_ERROR) && (dbgc != NULL))  {
+		if (SLOG_LEVEL(cw) > SLOG_LEVEL(dbgc->control)) {
+			return 0;
 		}
-		return n;
 	}
 
-	if (dbgc->device & SLOG_TO_STDOUT) {
-		fwrite(logbuf, n, 1, stdout);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			fflush(stdout);
+	va_start(ap, fmt);
+	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
+	va_end(ap);
+
+	return slog_output(dbgc, cw, logbuf, n);
+}
+
+
+int slogs(void *control, int cw, char *buf, int len)
+{
+	SMMDBG	*dbgc = control;
+
+	if ((SLOG_LEVEL(cw) > SLOG_LVL_ERROR) && (dbgc != NULL))  {
+		if (SLOG_LEVEL(cw) > SLOG_LEVEL(dbgc->control)) {
+			return 0;
 		}
 	}
-	if (dbgc->device & SLOG_TO_STDERR) {
-		fwrite(logbuf, n, 1, stderr);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			fflush(stderr);
-		}
-	}
-	if (dbgc->device & SLOG_TO_FILE) {
-		fwrite(logbuf, n, 1, dbgc->logd);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			fflush(dbgc->logd);
-		}
-	}
-	return n;
+
+	return slog_output(dbgc, cw, buf, len);
 }
 
 

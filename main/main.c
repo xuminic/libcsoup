@@ -25,6 +25,8 @@
 #include "libcsoup.h"
 
 
+SMMDBG	*tstdbg = NULL;
+
 extern int fixtoken_main(int argc, char **argv);
 extern int smm_main(int argc, char **argv);
 extern int memdump_main(int argc, char **argv);
@@ -47,9 +49,9 @@ static void usage(void)
 {
 	int	i;
 
-	printf("Usage: csoup COMMAND [args ...]\n");
+	slogc(tstdbg, SLINFO, "Usage: csoup COMMAND [args ...]\n");
 	for (i = 0; cmdlist[i].cmd; i++) {
-		printf("  %-20s %s\n", cmdlist[i].cmd,
+		slogc(tstdbg, SLINFO, "  %-20s %s\n", cmdlist[i].cmd,
 				cmdlist[i].comment ? cmdlist[i].comment : "");
 	}
 }
@@ -57,6 +59,8 @@ static void usage(void)
 int main(int argc, char **argv)
 {
 	int	i;
+
+	tstdbg = slog_open(SLINFO);
 
 	if (argc > 1) {
 		for (i = 0; cmdlist[i].cmd; i++) {
@@ -66,6 +70,8 @@ int main(int argc, char **argv)
 		}
 	}
 	usage();
+	
+	slog_close(tstdbg);
 	return -1;
 }
 

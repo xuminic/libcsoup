@@ -2,7 +2,7 @@
 include Make.conf
 
 ifndef	RELCS
-RELCS	= libcsoup-`grep LIBCSOUP_VERSION libcsoup.h | cut -d\" -f 2`
+RELCS	= libcsoup-$(shell version.sh)
 endif
 
 TARGET	= libcsoup.a
@@ -41,3 +41,5 @@ release:
 	$(CP) -a misc slog smm main $(RELCS)
 	make -C $(RELCS) clean
 	make -C $(RELCS)/main clean
+
+

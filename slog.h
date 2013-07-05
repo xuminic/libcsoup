@@ -84,6 +84,11 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_TO_FILE		4
 #define SLOG_TO_SOCKET		8
 #define SLOG_TO_WINDOW		16
+#define SLOG_TO_UNBUF		0x8000
+
+
+typedef int (*F_STD)(int, char*, int);
+
 
 typedef	struct		{
 	unsigned	control;	/* module mask and level */
@@ -92,6 +97,8 @@ typedef	struct		{
 	char	*filename;
 	FILE	*logd;
 
+	F_STD	stdoutput;
+	F_STD	stderrput;
 } SMMDBG;
 
 
@@ -101,14 +108,16 @@ unsigned slog_control_word_read(void *control);
 unsigned slog_control_word_write(void *control, unsigned cword);
 int slog_level_read(void *control);
 int slog_level_write(void *control, int dbg_lvl);
-int slog_bind_stdout(void *control);
+int slog_bind_stdout(void *control, F_STD func);
 int slog_unbind_stdout(void *control);
-int slog_bind_stderr(void *control);
+int slog_bind_stderr(void *control, F_STD func);
 int slog_unbind_stderr(void *control);
 int slog_bind_file(void *control, char *fname, int append);
 int slog_unbind_file(void *control);
 
 int slog(int cw, char *fmt, ...);
+int slogc(void *control, int cw, char *fmt, ...);
+int slogs(void *control, int cw, char *buf, int len);
 
 
 #endif	/* _SLOG_H_ */

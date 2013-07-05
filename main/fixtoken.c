@@ -24,6 +24,7 @@
 
 #include "libcsoup.h"
 
+extern SMMDBG  *tstdbg;
 
 static	struct	{
 	char	*delim;
@@ -39,31 +40,31 @@ static int fixtoken_test(char *content, char *delim)
 	char	buf[256], *argv[32];
 	int	i, argc;
 
-	printf("PARSING   {%s} by {%s}\n", content, delim);
+	slogc(tstdbg, SLINFO, "PARSING   {%s} by {%s}\n", content, delim);
 
 	strcpy(buf, content);
 	argc = fixtoken(buf, argv, sizeof(argv)/sizeof(char*), delim);
-	printf("FIXTOKEN: ");
+	slogc(tstdbg, SLINFO, "FIXTOKEN: ");
 	for (i = 0; i < argc; i++) {
-		printf("{%s} ", argv[i]);
+		slogc(tstdbg, SLINFO, "{%s} ", argv[i]);
 	}
-	printf("\n");
+	slogc(tstdbg, SLINFO, "\n");
 
 	strcpy(buf, content);
 	argc = ziptoken(buf, argv, sizeof(argv)/sizeof(char*), delim);
-	printf("ZIPTOKEN: ");
+	slogc(tstdbg, SLINFO, "ZIPTOKEN: ");
 	for (i = 0; i < argc; i++) {
-		printf("{%s} ", argv[i]);
+		slogc(tstdbg, SLINFO, "{%s} ", argv[i]);
 	}
-	printf("\n");
+	slogc(tstdbg, SLINFO, "\n");
 
 	strcpy(buf, content);
 	argc = mkargv(buf, argv, sizeof(argv)/sizeof(char*));
-	printf("MKARGV:   ");
+	slogc(tstdbg, SLINFO, "MKARGV:   ");
 	for (i = 0; i < argc; i++) {
-		printf("{%s} ", argv[i]);
+		slogc(tstdbg, SLINFO, "{%s} ", argv[i]);
 	}
-	printf("\n\n");
+	slogc(tstdbg, SLINFO, "\n\n");
 	return 0;
 }
 
@@ -71,9 +72,9 @@ static int fixtoken_run(void)
 {
 	char	buf[256];
 
-	printf("Press Ctrl-D or 'quit' command to quit.\n");
+	slogc(tstdbg, SLINFO, "Press Ctrl-D or 'quit' command to quit.\n");
 	while (1) {
-		printf("IN> ");
+		slogc(tstdbg, SLINFO, "IN> ");
 		if (fgets(buf, 256, stdin) == NULL) {
 			break;
 		}
@@ -95,12 +96,12 @@ int fixtoken_main(int argc, char **argv)
 
 	while (--argc && (**++argv == '-')) {
 		if (!strcmp(*argv, "-h") || !strcmp(*argv, "--help")) {
-			printf("fixtoken [--help] [--runtime]\n");
+			slogc(tstdbg, SLINFO, "fixtoken [--help] [--runtime]\n");
 			return 0;
 		} else if (!strcmp(*argv, "--runtime")) {
 			return fixtoken_run();
 		} else {
-			printf("Unknown option. [%s]\n", *argv);
+			slogc(tstdbg, SLINFO, "Unknown option. [%s]\n", *argv);
 			return -1;
 		}
 	}

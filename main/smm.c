@@ -28,10 +28,11 @@
 
 #define VERSION	"0.1"
 
+extern SMMDBG  *tstdbg;
 
 static int do_signal_break(int sig)
 {
-	printf("Signal %d received\n", sig);
+	slogc(tstdbg, SLINFO, "Signal %d received\n", sig);
 	return sig;
 }
 
@@ -43,12 +44,12 @@ static int do_smm_chdir(char *path)
 	rc = smm_chdir(path);
 	
 	cwd = smm_cwd_alloc();
-	printf("Enter: %s\n", cwd);
+	slogc(tstdbg, SLINFO, "Enter: %s\n", cwd);
 	free(cwd);
 
-	printf("Press any key to continue ... ");
+	slogc(tstdbg, SLINFO, "Press any key to continue ... ");
 	getchar();
-	printf("(%d)\n", rc);
+	slogc(tstdbg, SLINFO, "(%d)\n", rc);
 	return 0;
 }
 
@@ -58,25 +59,25 @@ static int do_push_dir(char *path)
 	int	rc;
 
 	cwd = smm_cwd_alloc();
-	printf("Current: %s\n", cwd);
+	slogc(tstdbg, SLINFO, "Current: %s\n", cwd);
 	free(cwd);
 
 	cid = smm_cwd_push();
 	
 	rc = smm_chdir(path);
 	cwd = smm_cwd_alloc();
-	printf("Enter: %s\n", cwd);
+	slogc(tstdbg, SLINFO, "Enter: %s\n", cwd);
 	free(cwd);
 
 	smm_cwd_pop(cid);
 	
 	cwd = smm_cwd_alloc();
-	printf("Return: %s\n", cwd);
+	slogc(tstdbg, SLINFO, "Return: %s\n", cwd);
 	free(cwd);
 
-	printf("Press any key to continue ... ");
+	slogc(tstdbg, SLINFO, "Press any key to continue ... ");
 	getchar();
-	printf("(%d)\n", rc);
+	slogc(tstdbg, SLINFO, "(%d)\n", rc);
 	return 0;
 }
 
@@ -87,19 +88,19 @@ static int do_stat_file(char *path)
 	rc = smm_fstat(path);
 	switch (rc) {
 	case SMM_FSTAT_REGULAR:
-		printf("%s: regular\n", path);
+		slogc(tstdbg, SLINFO, "%s: regular\n", path);
 		break;
 	case SMM_FSTAT_DIR:
-		printf("%s: directory\n", path);
+		slogc(tstdbg, SLINFO, "%s: directory\n", path);
 		break;
 	case SMM_FSTAT_LINK:
-		printf("%s: link\n", path);
+		slogc(tstdbg, SLINFO, "%s: link\n", path);
 		break;
 	case SMM_FSTAT_DEVICE:
-		printf("%s: device\n", path);
+		slogc(tstdbg, SLINFO, "%s: device\n", path);
 		break;
 	}
-	printf("(%d)\n", rc);
+	slogc(tstdbg, SLINFO, "(%d)\n", rc);
 	return 0;
 }
 
@@ -110,17 +111,17 @@ static int pathtrek_cb(void *option, char *path, int type, void *info)
 
 	switch (type) {
 	case SMM_MSG_PATH_ENTER:
-		printf("Enter %s\n", path);
+		slogc(tstdbg, SLINFO, "Enter %s\n", path);
 		break;
 	case SMM_MSG_PATH_LEAVE:
-		printf("Leave %s (%d:%d)\n", path, 
+		slogc(tstdbg, SLINFO, "Leave %s (%d:%d)\n", path, 
 				sdir->stat_dirs, sdir->stat_files);
 		break;
 	case SMM_MSG_PATH_STAT:
-		printf("Finish (%d:%d)\n", sdir->stat_dirs, sdir->stat_files);
+		slogc(tstdbg, SLINFO, "Finish (%d:%d)\n", sdir->stat_dirs, sdir->stat_files);
 		break;
 	case SMM_MSG_PATH_EXEC:
-		printf("Processing %s\n", path);
+		slogc(tstdbg, SLINFO, "Processing %s\n", path);
 		break;
 	}
 	return 0;
@@ -131,21 +132,10 @@ static int do_path_trek(char *path, int flags)
 	int	rc;
 
 	rc = smm_pathtrek(path, flags, pathtrek_cb, NULL);
-	printf("(%d)\n", rc);
+	slogc(tstdbg, SLINFO, "(%d)\n", rc);
 	return 0;
 }
 
-
-static  char    *usage = "\
-OPTIONS:\n\
-  -c DIR    change current working directory\n\
-  -p DIR    push/pop current working directory\n\
-  -r DIR    process directory recurrsively\n\
-     --dir-fifo\n\
-     --dir-first\n\
-     --dir-last\n\
-  -s FILE   state of the file \n\
-";
 
 static	struct	cliopt	clist[] = {
 	{   0, NULL,      0, "OPTIONS:" },
@@ -171,23 +161,24 @@ There is NO WARRANTY, to the extent permitted by law.\n";
 
 int smm_main(int argc, char **argv)
 {
-	struct	option	*argtbl;
-	char	*arglist;
+	struct	clirun	*rtbuf;
 	int	c, d_flags;
+
+	if ((rtbuf = cli_alloc_getopt(clist)) == NULL) {
+		return -1;
+	}
 
 	smm_init(0);
 	smm_signal_break(do_signal_break);
 
-	arglist = cli_alloc_list(clist);
-	argtbl  = cli_alloc_table(clist);
 	d_flags = SMM_PATH_DIR_FIFO;
-	while ((c = getopt_long(argc, argv, arglist, argtbl, NULL)) > 0) {
+	while ((c = getopt_long(argc, argv, rtbuf->optarg, rtbuf->oplst, NULL)) > 0) {
 		switch (c) {
 		case 1:
-			puts(usage);
+			cli_print(clist);
 			goto quick_quit;
 		case 2:
-			puts(version);
+			slogs(tstdbg, SLINFO, version, strlen(version));
 			goto quick_quit;
 		case 3:
 			d_flags &= ~SMM_PATH_DIR_MASK;
@@ -214,13 +205,12 @@ int smm_main(int argc, char **argv)
 			do_path_trek(*++argv, d_flags);
 			break;
 		default:
-			printf("Unknown option. [%c]\n", c);
+			slogc(tstdbg, SLINFO, "Unknown option. [%c]\n", c);
 			goto quick_quit;
 		}
 	}
 quick_quit:
-	free(argtbl);
-	free(arglist);
+	free(rtbuf);
 	return 0;
 }
 
