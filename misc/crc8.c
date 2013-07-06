@@ -51,15 +51,17 @@ static unsigned char const crc8_table[256] = {
 	0xe6, 0xe1, 0xe8, 0xef, 0xfa, 0xfd, 0xf4, 0xf3
 };
 
-unsigned char crc8_byte(unsigned char crc, unsigned char data)
+unsigned char crc8_byte(unsigned char crc, char data)
 {
-	return crc8_table[crc ^ data];
+	return crc8_table[crc ^ (unsigned char) data];
 }
 
-unsigned char crc8(unsigned char crc, unsigned char *buf, size_t len)
+unsigned char crc8(unsigned char crc, void *buf, size_t len)
 {
+	unsigned char	*p = buf;
+
 	while (len--)
-		crc = crc8_table[crc ^ *buf++];
+		crc = crc8_table[crc ^ *p++];
 	return crc;
 }
 

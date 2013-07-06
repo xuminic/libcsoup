@@ -31,6 +31,7 @@ extern int fixtoken_main(int argc, char **argv);
 extern int smm_main(int argc, char **argv);
 extern int memdump_main(int argc, char **argv);
 extern int slog_main(int argc, char **argv);
+extern int crc_main(int argc, char **argv);
 
 static	struct	{
 	char	*cmd;
@@ -41,6 +42,7 @@ static	struct	{
 	{ "smm", smm_main, NULL },
 	{ "memdump", memdump_main, NULL },
 	{ "slog", slog_main, NULL },
+	{ "crc", crc_main, NULL },
 	{ NULL, NULL, NULL }
 };
 

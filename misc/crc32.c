@@ -84,17 +84,19 @@ static unsigned const crc32_table[256] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-unsigned crc32_byte(unsigned crc, unsigned char data)
+unsigned crc32_byte(unsigned crc, char data)
 {
-	return (crc >> 8) ^ crc32_table[(crc & 0xff) ^ data];
+	return (crc >> 8) ^ crc32_table[(crc & 0xff) ^ (unsigned char) data];
 }
 
-unsigned crc32(unsigned crc, unsigned char *buf, size_t len)
+unsigned crc32(unsigned crc, void *buf, size_t len)
 {
+	unsigned char	*p = buf;
+
 	crc ^= 0xffffffff;
 
 	while (len--)
-		crc = (crc >> 8) ^ crc32_table[(crc & 0xff) ^ *buf++];
+		crc = (crc >> 8) ^ crc32_table[(crc & 0xff) ^ *p++];
 
 	return crc ^ 0xffffffff;
 }
