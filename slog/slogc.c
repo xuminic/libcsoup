@@ -31,8 +31,9 @@
 #include "slog.h"
 
 
-int slog(int cw, char *fmt, ...)
+int slogc(void *control, int cw, char *fmt, ...)
 {
+	SMMDBG	*dbgc = control;
 	char	logbuf[SLOG_BUFFER];
 	int	n;
 	va_list	ap;
@@ -45,16 +46,10 @@ int slog(int cw, char *fmt, ...)
 	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
 	va_end(ap);
 
-	return slog_output(NULL, cw, logbuf, n);
+	return slog_output(dbgc, cw, logbuf, n);
 }
 
-int slos(int cw, char *buf)
-{
-	if (buf && slog_validate(NULL, cw)) {
-		return slog_output(NULL, cw, buf, strlen(buf));
-	}
-	return 0;
-}
+
 
 
 

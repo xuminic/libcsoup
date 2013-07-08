@@ -31,27 +31,10 @@
 #include "slog.h"
 
 
-int slog(int cw, char *fmt, ...)
+int slogs(void *control, int cw, char *buf, int len)
 {
-	char	logbuf[SLOG_BUFFER];
-	int	n;
-	va_list	ap;
-
-	if (!slog_validate(NULL, cw)) {
-		return 0;
-	}
-
-	va_start(ap, fmt);
-	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
-	va_end(ap);
-
-	return slog_output(NULL, cw, logbuf, n);
-}
-
-int slos(int cw, char *buf)
-{
-	if (buf && slog_validate(NULL, cw)) {
-		return slog_output(NULL, cw, buf, strlen(buf));
+	if (slog_validate(control, cw)) {
+		return slog_output(control, cw, buf, len);
 	}
 	return 0;
 }

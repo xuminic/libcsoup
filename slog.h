@@ -87,23 +87,35 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_TO_UNBUF		0x8000
 
 
+#define SLOG_BUFFERED		0
+#define SLOG_NONBUFED		1
+
+
 typedef int (*F_STD)(int, char*, int);
 
 
 typedef	struct		{
-	unsigned	control;	/* module mask and level */
-	unsigned	device;
+	unsigned	cword;		/* control word: modules and level */
+	unsigned	device;		/* mask of output devices */
 
-	char	*filename;
-	FILE	*logd;
+	/* log file as output device */
+	char		*filename;
+	FILE		*logd;
 
-	F_STD	stdoutput;
-	F_STD	stderrput;
+	/* standard i/o as output device */
+	F_STD		stdoutput;
+	F_STD		stderrput;
 } SMMDBG;
 
 
+void slog_def_open(int cword);
+void slog_def_close(void);
+int slog_def_stdout(int flush, char *buf, int len);
+int slog_def_stderr(int flush, char *buf, int len);
 void *slog_open(int cword);
 int slog_close(void *control);
+SMMDBG *slog_control(void *control);
+int slog_validate(SMMDBG *dbgc, int cw);
 unsigned slog_control_word_read(void *control);
 unsigned slog_control_word_write(void *control, unsigned cword);
 int slog_level_read(void *control);
@@ -114,10 +126,12 @@ int slog_bind_stderr(void *control, F_STD func);
 int slog_unbind_stderr(void *control);
 int slog_bind_file(void *control, char *fname, int append);
 int slog_unbind_file(void *control);
-
-int slog(int cw, char *fmt, ...);
+int slog_output(SMMDBG *dbgc, int cw, char *buf, int len);
 int slogc(void *control, int cw, char *fmt, ...);
 int slogs(void *control, int cw, char *buf, int len);
+
+int slog(int cw, char *fmt, ...);
+int slos(int cw, char *buf);
 
 
 #endif	/* _SLOG_H_ */

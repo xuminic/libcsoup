@@ -31,31 +31,34 @@
 #include "slog.h"
 
 
-int slog(int cw, char *fmt, ...)
+int slog_output(SMMDBG *dbgc, int cw, char *buf, int len)
 {
-	char	logbuf[SLOG_BUFFER];
-	int	n;
-	va_list	ap;
-
-	if (!slog_validate(NULL, cw)) {
-		return 0;
+	if (dbgc == NULL) {	/* ignore the control */
+		len = slog_def_stdout(SLOG_BUFFERED, buf, len);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			slog_def_stdout(SLOG_NONBUFED, NULL, 0);
+		}
+		return len;
 	}
 
-	va_start(ap, fmt);
-	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
-	va_end(ap);
-
-	return slog_output(NULL, cw, logbuf, n);
-}
-
-int slos(int cw, char *buf)
-{
-	if (buf && slog_validate(NULL, cw)) {
-		return slog_output(NULL, cw, buf, strlen(buf));
+	if (dbgc->device & SLOG_TO_STDOUT) {
+		len = dbgc->stdoutput(SLOG_BUFFERED, buf, len);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			dbgc->stdoutput(SLOG_NONBUFED, NULL, 0);
+		}
 	}
-	return 0;
+	if (dbgc->device & SLOG_TO_STDERR) {
+		len = dbgc->stderrput(SLOG_BUFFERED, buf, len);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			dbgc->stderrput(SLOG_NONBUFED, NULL, 0);
+		}
+	}
+	if (dbgc->device & SLOG_TO_FILE) {
+		len = fwrite(buf, len, 1, dbgc->logd);
+		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+			fflush(dbgc->logd);
+		}
+	}
+	return len;
 }
-
-
-
 

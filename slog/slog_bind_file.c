@@ -31,31 +31,40 @@
 #include "slog.h"
 
 
-int slog(int cw, char *fmt, ...)
+int slog_bind_file(void *control, char *fname, int append)
 {
-	char	logbuf[SLOG_BUFFER];
-	int	n;
-	va_list	ap;
+	SMMDBG	*dbgc;
 
-	if (!slog_validate(NULL, cw)) {
-		return 0;
+	if ((dbgc = slog_control(control)) == NULL) {
+		return -1;
 	}
 
-	va_start(ap, fmt);
-	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
-	va_end(ap);
-
-	return slog_output(NULL, cw, logbuf, n);
-}
-
-int slos(int cw, char *buf)
-{
-	if (buf && slog_validate(NULL, cw)) {
-		return slog_output(NULL, cw, buf, strlen(buf));
+	if (append) {
+		dbgc->logd = fopen(fname, "a+");
+	} else {
+		dbgc->logd = fopen(fname, "w");
 	}
+	if (dbgc->logd == NULL) {
+		return -2;
+	}
+	
+	dbgc->filename = fname;
+	dbgc->device |= SLOG_TO_FILE;
 	return 0;
 }
 
+int slog_unbind_file(void *control)
+{
+	SMMDBG	*dbgc;
 
+	if ((dbgc = slog_control(control)) == NULL) {
+		return -1;
+	}
 
+	fflush(dbgc->logd);
+	fclose(dbgc->logd);
+	dbgc->filename = NULL;
+	dbgc->device &= ~SLOG_TO_FILE;
+	return 0;
+}
 

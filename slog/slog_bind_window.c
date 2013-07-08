@@ -31,31 +31,24 @@
 #include "slog.h"
 
 
-int slog(int cw, char *fmt, ...)
+int slog_bind_window(void *control)
 {
-	char	logbuf[SLOG_BUFFER];
-	int	n;
-	va_list	ap;
+	SMMDBG	*dbgc;
 
-	if (!slog_validate(NULL, cw)) {
-		return 0;
-	}
-
-	va_start(ap, fmt);
-	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
-	va_end(ap);
-
-	return slog_output(NULL, cw, logbuf, n);
-}
-
-int slos(int cw, char *buf)
-{
-	if (buf && slog_validate(NULL, cw)) {
-		return slog_output(NULL, cw, buf, strlen(buf));
+	if ((dbgc = slog_control(control)) == NULL) {
+		return -1;
 	}
 	return 0;
 }
 
+int slog_unbind_window(void *control)
+{
+	SMMDBG	*dbgc;
 
+	if ((dbgc = slog_control(control)) == NULL) {
+		return -1;
+	}
+	return 0;
+}
 
 
