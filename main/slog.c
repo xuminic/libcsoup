@@ -65,24 +65,18 @@ int slog_main(int argc, char **argv)
 		slog(i, "%d/%d: debug level test\n", i, control);
 	}
 
-#if 0
+#if 1
 	slogc(tstdbg, SLINFO, "## unbuffered mode test\n");
 	level = SLSHOW;
-	slog(level, "%d: unbuffered ", level);
-	for (i = 0; i < 4; i++) {
-		slog(level, ".");
-		sleep(1);
-	}
-	slog(level, "\n");
-	level++;
-	slog(level, "%d: unbuffered ", level);
-	for (i = 0; i < 4; i++) {
-		slog(level, ".");
-		sleep(1);
-	}
-	slog(level, "\n");
-	level++;
 	slog(level, "%d: buffered ", level);
+	for (i = 0; i < 4; i++) {
+		slog(level, ".");
+		sleep(1);
+	}
+	slog(level, "\n");
+
+	level = SLSHOW | SLOG_FLUSH;
+	slog(level, "%d: unbuffered ", level);
 	for (i = 0; i < 4; i++) {
 		slog(level, ".");
 		sleep(1);

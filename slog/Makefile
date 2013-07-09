@@ -15,7 +15,8 @@ SRCS	:= slog_bind_file.c	\
 	   slog_level_read.c	\
 	   slog_open.c		\
 	   slog_output.c	\
-	   slogs.c
+	   slogs.c		\
+	   slogz.c
 
 OBJS	:= $(SRCS:.c=.o)
 

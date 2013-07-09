@@ -34,28 +34,19 @@
 int slog_output(SMMDBG *dbgc, int cw, char *buf, int len)
 {
 	if (dbgc == NULL) {	/* ignore the control */
-		len = slog_def_stdout(SLOG_BUFFERED, buf, len);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			slog_def_stdout(SLOG_NONBUFED, NULL, 0);
-		}
+		len = slog_def_stdout(cw, buf, len);
 		return len;
 	}
 
 	if (dbgc->device & SLOG_TO_STDOUT) {
-		len = dbgc->stdoutput(SLOG_BUFFERED, buf, len);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			dbgc->stdoutput(SLOG_NONBUFED, NULL, 0);
-		}
+		len = dbgc->stdoutput(cw, buf, len);
 	}
 	if (dbgc->device & SLOG_TO_STDERR) {
-		len = dbgc->stderrput(SLOG_BUFFERED, buf, len);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
-			dbgc->stderrput(SLOG_NONBUFED, NULL, 0);
-		}
+		len = dbgc->stderrput(cw, buf, len);
 	}
 	if (dbgc->device & SLOG_TO_FILE) {
 		len = fwrite(buf, len, 1, dbgc->logd);
-		if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+		if (cw & SLOG_FLUSH) {
 			fflush(dbgc->logd);
 		}
 	}

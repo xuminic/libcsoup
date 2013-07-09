@@ -37,7 +37,7 @@ int slog(int cw, char *fmt, ...)
 	int	n;
 	va_list	ap;
 
-	if (!slog_validate(NULL, cw)) {
+	if (!slog_validate(slog_control(NULL), cw)) {
 		return 0;
 	}
 
@@ -45,13 +45,13 @@ int slog(int cw, char *fmt, ...)
 	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
 	va_end(ap);
 
-	return slog_output(NULL, cw, logbuf, n);
+	return slog_output(slog_control(NULL), cw, logbuf, n);
 }
 
 int slos(int cw, char *buf)
 {
-	if (buf && slog_validate(NULL, cw)) {
-		return slog_output(NULL, cw, buf, strlen(buf));
+	if (buf && slog_validate(slog_control(NULL), cw)) {
+		return slog_output(slog_control(NULL), cw, buf, strlen(buf));
 	}
 	return 0;
 }

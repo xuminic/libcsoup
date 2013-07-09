@@ -1,5 +1,5 @@
 
-/*  slog.c - a simple interface for logging/debugging
+/*  slogz.c - simple replacement of printf
 
     Copyright (C) 2011  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -31,33 +31,27 @@
 #include "slog.h"
 
 
-int slog_bind_stdout(void *control, F_STD func)
+int slogz(char *fmt, ...)
 {
-	SMMDBG	*dbgc;
+	char	logbuf[SLOG_BUFFER];
+	int	n;
+	va_list	ap;
 
-	if ((dbgc = slog_control(control)) == NULL) {
-		return -1;
-	}
+	va_start(ap, fmt);
+	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
+	va_end(ap);
 
-	dbgc->device |= SLOG_TO_STDOUT;
-	if (func == (F_STD) -1) {
-		dbgc->stdoutput = slog_def_stdout;
-	} else if (func) {
-		dbgc->stdoutput = func;
-	}
-	return 0;
+	return slog_output(slog_control(NULL), SLSHOW, logbuf, n);
 }
 
-int slog_unbind_stdout(void *control)
+int slosz(char *buf)
 {
-	SMMDBG	*dbgc;
-
-	if ((dbgc = slog_control(control)) == NULL) {
-		return -1;
+	if (buf == NULL) {
+		return 0;
 	}
-	
-	dbgc->stdoutput(SLOG_FLUSH, NULL, 0);
-	dbgc->device &= ~SLOG_TO_STDOUT;
-	return 0;
+	return slog_output(slog_control(NULL), SLSHOW, buf, strlen(buf));
 }
+
+
+
 

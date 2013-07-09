@@ -1,19 +1,18 @@
 /* README:
 Debug level is 0-7 using Bit2 to Bit0 in the control word
-  0: unmaskable, unbuffered output (for show-off printf like information)
-  1: unmaskable error, unbuffered output (when error occur)
-  2: warning, buffered output (something might be functionably problem, 
-     like server returned not-so-good results. the program itself should 
-     be still intact)
+  0: unmaskable output (for show-off printf like information)
+  1: unmaskable error message (when error occur)
+  2: warning output (something might be functionably problem, like server 
+     returned not-so-good results. the program itself should be still intact)
   3: information, buffered output (information maybe useful for the user)
   4: debug (debug information for the developer)
   5: program progress (the workflow between modules)
   6: module workflow (the detail progress inside a function module)
   7: function workflow (very trivial information shows how the program 
      running detailly inside a function)
+Bit3 is used to indicate flush or non-flush mode.
 
-Module indicator uses Bit31 to Bit3 in the control word 
-(29 bits supports 29 modules at most, reserved)
+Module indicator uses Bit31 to Bit4 in the control word (reserved)
 
 
 slog_init(int default);
@@ -63,7 +62,8 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_LVL_PROGRAM	5
 #define SLOG_LVL_MODULE		6
 #define SLOG_LVL_FUNC		7
-#define SLOG_LVL_MASK		7
+#define SLOG_LVL_MASK		0xf
+#define SLOG_FLUSH		8
 
 #define SLOG_LEVEL(x)	((x) & SLOG_LVL_MASK)
 #define SLOG_MODULE(x)	((x) & ~SLOG_LVL_MASK)
@@ -84,11 +84,11 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_TO_FILE		4
 #define SLOG_TO_SOCKET		8
 #define SLOG_TO_WINDOW		16
-#define SLOG_TO_UNBUF		0x8000
+//#define SLOG_TO_UNBUF		0x8000
 
 
-#define SLOG_BUFFERED		0
-#define SLOG_NONBUFED		1
+//#define SLOG_BUFFERED		0
+//#define SLOG_NONBUFED		1
 
 
 typedef int (*F_STD)(int, char*, int);
@@ -133,6 +133,8 @@ int slogs(void *control, int cw, char *buf, int len);
 int slog(int cw, char *fmt, ...);
 int slos(int cw, char *buf);
 
+int slogz(char *fmt, ...);
+int slosz(char *buf);
 
 #endif	/* _SLOG_H_ */
 

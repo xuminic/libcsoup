@@ -43,23 +43,23 @@ void slog_def_close(void)
 	SlogCB = NULL;
 }
 
-int slog_def_stdout(int flush, char *buf, int len)
+int slog_def_stdout(int cword, char *buf, int len)
 {
 	if (buf) {
 		len = fwrite(buf, len, 1, stdout);
 	}
-	if (flush) {
+	if (cword & SLOG_FLUSH) {
 		fflush(stdout);
 	}
 	return len;
 }
 
-int slog_def_stderr(int flush, char *buf, int len)
+int slog_def_stderr(int cword, char *buf, int len)
 {
 	if (buf) {
 		len = fwrite(buf, len, 1, stderr);
 	}
-	if (flush) {
+	if (cword & SLOG_FLUSH) {
 		fflush(stderr);
 	}
 	return len;
@@ -88,10 +88,10 @@ int slog_close(void *control)
 	}
 
 	if (dbgc->device & SLOG_TO_STDOUT) {
-		dbgc->stdoutput(SLOG_NONBUFED, NULL, 0);
+		dbgc->stdoutput(SLOG_FLUSH, NULL, 0);
 	}
 	if (dbgc->device & SLOG_TO_STDERR) {
-		dbgc->stderrput(SLOG_NONBUFED, NULL, 0);
+		dbgc->stderrput(SLOG_FLUSH, NULL, 0);
 	}
 	if (dbgc->device & SLOG_TO_FILE) {
 		fflush(dbgc->logd);

@@ -56,7 +56,7 @@ int slog_unbind_stderr(void *control)
 		return -1;
 	}
 
-	dbgc->stderrput(1, NULL, 0);
+	dbgc->stderrput(SLOG_FLUSH, NULL, 0);
 	dbgc->device &= ~SLOG_TO_STDERR;
 	return 0;
 }
