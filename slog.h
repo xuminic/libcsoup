@@ -62,7 +62,7 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_LVL_PROGRAM	5
 #define SLOG_LVL_MODULE		6
 #define SLOG_LVL_FUNC		7
-#define SLOG_LVL_MASK		0xf
+#define SLOG_LVL_MASK		7
 #define SLOG_FLUSH		8
 
 #define SLOG_LEVEL(x)	((x) & SLOG_LVL_MASK)
@@ -84,11 +84,6 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_TO_FILE		4
 #define SLOG_TO_SOCKET		8
 #define SLOG_TO_WINDOW		16
-//#define SLOG_TO_UNBUF		0x8000
-
-
-//#define SLOG_BUFFERED		0
-//#define SLOG_NONBUFED		1
 
 
 typedef int (*F_STD)(int, char*, int);
