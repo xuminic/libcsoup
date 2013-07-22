@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <smm.h>
 
 #define MEMDUMP_MODE_WID_MASK	0xff
 #define MEMDUMP_MODE_NO_GLYPH	0x100
@@ -55,7 +56,8 @@ int memdump(void *mem, int range, int column, int mode)
 			break;
 		case 64:
 			step = 8;
-			sprintf(tmp, "%016llx ", *((unsigned long long *)mem));
+			SMM_SPRINT(tmp, "%016lld ", 
+					*((unsigned long long *)mem));
 			break;
 		default:
 			step = 1;

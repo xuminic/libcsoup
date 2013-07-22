@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "smm.h"
 #include "slog.h"
 
 
@@ -42,7 +43,7 @@ int slog(int cw, char *fmt, ...)
 	}
 
 	va_start(ap, fmt);
-	n = vsnprintf(logbuf, sizeof(logbuf), fmt, ap);
+	n = SMM_VSNPRINT(logbuf, sizeof(logbuf), fmt, ap);
 	va_end(ap);
 
 	return slog_output(slog_control(NULL), cw, logbuf, n);

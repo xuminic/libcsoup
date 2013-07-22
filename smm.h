@@ -104,9 +104,13 @@ typedef int (*F_DIR)(void*, char*, int, void*);
 #ifdef	CFG_WIN32_API
 #define	SMM_TIME	FILETIME
 #define SMM_PRINT	__mingw_printf
+#define SMM_SPRINT	__mingw_sprintf
+#define SMM_VSNPRINT	__mingw_vsnprintf
 #else	/* CFG_UNIX_API */
 typedef	struct timeval	SMM_TIME;
 #define SMM_PRINT	printf
+#define SMM_SPRINT	sprintf
+#define SMM_VSNPRINT	vsnprintf
 #endif
 
 extern	int	smm_error_no;
