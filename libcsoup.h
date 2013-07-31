@@ -28,7 +28,7 @@
 #include "smm.h"
 
 size_t strlcopy(char *dst, const char *src, size_t siz);
-char *strcpy_alloc(const char *src);
+char *strcpy_alloc(const char *src, int extra);
 int fixtoken(char *sour, char **idx, int ids, char *delim);
 int ziptoken(char *sour, char **idx, int ids, char *delim);
 int isdelim(char *delim, int ch);
@@ -54,6 +54,11 @@ unsigned char crc8_byte(unsigned char crc, char data);
 unsigned char crc8(unsigned char crc, void *buf, size_t len);
 unsigned short crc_ccitt_byte(unsigned short crc, char data);
 unsigned short crc_ccitt(unsigned short crc, void *buf, size_t len);
+
+/* see iso639.c */
+char *csoup_iso639_lang_to_iso(char *lang);
+char *csoup_iso639_lang_to_short(char *lang);
+char *csoup_iso639_iso_to_lang(char *iso);
 
 
 #endif	/* _LIBCSOUP_H_ */
