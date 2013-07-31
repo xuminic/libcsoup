@@ -9,6 +9,7 @@ OBJS	= smm_chdir.o		\
 	  smm_cwd_pop.o		\
 	  smm_cwd_push.o	\
 	  smm_filesize.o	\
+	  smm_fontpath.o	\
 	  smm_fstat.o		\
 	  smm_init.o		\
 	  smm_wcstombs.o	\
