@@ -17,6 +17,7 @@ SRCS	:= cli_alloc_getopt.c	\
 	  csoup_strcmp_list.c	\
 	  fixtoken.c		\
 	  isdelim.c		\
+	  iso639.c		\
 	  memdump.c		\
 	  mkargs.c		\
 	  strcpy_alloc.c	\

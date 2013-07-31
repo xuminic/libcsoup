@@ -43,7 +43,7 @@ static int do_smm_chdir(char *path)
 
 	rc = smm_chdir(path);
 	
-	cwd = smm_cwd_alloc();
+	cwd = smm_cwd_alloc(0);
 	slogc(tstdbg, SLINFO, "Enter: %s\n", cwd);
 	free(cwd);
 
@@ -58,20 +58,20 @@ static int do_push_dir(char *path)
 	char	*cwd, *cid;
 	int	rc;
 
-	cwd = smm_cwd_alloc();
+	cwd = smm_cwd_alloc(0);
 	slogc(tstdbg, SLINFO, "Current: %s\n", cwd);
 	free(cwd);
 
 	cid = smm_cwd_push();
 	
 	rc = smm_chdir(path);
-	cwd = smm_cwd_alloc();
+	cwd = smm_cwd_alloc(0);
 	slogc(tstdbg, SLINFO, "Enter: %s\n", cwd);
 	free(cwd);
 
 	smm_cwd_pop(cid);
 	
-	cwd = smm_cwd_alloc();
+	cwd = smm_cwd_alloc(0);
 	slogc(tstdbg, SLINFO, "Return: %s\n", cwd);
 	free(cwd);
 

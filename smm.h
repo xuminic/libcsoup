@@ -65,6 +65,7 @@
 #define SMM_FSTAT_LINK		3
 
 
+/* for smm_pathtrek() */
 #define SMM_PATH_DEPTH_MASK	0x0000FFFF	/* should be deep enough */
 #define SMM_PATH_DIR_MASK	0xF0000000
 #define SMM_PATH_DIR_FIFO	0
@@ -76,6 +77,9 @@
 #define SMM_PATH_DEPTH(f,x)	\
 	(((f) & ~SMM_PATH_DEPTH_MASK) | ((x) & SMM_PATH_DEPTH_MASK))
 
+
+/* message defines: from main functions to the callback function */
+/* for smm_pathtrek() */
 #define SMM_MSG_PATH_ENTER	0
 #define SMM_MSG_PATH_LEAVE	1
 #define SMM_MSG_PATH_EXEC	2
@@ -83,6 +87,15 @@
 #define SMM_MSG_PATH_BREAK	4
 #define SMM_MSG_PATH_FLOOR	5
 
+
+/* notification defines: from callback functions to the main function */
+/* for smm_pathtrek() */
+#define SMM_NTF_PATH_NONE	0
+#define SMM_NTF_PATH_EOP	1	/* end of process: target found */
+#define SMM_NTF_PATH_NOACC	2	/* maybe access denied */
+#define SMM_NTF_PATH_DEPTH	3	/* maximum depth hit */
+#define SMM_NTF_PATH_CHDIR	4	/* can not enter the directory */
+#define SMM_NTF_PATH_CHARSET	5	/* charset error in filename */
 
 struct	smmdir	{
 	int	flags;
@@ -120,7 +133,7 @@ int smm_chdir(char *path);
 int smm_codepage(void);
 int smm_codepage_set(int cpno);
 int smm_codepage_reset(void);
-char *smm_cwd_alloc(void);
+char *smm_cwd_alloc(int extra);
 int smm_cwd_pop(void *cwid);
 void *smm_cwd_push(void);
 int smm_destroy(void);

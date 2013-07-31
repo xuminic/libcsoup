@@ -22,11 +22,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *strcpy_alloc(const char *src)
+char *strcpy_alloc(const char *src, int extra)
 {
 	char	*dst;
 
-	if (!src || ((dst = malloc(strlen(src) + 4)) == NULL)) {
+	extra = (extra + strlen(src) + 20) / 16 * 16;
+	if (!src || ((dst = malloc(extra)) == NULL)) {
 		return NULL;
 	}
 	return strcpy(dst, src);

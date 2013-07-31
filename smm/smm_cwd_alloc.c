@@ -25,7 +25,7 @@
 #include "smm.h"
 
 #ifdef	CFG_WIN32_API
-char *smm_cwd_alloc(void)
+char *smm_cwd_alloc(int extra)
 {
 	TCHAR	*wpath;
 	int	len;
@@ -38,7 +38,7 @@ char *smm_cwd_alloc(void)
 
 	/* first 3*len buffer is reserved for the multibyte convert and
 	 * the last len size is for the getcwd call */
-	if ((wpath = malloc(sizeof(TCHAR) * len * 4)) == NULL) {
+	if ((wpath = malloc(sizeof(TCHAR) * len * 4 + extra)) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;	/* low memory */
 	}
@@ -57,13 +57,13 @@ char *smm_cwd_alloc(void)
 #include <limits.h>
 #include <errno.h>
 
-char *smm_cwd_alloc(void)
+char *smm_cwd_alloc(int extra)
 {
 	char	*path;
 	int	i, len = PATH_MAX;
 
 	for (i = 0; i < 8; i++) {
-		if ((path = malloc(len)) == NULL) {
+		if ((path = malloc(len + extra)) == NULL) {
 			smm_errno_update(SMM_ERR_LOWMEM);
 			return NULL;
 		}
