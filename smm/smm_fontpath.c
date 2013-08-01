@@ -58,16 +58,6 @@ char *smm_fontpath(char *ftname, char **userdir)
 	TCHAR	wpbuf[MAX_PATH];
 #endif
 
-	/* no need to search fontconfig patterns like "times:bold:italic" */
-#ifdef	CFG_WIN32_API
-	if (((home = strchr(ftname, ':')) != NULL) && isalnum(home[1])) {
-		return strcpy_alloc(ftname, 0);
-	}
-#else
-	if (strchr(ftname, ':')) {
-		return strcpy_alloc(ftname, 0);
-	}
-#endif
 	/* absolute path */
 	if (find_sep(ftname)) {
 		if (smm_fstat(ftname) != SMM_FSTAT_REGULAR) {
