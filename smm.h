@@ -128,6 +128,7 @@ typedef	struct timeval	SMM_TIME;
 
 extern	int	smm_error_no;
 extern	int	smm_sys_cp;
+extern	char	*smm_rt_name;
 
 int smm_chdir(char *path);
 int smm_codepage(void);
@@ -141,8 +142,9 @@ int smm_errno(void);
 int smm_errno_zip(int err);
 int smm_errno_update(int value);
 long long smm_filesize(char *fname);
+char *smm_fontpath(char *ftname, char **userdir);
 int smm_fstat(char *fname);
-int smm_init(int logcw);
+int smm_init(int logcw, char *rtname);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
 int smm_pwuid(char *uname, long *uid, long *gid);
 int smm_signal_break(int (*handle)(int));

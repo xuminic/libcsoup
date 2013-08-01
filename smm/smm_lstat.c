@@ -1,5 +1,5 @@
 
-/*  smm_fstat.c - get the status of files
+/*  smm_lstat.c - get the status of files (with symbol link)
 
     Copyright (C) 2011  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -49,6 +49,9 @@ int smm_fstat(char *fname)
 				FILE_ATTRIBUTE_SPARSE_FILE)) {
 		return SMM_FSTAT_DEVICE;
 	}
+	if (fattr & FILE_ATTRIBUTE_REPARSE_POINT) {
+		return SMM_FSTAT_LINK;
+	}
 	if (fattr & FILE_ATTRIBUTE_DIRECTORY) {
 		return SMM_FSTAT_DIR;
 	}
@@ -67,7 +70,7 @@ int smm_fstat(char *fname)
 	struct	stat	fs;
 
 	smm_errno_update(SMM_ERR_NONE);
-	if (stat(fname, &fs) < 0)  {
+	if (lstat(fname, &fs) < 0)  {
 		smm_errno_update(SMM_ERR_STAT);	/* failed < 0 */
 		return SMM_FSTAT_ERROR;
 	}
@@ -76,6 +79,9 @@ int smm_fstat(char *fname)
 	}
 	if (S_ISDIR(fs.st_mode)) {
 		return SMM_FSTAT_DIR;
+	}
+	if (S_ISLNK(fs.st_mode)) {
+		return SMM_FSTAT_LINK;
 	}
 	return SMM_FSTAT_DEVICE;
 }

@@ -168,7 +168,6 @@ int smm_main(int argc, char **argv)
 		return -1;
 	}
 
-	smm_init(0);
 	smm_signal_break(do_signal_break);
 
 	d_flags = SMM_PATH_DIR_FIFO;

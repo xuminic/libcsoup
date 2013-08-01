@@ -28,6 +28,7 @@
 SMMDBG	*tstdbg = NULL;
 
 extern int fixtoken_main(int argc, char **argv);
+extern int fontpath_main(int argc, char **argv);
 extern int smm_main(int argc, char **argv);
 extern int memdump_main(int argc, char **argv);
 extern int slog_main(int argc, char **argv);
@@ -39,6 +40,7 @@ static	struct	{
 	char	*comment;
 } cmdlist[] = {
 	{ "fixtoken", fixtoken_main, NULL },
+	{ "fontpath", fontpath_main, NULL },
 	{ "smm", smm_main, NULL },
 	{ "memdump", memdump_main, NULL },
 	{ "slog", slog_main, NULL },
@@ -63,6 +65,7 @@ int main(int argc, char **argv)
 	int	i;
 
 	tstdbg = slog_open(SLINFO);
+	smm_init(0, argv[0]);
 
 	if (argc > 1) {
 		for (i = 0; cmdlist[i].cmd; i++) {
