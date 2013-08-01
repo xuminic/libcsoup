@@ -17,6 +17,7 @@ OBJS	= smm_chdir.o		\
 	  smm_pathtrek.o	\
 	  smm_pwuid.o		\
 	  smm_signal_break.o	\
+	  smm_sleep.o		\
 	  smm_time_diff.o	\
 	  smm_time_get_epoch.o	\
 	  smm_mbstowcs.o

@@ -71,7 +71,7 @@ int slog_main(int argc, char **argv)
 	slog(level, "%d: buffered ", level);
 	for (i = 0; i < 4; i++) {
 		slog(level, ".");
-		sleep(1);
+		smm_sleep(1, 0);
 	}
 	slog(level, "\n");
 
@@ -79,7 +79,7 @@ int slog_main(int argc, char **argv)
 	slog(level, "%d: unbuffered ", level);
 	for (i = 0; i < 4; i++) {
 		slog(level, ".");
-		sleep(1);
+		smm_sleep(1, 0);
 	}
 	slog(level, "\n");
 #endif

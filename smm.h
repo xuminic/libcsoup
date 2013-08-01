@@ -148,6 +148,7 @@ int smm_init(int logcw, char *rtname);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
 int smm_pwuid(char *uname, long *uid, long *gid);
 int smm_signal_break(int (*handle)(int));
+int smm_sleep(int sec, int usec);
 int smm_time_diff(SMM_TIME *tmbuf);
 int smm_time_get_epoch(SMM_TIME *tmbuf);
 void *smm_mbstowcs(char *mbs);
