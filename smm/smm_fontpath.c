@@ -77,7 +77,11 @@ char *smm_fontpath(char *ftname, char **userdir)
 	}
 	/* try current directory first */
 	if (smm_fstat(ftname) == SMM_FSTAT_REGULAR) {
-		return strcpy_alloc(ftname, 0);
+		if ((home = malloc(strlen(ftname)+16)) != NULL) {
+			strcpy(home, "./");	//FIXME: is it OK in Windows?
+			strcat(home, ftname);
+		}
+		return home;
 	}
 
 	/* try the runtime directory */
