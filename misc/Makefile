@@ -14,7 +14,11 @@ SRCS	:= cli_alloc_getopt.c	\
 	  crc32.c		\
 	  crc8.c		\
 	  csoup_cmp_file_extname.c \
+	  csoup_eff_match.c	\
+	  csoup_eff_open.c	\
 	  csoup_strcmp_list.c	\
+	  csoup_path_basename.c	\
+	  csoup_path_path.c	\
 	  fixtoken.c		\
 	  isdelim.c		\
 	  iso639.c		\

@@ -126,6 +126,16 @@ typedef	struct timeval	SMM_TIME;
 #define SMM_VSNPRINT	vsnprintf
 #endif
 
+/* the delimiter of path */
+#ifdef	CFG_WIN32_API
+#define SMM_DELIM	'\\'
+#define SMM_PATHD(c)	(((c) == '/') || ((c)=='\\'))
+#else	/* CFG_UNIX_API */
+#define SMM_DELIM	'/'
+#define SMM_PATHD(c)	((c) == '/')
+#endif
+
+
 extern	int	smm_error_no;
 extern	int	smm_sys_cp;
 extern	char	*smm_rt_name;

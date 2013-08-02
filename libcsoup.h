@@ -27,6 +27,15 @@
 #include "slog.h"
 #include "smm.h"
 
+
+/* Extended File Name Filter setting
+ *  * Input string could be "avi,wmv,mkv" or "+avi:wmv:-mkv"
+ *   * Stored format will be "*.avi", "*.wmv", "*.mkv"
+ *    */
+typedef struct  {
+	char	*filter[1];
+} CSEFF;
+
 size_t strlcopy(char *dst, const char *src, size_t siz);
 char *strcpy_alloc(const char *src, int extra);
 int fixtoken(char *sour, char **idx, int ids, char *delim);
@@ -41,6 +50,13 @@ int csoup_cmp_file_extargs(char *fname, char *ext, ...);
 
 /* see csoup_strcmp_list.c */
 int csoup_strcmp_list(char *dest, char *src, ...);
+
+char *csoup_path_basename(char *path, char *buffer, int blen);
+char *csoup_path_path(char *path, char *buffer, int blen);
+
+void *csoup_eff_open(char *s);
+int csoup_eff_close(void *efft);
+int csoup_eff_match(void *efft, char *fname);
 
 /* see memdump.c */
 int memdump(void *mem, int range, int column, int mode);
