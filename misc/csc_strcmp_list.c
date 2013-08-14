@@ -1,5 +1,4 @@
-
-/*  csoup_eff_open.c
+/*  csc_strcmp_list.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -19,36 +18,30 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
-#include "libcsoup.h"
-
-
-void *csoup_eff_open(char *s)
+/* it must end by a NULL, otherwise it goes nasty. 
+ * for example:
+ * csc_strcmp_list(myfolder, ".c", ".h", ".cc", NULL); */
+int csc_strcmp_list(char *dest, char *src, ...)
 {
-	CSEFF	*flt;
-	int	len, fno;
-	char	*tmp;
+	va_list	ap;
+	char	*s;
+	int	n;
 
-	len = strlen(s);
-	fno = len / 2;
-	len += fno * sizeof(char*) + sizeof(CSEFF) + 16;
-	if ((flt = malloc(len)) == NULL) {
-		return NULL;
+	va_start(ap, src);
+	n = 1;
+	s = va_arg(ap, char *);
+	while (s) {
+		if (!strcmp(dest, s)) {
+			return 0;
+		}
+		s = va_arg(ap, char *);
+		n++;
 	}
-
-	memset(flt, 0, len);
-	tmp = (char*) &flt->filter[fno];
-	strcpy(tmp, s);
-	len = ziptoken(tmp, flt->filter, fno, ",;:");
-	flt->filter[len] = NULL;
-	return flt;
+	va_end(ap);
+	return n;
 }
 
-int csoup_eff_close(void *efft)
-{
-	free(efft);
-	return 0;
-}
 

@@ -1,5 +1,5 @@
 
-/*  cli_getopt.c - command line option utility
+/*  csc_cli_getopt.c - command line option utility
 
     Copyright (C) 2011-2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -25,24 +25,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cliopt.h"
+#include "libcsoup.h"
 
 
-void *cli_setopt(struct clirun *rtbuf, int argc, char **argv)
+void *csc_cli_setopt(void *clibuf, int argc, char **argv)
 {
-	if (!rtbuf && !(rtbuf = malloc(sizeof(struct clirun)))) {
-		return NULL;
-	}
+	struct	clirun	*rtbuf = clibuf;
 
-	rtbuf->optind = 0;
-	rtbuf->optarg = NULL;
-	rtbuf->argc   = argc;
-	rtbuf->argv   = argv;
+	if (rtbuf) {
+		rtbuf->optind = 0;
+		rtbuf->optarg = NULL;
+		rtbuf->argc   = argc;
+		rtbuf->argv   = argv;
+	}
 	return rtbuf;
 }
 
-int cli_getopt(struct clirun *rtbuf, struct cliopt *optbl)
+int csc_cli_getopt(void *clibuf, struct cliopt *optbl)
 {
+	struct	clirun	*rtbuf = clibuf;
 	int	i, rc;
 
 	if (!rtbuf || !optbl) {
@@ -58,7 +59,7 @@ int cli_getopt(struct clirun *rtbuf, struct cliopt *optbl)
 		return -2;	/* end of scan */
 	}
 
-	for (i = 0; (rc = cli_type(optbl + i)) != CLI_EOL; i++) {
+	for (i = 0; (rc = csc_cli_type(optbl + i)) != CLI_EOL; i++) {
 		if (rc == CLI_SHORT) {
 			if (rtbuf->argv[rtbuf->optind][1] == 
 					optbl[i].opt_char) {

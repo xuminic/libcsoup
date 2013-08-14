@@ -63,7 +63,7 @@ char *smm_fontpath(char *ftname, char **userdir)
 		if (smm_fstat(ftname) != SMM_FSTAT_REGULAR) {
 			return NULL;
 		}
-		return strcpy_alloc(ftname, 0);
+		return csc_strcpy_alloc(ftname, 0);
 	}
 	/* try current directory first */
 	if (smm_fstat(ftname) == SMM_FSTAT_REGULAR) {
@@ -78,7 +78,7 @@ char *smm_fontpath(char *ftname, char **userdir)
 	/* Note that in MinGW, or cygwin I reckon, the smm_rt_name follows
 	 * the unix convention like C:\MinGW\msys\1.0\home\User\libcsoup */
 	if (smm_rt_name && find_sep(smm_rt_name)) {
-		home = strcpy_alloc(smm_rt_name, strlen(ftname) + 8);
+		home = csc_strcpy_alloc(smm_rt_name, strlen(ftname) + 8);
 		if (home == NULL) {
 			return NULL;
 		}
@@ -103,7 +103,7 @@ char *smm_fontpath(char *ftname, char **userdir)
 	/* try the user fonts in the home directory */
 	/* MinGW and Cygwin have $HOME */
 	if ((bpath = getenv("HOME")) != NULL) {
-		if ((home = strcpy_alloc(bpath, 16)) == NULL) {
+		if ((home = csc_strcpy_alloc(bpath, 16)) == NULL) {
 			return NULL;
 		}
 		/* Unix type environment so no need to '\\' */

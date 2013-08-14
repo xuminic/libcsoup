@@ -43,7 +43,7 @@ static unsigned short const crc16_table[256] = {
 	0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 };
 
-unsigned short crc16_byte(unsigned short crc, char data)
+unsigned short csc_crc16_byte(unsigned short crc, char data)
 {
 	return (crc >> 8) ^ crc16_table[(crc ^ (unsigned char) data) & 0xff];
 }
@@ -56,12 +56,13 @@ unsigned short crc16_byte(unsigned short crc, char data)
  *
  * Returns the updated CRC value.
  */
-unsigned short crc16(unsigned short crc, void *buf, size_t len)
+unsigned short csc_crc16(unsigned short crc, void *buf, size_t len)
 {
 	unsigned char	*p = buf;
 
-	while (len--)
-		crc = (crc >> 8) ^ crc16_table[(crc ^ *p++) & 0xff];
+	while (len--) {
+		crc = csc_crc16_byte(crc, *p++);
+	}
 	return crc;
 }
 

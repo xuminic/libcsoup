@@ -1,4 +1,4 @@
-/*  iso639.c - convert table of ISO639
+/*  csc_iso639.c - convert table of ISO639
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -577,7 +577,7 @@ struct	_ISO639LUT	{
 };
 
 
-char *csoup_iso639_lang_to_iso(char *lang)
+char *csc_iso639_lang_to_iso(char *lang)
 {
 	int	i;
 
@@ -589,7 +589,7 @@ char *csoup_iso639_lang_to_iso(char *lang)
 	return 0;
 }
 
-char *csoup_iso639_lang_to_short(char *lang)
+char *csc_iso639_lang_to_short(char *lang)
 {
 	int	i;
 
@@ -601,7 +601,7 @@ char *csoup_iso639_lang_to_short(char *lang)
 	return 0;
 }
 
-char *csoup_iso639_iso_to_lang(char *iso)
+char *csc_iso639_iso_to_lang(char *iso)
 {
 	int	i;
 

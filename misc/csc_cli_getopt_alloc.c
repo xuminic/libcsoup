@@ -1,5 +1,5 @@
 
-/*  cli_alloc_table.c- command line option utility
+/*  csc_cli_getopt_alloc.c - command line option utility
 
     Copyright (C) 2011-2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -25,27 +25,34 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cliopt.h"
+#include "libcsoup.h"
 
-
-void *cli_alloc_table(struct cliopt *optbl)
+void *csc_cli_getopt_alloc(struct cliopt *optbl)
 {
-	struct	option	*table, *p;
-	int	rc;
+	struct	clirun	*rtbuf;
+	int	n, k, rc;
 
-	table = calloc(cli_table_size(optbl) + 1, sizeof(struct option));
-	if (table == NULL) {
+	n  = csc_cli_table_size(optbl) + 1;
+	rc = n * (sizeof(struct option) + 4) + sizeof(struct clirun);
+	if ((rtbuf = calloc(rc, 1)) == NULL) {
 		return NULL;
 	}
 
-	for (p = table; (rc = cli_type(optbl)) != CLI_EOL; optbl++) {
+	rtbuf->optarg = (char*) &rtbuf->oplst[n];
+	for (n = k = 0; (rc = csc_cli_type(optbl)) != CLI_EOL; optbl++) {
+		if (rc & CLI_SHORT) {
+			rtbuf->optarg[n++] = optbl->opt_char;
+			if (optbl->param > 0) {
+				rtbuf->optarg[n++] = ':';
+			}
+		}
 		if (rc & CLI_LONG) {
-			p->name    = optbl->opt_long;
-			p->has_arg = optbl->param > 0 ? 1 : 0;
-			p->val     = optbl->opt_char;
-			p++;
+			rtbuf->oplst[k].name    = optbl->opt_long;
+			rtbuf->oplst[k].has_arg = optbl->param > 0 ? 1 : 0;
+			rtbuf->oplst[k].val     = optbl->opt_char;
+			k++;
 		}
 	}
-	return (void*) table;
+	return rtbuf;
 }
 

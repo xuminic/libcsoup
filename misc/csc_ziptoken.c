@@ -1,5 +1,5 @@
 
-/* ziptoken - extract tokens from a string in compressed mode
+/* csc_ziptoken - extract tokens from a string in compressed mode
  
    Version 1.1
    Version 1.2 20090401
@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 
-extern int isdelim(char *delim, int ch);
+extern int csc_isdelim(char *delim, int ch);
 
 /* This function splits the string into tokens. It extracts everything
    between delimiter.
@@ -48,14 +48,14 @@ extern int isdelim(char *delim, int ch);
    NOTE:  'sour' will be changed.
 */
 
-int ziptoken(char *sour, char **idx, int ids, char *delim)
+int csc_ziptoken(char *sour, char **idx, int ids, char *delim)
 {
 	int	i, ss;
 
 	for (i = 0; i < ids; idx[i++] = NULL);
 
 	for (i = ss = 0; *sour && (i < ids); sour++)  {
-		if (isdelim(delim, *sour))  {
+		if (csc_isdelim(delim, *sour))  {
 			ss = 0;
 			*sour = 0;
 		} else if (ss == 0) {

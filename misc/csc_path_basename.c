@@ -1,4 +1,4 @@
-/*  memdump.c - test harness of memdump()
+/*  csc_path_basename.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -17,29 +17,33 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 #include <stdio.h>
 #include <string.h>
 
 #include "libcsoup.h"
 
-extern SMMDBG  *tstdbg;
-
-int memdump_main(int argc, char **argv)
+/* return the base name from an input path. 
+ * Note the returned pointer points to the input string.
+ * If 'buffer' were supplied, a copy would be made to it.
+ * for example:
+ * /abc/def/ghi      return  ghi
+ * /abc/def/ghi/     return  ""
+ * abc               return  abc
+ */
+char *csc_path_basename(char *path, char *buffer, int blen)
 {
-	char	user[384];
-	int	i;
+	char	*p;
 
-	for (i = 0; i < sizeof(user); user[i] = i, i++);
-
-	csc_memdump(user, sizeof(user), 16, 7);
-	csc_memdump(user, sizeof(user), 8, 16);
-	csc_memdump(user, sizeof(user), 6, 32);
-	csc_memdump(user, sizeof(user), 3, 64);
-	csc_memdump(user+sizeof(user), -(int)(sizeof(user)), 6, 32);
-	csc_memdump(user+sizeof(user), -(int)(sizeof(user)), 16, 8);
-	slogc(tstdbg, SLINFO, "sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld\n",
-			sizeof(int), sizeof(long), sizeof(short), sizeof(long long), sizeof(long int));
-	return 0;
+	for (p = path + strlen(path) - 1; p >= path; p--) {
+		if (SMM_PATHD(*p)) {
+			break;
+		}
+	}
+	p++;
+	if (buffer) {
+		csc_strlcpy(buffer, p, blen);
+	}
+	return p;
 }
+
 

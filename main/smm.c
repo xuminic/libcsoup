@@ -164,7 +164,7 @@ int smm_main(int argc, char **argv)
 	struct	clirun	*rtbuf;
 	int	c, d_flags;
 
-	if ((rtbuf = cli_alloc_getopt(clist)) == NULL) {
+	if ((rtbuf = csc_cli_getopt_alloc(clist)) == NULL) {
 		return -1;
 	}
 
@@ -174,7 +174,7 @@ int smm_main(int argc, char **argv)
 	while ((c = getopt_long(argc, argv, rtbuf->optarg, rtbuf->oplst, NULL)) > 0) {
 		switch (c) {
 		case 1:
-			cli_print(clist);
+			csc_cli_print(clist);
 			goto quick_quit;
 		case 2:
 			slogs(tstdbg, SLINFO, version, strlen(version));

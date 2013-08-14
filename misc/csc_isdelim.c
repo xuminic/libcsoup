@@ -27,7 +27,7 @@
  * A sample is: 0xC5 0xF3 0xD3 0xD1 */
 #define IsSpace(c)	((((c) >= 9) && ((c) <= 0xd)) || ((c) == 0x20))
 
-int isdelim(char *delim, int ch)
+int csc_isdelim(char *delim, int ch)
 {
 	while (*delim) {
 		if (*delim == (char) ch) {

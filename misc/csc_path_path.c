@@ -1,4 +1,4 @@
-/*  memdump.c - test harness of memdump()
+/*  csc_path_path.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -17,29 +17,38 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 #include <stdio.h>
 #include <string.h>
 
 #include "libcsoup.h"
 
-extern SMMDBG  *tstdbg;
-
-int memdump_main(int argc, char **argv)
+/* return the directory from an input path. 
+ * for example:
+ * /abc/def/ghi      buffer = /abc/def/         return ghi
+ * /abc/def/ghi/     buffer = /abc/def/ghi/     return ""
+ * abc               buffer = ./                return abc
+ */
+char *csc_path_path(char *path, char *buffer, int blen)
 {
-	char	user[384];
 	int	i;
 
-	for (i = 0; i < sizeof(user); user[i] = i, i++);
-
-	csc_memdump(user, sizeof(user), 16, 7);
-	csc_memdump(user, sizeof(user), 8, 16);
-	csc_memdump(user, sizeof(user), 6, 32);
-	csc_memdump(user, sizeof(user), 3, 64);
-	csc_memdump(user+sizeof(user), -(int)(sizeof(user)), 6, 32);
-	csc_memdump(user+sizeof(user), -(int)(sizeof(user)), 16, 8);
-	slogc(tstdbg, SLINFO, "sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld\n",
-			sizeof(int), sizeof(long), sizeof(short), sizeof(long long), sizeof(long int));
-	return 0;
+	for (i = strlen(path) - 1; i >= 0; i--) {
+		if (SMM_PATHD(path[i])) {
+			break;
+		}
+	}
+	if (i >= 0) {
+		i++;
+		if (buffer) {
+			csc_strlcpy(buffer, path, i > blen ? blen : i);
+		}
+		return path + i;
+	}
+	if (buffer && (blen > 3)) {
+		buffer[0] = '.';
+		buffer[1] = SMM_DELIM;
+		buffer[2] = 0;
+	}
+	return path;
 }
 

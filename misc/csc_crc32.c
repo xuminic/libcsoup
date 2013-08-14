@@ -17,7 +17,7 @@
  */
 #include <stdio.h>
 
-static unsigned const crc32_table[256] = {
+static unsigned long const crc32_table[256] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
 	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -84,20 +84,20 @@ static unsigned const crc32_table[256] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-unsigned crc32_byte(unsigned crc, char data)
+unsigned long csc_crc32_byte(unsigned long crc, char data)
 {
 	return (crc >> 8) ^ crc32_table[(crc & 0xff) ^ (unsigned char) data];
 }
 
-unsigned crc32(unsigned crc, void *buf, size_t len)
+unsigned long csc_crc32(unsigned long crc, void *buf, size_t len)
 {
 	unsigned char	*p = buf;
 
 	crc ^= 0xffffffff;
 
-	while (len--)
-		crc = (crc >> 8) ^ crc32_table[(crc & 0xff) ^ *p++];
-
+	while (len--) {
+		crc = csc_crc32_byte(crc, *p++);
+	}
 	return crc ^ 0xffffffff;
 }
 

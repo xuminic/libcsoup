@@ -49,7 +49,7 @@ static unsigned short const crc_ccitt_table[256] = {
 };
 
 
-unsigned short crc_ccitt_byte(unsigned short crc, char c)
+unsigned short csc_crc_ccitt_byte(unsigned short crc, char c)
 {
 	return (crc >> 8) ^ crc_ccitt_table[(crc ^ (unsigned char) c) & 0xff];
 }
@@ -60,12 +60,13 @@ unsigned short crc_ccitt_byte(unsigned short crc, char c)
  *	@buffer: data pointer
  *	@len: number of bytes in the buffer
  */
-unsigned short crc_ccitt(unsigned short crc, void *buf, size_t len)
+unsigned short csc_crc_ccitt(unsigned short crc, void *buf, size_t len)
 {
 	unsigned char	*p = buf;
 
-	while (len--)
-		crc = (crc >> 8) ^ crc_ccitt_table[(crc ^ *p++) & 0xff];
+	while (len--) {
+		crc = csc_crc_ccitt_byte(crc, *p++);
+	}
 	return crc;
 }
 

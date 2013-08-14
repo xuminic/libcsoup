@@ -1,5 +1,4 @@
-
-/*  csoup_eff_match.c
+/*  csc_strcpy_alloc.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -18,26 +17,20 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "libcsoup.h"
-
-
-int csoup_eff_match(void *efft, char *fname)
+char *csc_strcpy_alloc(const char *src, int extra)
 {
-	CSEFF	*flt = efft;
+	char	*dst;
 
-	if (flt == NULL) {
-		return 1;	/* no filter means total matched */
+	extra = (extra + strlen(src) + 20) / 16 * 16;
+	if (!src || ((dst = malloc(extra)) == NULL)) {
+		return NULL;
 	}
-	if (!flt->filter || !*flt->filter) {
-		return 1;
-	}
-	if (!csoup_cmp_file_extlist(fname, flt->filter)) {
-		return 1;
-	}
-	return 0;	/* not matched */
+	return strcpy(dst, src);
 }
+
 

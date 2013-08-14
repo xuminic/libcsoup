@@ -1,7 +1,7 @@
 
-/*  cli_alloc_list.c - command line option utility
+/*  csc_cmp_file_extlist.c
 
-    Copyright (C) 2011-2013  "Andy Xuming" <xuming@users.sourceforge.net>
+    Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
     This file is part of CSOUP, Chicken Soup library
 
@@ -18,33 +18,30 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
-
-#include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "cliopt.h"
+#include "libcsoup.h"
 
 
-char *cli_alloc_list(struct cliopt *optbl)
+/* the extension name must be ended by a NULL, otherwise it goes nasty. 
+ * for example: 
+ *   char *ext[] = { ".c", ".h", ".cc", NULL }
+ */
+int csc_cmp_file_extlist(char *fname, char **ext)
 {
-	char	*list, *p;
-	int	rc;
+	int	i;
 
-	if ((list = calloc(cli_table_size(optbl) + 1, 2)) == NULL) {
-		return NULL;
+	if (!ext || !*ext) {
+		return -1;
 	}
-
-	for (p = list; (rc = cli_type(optbl)) != CLI_EOL; optbl++) {
-		if (rc & CLI_SHORT) {
-			*p++ = optbl->opt_char;
-			if (optbl->param > 0) {
-				*p++ = ':';
-			}
+	for (i = 0; ext[i]; i++) {
+		if (!csc_cmp_file_extname(fname, ext[i])) {
+			return 0;
 		}
 	}
-	return list;
+	return i;
 }
+
+
 

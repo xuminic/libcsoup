@@ -1,4 +1,4 @@
-/* strlcopy - rename of strlcpy() */
+/* csc_strlcpy.c - rename of strlcpy() */
 
 /*	$OpenBSD: strlcpy.c,v 1.4 1999/05/01 18:56:41 millert Exp $	*/
 
@@ -41,7 +41,7 @@ static char *rcsid = "$OpenBSD: strlcpy.c,v 1.4 1999/05/01 18:56:41 millert Exp 
  * will be copied.  Always NUL terminates (unless siz == 0).
  * Returns strlen(src); if retval >= siz, truncation occurred.
  */
-size_t strlcopy(char *dst, const char *src, size_t siz)
+size_t csc_strlcpy(char *dst, const char *src, size_t siz)
 {
 	register char *d = dst;
 	register const char *s = src;

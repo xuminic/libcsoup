@@ -1,5 +1,5 @@
 
-/* fixtoken - extract tokens from a string
+/* csc_fixtoken - extract tokens from a string
  
    Version 1.1
    Version 1.2 20090401
@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 
-extern int isdelim(char *delim, int ch);
+extern int csc_isdelim(char *delim, int ch);
 
 /* This function splits the string into tokens. It extracts everything 
    between delimiter.
@@ -46,7 +46,7 @@ extern int isdelim(char *delim, int ch);
    NOTE:  'sour' will be changed.
 */
 
-int fixtoken(char *sour, char **idx, int ids, char *delim)
+int csc_fixtoken(char *sour, char **idx, int ids, char *delim)
 {
 	int	i;
 
@@ -54,7 +54,7 @@ int fixtoken(char *sour, char **idx, int ids, char *delim)
     
 	i = 0;
 	for (idx[i++] = sour; *sour && (i < ids); sour++)  {
-		if (isdelim(delim, *sour))  {
+		if (csc_isdelim(delim, *sour))  {
 			*sour = 0;
 			idx[i++] = sour + 1;
 		}

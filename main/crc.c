@@ -28,7 +28,7 @@ static	char	testbuf[2048];
 
 int crc_main(int argc, char **argv)
 {
-	unsigned	c32;
+	unsigned long	c32;
 	unsigned short	c16, cci;
 	unsigned char	c8;
 	int		i;
@@ -36,32 +36,32 @@ int crc_main(int argc, char **argv)
 	for (i = 0; i < sizeof(testbuf); i++) {
 		testbuf[i] = i + 1;
 	}
-	c32 = crc32(0, testbuf, sizeof(testbuf));
-	c16 = crc16(0, testbuf, sizeof(testbuf));
-	cci = crc_ccitt(0, testbuf, sizeof(testbuf));
-	c8  = crc8(0, testbuf, sizeof(testbuf));
+	c32 = csc_crc32(0, testbuf, sizeof(testbuf));
+	c16 = csc_crc16(0, testbuf, sizeof(testbuf));
+	cci = csc_crc_ccitt(0, testbuf, sizeof(testbuf));
+	c8  = csc_crc8(0, testbuf, sizeof(testbuf));
 	slog(SLINFO, "RUN1: CRC32=%X  CRC16=%X  CRC-CCITT=%X  CRC8=%X\n", 
 			c32, c16, cci, c8);
 
-	c32 = crc32(c32, testbuf, sizeof(testbuf));
-	c16 = crc16(c16, testbuf, sizeof(testbuf));
-	cci = crc_ccitt(cci, testbuf, sizeof(testbuf));
-	c8  = crc8(c8, testbuf, sizeof(testbuf));
+	c32 = csc_crc32(c32, testbuf, sizeof(testbuf));
+	c16 = csc_crc16(c16, testbuf, sizeof(testbuf));
+	cci = csc_crc_ccitt(cci, testbuf, sizeof(testbuf));
+	c8  = csc_crc8(c8, testbuf, sizeof(testbuf));
 	slog(SLINFO, "RUN2: CRC32=%X  CRC16=%X  CRC-CCITT=%X  CRC8=%X\n", 
 			c32, c16, cci, c8);
 
-	c32 = crc32(0, testbuf, sizeof(testbuf));
-	c16 = crc16(0, testbuf, sizeof(testbuf));
-	cci = crc_ccitt(0, testbuf, sizeof(testbuf));
-	c8  = crc8(0, testbuf, sizeof(testbuf));
+	c32 = csc_crc32(0, testbuf, sizeof(testbuf));
+	c16 = csc_crc16(0, testbuf, sizeof(testbuf));
+	cci = csc_crc_ccitt(0, testbuf, sizeof(testbuf));
+	c8  = csc_crc8(0, testbuf, sizeof(testbuf));
 	slog(SLINFO, "RUN3: CRC32=%X  CRC16=%X  CRC-CCITT=%X  CRC8=%X\n", 
 			c32, c16, cci, c8);
 
 	testbuf[128]++;
-	c32 = crc32(0, testbuf, sizeof(testbuf));
-	c16 = crc16(0, testbuf, sizeof(testbuf));
-	cci = crc_ccitt(0, testbuf, sizeof(testbuf));
-	c8  = crc8(0, testbuf, sizeof(testbuf));
+	c32 = csc_crc32(0, testbuf, sizeof(testbuf));
+	c16 = csc_crc16(0, testbuf, sizeof(testbuf));
+	cci = csc_crc_ccitt(0, testbuf, sizeof(testbuf));
+	c8  = csc_crc8(0, testbuf, sizeof(testbuf));
 	slog(SLINFO, "RUN4: CRC32=%X  CRC16=%X  CRC-CCITT=%X  CRC8=%X\n", 
 			c32, c16, cci, c8);
 	return 0;

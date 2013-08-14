@@ -1,4 +1,5 @@
-/*  csoup_strcmp_list.c
+
+/*  csc_cmp_file_extargs.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -21,20 +22,22 @@
 #include <string.h>
 #include <stdarg.h>
 
+#include "libcsoup.h"
+
 /* it must end by a NULL, otherwise it goes nasty. 
  * for example:
- * csoup_strcmp_list(myfolder, ".c", ".h", ".cc", NULL); */
-int csoup_strcmp_list(char *dest, char *src, ...)
+ * csc_cmp_file_extargs("my_file_name.ext", ".c", ".h", ".cc", NULL); */
+int csc_cmp_file_extargs(char *fname, char *ext, ...)
 {
 	va_list	ap;
 	char	*s;
 	int	n;
 
-	va_start(ap, src);
+	va_start(ap, ext);
 	n = 1;
 	s = va_arg(ap, char *);
 	while (s) {
-		if (!strcmp(dest, s)) {
+		if (!csc_cmp_file_extname(fname, s)) {
 			return 0;
 		}
 		s = va_arg(ap, char *);

@@ -1,5 +1,5 @@
 
-/* mkargs - make command line arguments
+/* csc_mkargs - make command line arguments
  
    Version 1.1
    Version 1.2 20090401
@@ -35,8 +35,6 @@
 #define IsSpace(c)	((((c) >= 9) && ((c) <= 0xd)) || ((c) == 0x20))
 #define IsPipe(c)	(((c) == '>') || ((c) == '<') || ((c) == '|'))
 
-extern int isdelim(char *delim, int ch);
-
 #define MK_ARG_DELIM		0
 #define MK_ARG_TOKEN		1
 #define MK_ARG_SGL_QU		2
@@ -57,7 +55,7 @@ extern int isdelim(char *delim, int ch);
 
    NOTE:  'sour' will be changed.
 */
-int mkargv(char *sour, char **idx, int ids)
+int csc_mkargv(char *sour, char **idx, int ids)
 {
 	int	i = 0, stat;
 

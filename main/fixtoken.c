@@ -43,7 +43,7 @@ static int fixtoken_test(char *content, char *delim)
 	slogc(tstdbg, SLINFO, "PARSING   {%s} by {%s}\n", content, delim);
 
 	strcpy(buf, content);
-	argc = fixtoken(buf, argv, sizeof(argv)/sizeof(char*), delim);
+	argc = csc_fixtoken(buf, argv, sizeof(argv)/sizeof(char*), delim);
 	slogc(tstdbg, SLINFO, "FIXTOKEN: ");
 	for (i = 0; i < argc; i++) {
 		slogc(tstdbg, SLINFO, "{%s} ", argv[i]);
@@ -51,7 +51,7 @@ static int fixtoken_test(char *content, char *delim)
 	slogc(tstdbg, SLINFO, "\n");
 
 	strcpy(buf, content);
-	argc = ziptoken(buf, argv, sizeof(argv)/sizeof(char*), delim);
+	argc = csc_ziptoken(buf, argv, sizeof(argv)/sizeof(char*), delim);
 	slogc(tstdbg, SLINFO, "ZIPTOKEN: ");
 	for (i = 0; i < argc; i++) {
 		slogc(tstdbg, SLINFO, "{%s} ", argv[i]);
@@ -59,7 +59,7 @@ static int fixtoken_test(char *content, char *delim)
 	slogc(tstdbg, SLINFO, "\n");
 
 	strcpy(buf, content);
-	argc = mkargv(buf, argv, sizeof(argv)/sizeof(char*));
+	argc = csc_mkargv(buf, argv, sizeof(argv)/sizeof(char*));
 	slogc(tstdbg, SLINFO, "MKARGV:   ");
 	for (i = 0; i < argc; i++) {
 		slogc(tstdbg, SLINFO, "{%s} ", argv[i]);

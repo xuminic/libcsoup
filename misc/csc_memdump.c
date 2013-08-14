@@ -1,4 +1,4 @@
-/*  memdump.c
+/*  csc_memdump.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -27,7 +27,7 @@
 
 #define MEMDUMP_COL_MAX	32	/* no display more than this column a line */
 
-int memdump(void *mem, int range, int column, int mode)
+int csc_memdump(void *mem, int range, int column, int mode)
 {
 	char	lbuf[MEMDUMP_COL_MAX * 17];
 	char	abuf[MEMDUMP_COL_MAX + 4], tmp[32];

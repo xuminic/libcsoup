@@ -1,5 +1,5 @@
 
-/*  cliopt.c - command line option utility
+/*  csc_cli_option.c - command line option utility
 
     Copyright (C) 2011-2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -25,11 +25,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cliopt.h"
-#include "slog.h"
+#include "libcsoup.h"
 
 
-int cli_type(struct cliopt *optbl)
+int csc_cli_type(struct cliopt *optbl)
 {
 	int	rc = 0;
 
@@ -51,11 +50,11 @@ int cli_type(struct cliopt *optbl)
 	return rc;
 }
 
-int cli_table_size(struct cliopt *optbl)
+int csc_cli_table_size(struct cliopt *optbl)
 {
 	int	i, rc;
 
-	for (i = 0; (rc = cli_type(optbl)) != CLI_EOL; optbl++) {
+	for (i = 0; (rc = csc_cli_type(optbl)) != CLI_EOL; optbl++) {
 		if (rc & CLI_BOTH) {
 			i++;
 		}
@@ -63,12 +62,12 @@ int cli_table_size(struct cliopt *optbl)
 	return i;
 }
 
-int  cli_print(struct cliopt *optbl)
+int csc_cli_print(struct cliopt *optbl)
 {
 	char	tmp[128];
 	int	rc;
 
-	for ( ; (rc = cli_type(optbl)) != CLI_EOL; optbl++) {
+	for ( ; (rc = csc_cli_type(optbl)) != CLI_EOL; optbl++) {
 		switch (rc) {
 		case CLI_COMMENT:
 			slog(SLSHOW, "%s\n", optbl->comment);

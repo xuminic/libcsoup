@@ -1,4 +1,5 @@
-/*  csoup_path_path.c
+
+/*  csc_extname_filter_match.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -18,37 +19,25 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "libcsoup.h"
 
-/* return the directory from an input path. 
- * for example:
- * /abc/def/ghi      buffer = /abc/def/         return ghi
- * /abc/def/ghi/     buffer = /abc/def/ghi/     return ""
- * abc               buffer = ./                return abc
- */
-char *csoup_path_path(char *path, char *buffer, int blen)
-{
-	int	i;
 
-	for (i = strlen(path) - 1; i >= 0; i--) {
-		if (SMM_PATHD(path[i])) {
-			break;
-		}
+int csc_extname_filter_match(void *efft, char *fname)
+{
+	CSEFF	*flt = efft;
+
+	if (flt == NULL) {
+		return 1;	/* no filter means total matched */
 	}
-	if (i >= 0) {
-		i++;
-		if (buffer) {
-			strlcopy(buffer, path, i > blen ? blen : i);
-		}
-		return path + i;
+	if (!flt->filter || !*flt->filter) {
+		return 1;
 	}
-	if (buffer && (blen > 3)) {
-		buffer[0] = '.';
-		buffer[1] = SMM_DELIM;
-		buffer[2] = 0;
+	if (!csc_cmp_file_extlist(fname, flt->filter)) {
+		return 1;
 	}
-	return path;
+	return 0;	/* not matched */
 }
 

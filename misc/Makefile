@@ -4,29 +4,31 @@ include ../Make.conf
 CFLAGS	+= -I..
 
 #SRCS	:= $(shell echo *.c)
-SRCS	:= cli_alloc_getopt.c	\
-	  cli_alloc_list.c	\
-	  cli_alloc_table.c	\
-	  cli_getopt.c		\
-	  cliopt.c		\
-	  crc16.c		\
-	  crc16c.c		\
-	  crc32.c		\
-	  crc8.c		\
-	  csoup_cmp_file_extname.c \
-	  csoup_eff_match.c	\
-	  csoup_eff_open.c	\
-	  csoup_strcmp_list.c	\
-	  csoup_path_basename.c	\
-	  csoup_path_path.c	\
-	  fixtoken.c		\
-	  isdelim.c		\
-	  iso639.c		\
-	  memdump.c		\
-	  mkargs.c		\
-	  strcpy_alloc.c	\
-	  strlcopy.c		\
-	  ziptoken.c
+SRCS	:= csc_cli_alloc_list.c	\
+	   csc_cli_alloc_table.c \
+	   csc_cli_getopt_alloc.c \
+	   csc_cli_getopt.c	\
+	   csc_cli_option.c	\
+	   csc_crc16.c		\
+	   csc_crc16c.c		\
+	   csc_crc32.c		\
+	   csc_crc8.c		\
+	   csc_cmp_file_extargs.c \
+	   csc_cmp_file_extlist.c \
+	   csc_cmp_file_extname.c \
+	   csc_extname_filter_match.c \
+	   csc_extname_filter_open.c \
+	   csc_strcmp_list.c	\
+	   csc_path_basename.c	\
+	   csc_path_path.c	\
+	   csc_fixtoken.c	\
+	   csc_isdelim.c	\
+	   csc_iso639.c		\
+	   csc_memdump.c	\
+	   csc_mkargs.c		\
+	   csc_strcpy_alloc.c	\
+	   csc_strlcpy.c	\
+	   csc_ziptoken.c
 
 OBJS	:= $(SRCS:.c=.o)
 

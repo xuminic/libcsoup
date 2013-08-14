@@ -1,4 +1,5 @@
-/*  csoup_path_basename.c
+
+/*  csc_extname_filter_open.c
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -18,32 +19,36 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "libcsoup.h"
 
-/* return the base name from an input path. 
- * Note the returned pointer points to the input string.
- * If 'buffer' were supplied, a copy would be made to it.
- * for example:
- * /abc/def/ghi      return  ghi
- * /abc/def/ghi/     return  ""
- * abc               return  abc
- */
-char *csoup_path_basename(char *path, char *buffer, int blen)
-{
-	char	*p;
 
-	for (p = path + strlen(path) - 1; p >= path; p--) {
-		if (SMM_PATHD(*p)) {
-			break;
-		}
+void *csc_extname_filter_open(char *s)
+{
+	CSEFF	*flt;
+	int	len, fno;
+	char	*tmp;
+
+	len = strlen(s);
+	fno = len / 2;
+	len += fno * sizeof(char*) + sizeof(CSEFF) + 16;
+	if ((flt = malloc(len)) == NULL) {
+		return NULL;
 	}
-	p++;
-	if (buffer) {
-		strlcopy(buffer, p, blen);
-	}
-	return p;
+
+	memset(flt, 0, len);
+	tmp = (char*) &flt->filter[fno];
+	strcpy(tmp, s);
+	len = csc_ziptoken(tmp, flt->filter, fno, ",;:");
+	flt->filter[len] = NULL;
+	return flt;
 }
 
+int csc_extname_filter_close(void *efft)
+{
+	free(efft);
+	return 0;
+}
 
