@@ -68,12 +68,12 @@ int csc_cli_print(struct cliopt *optbl)
 	int	rc;
 
 	for ( ; (rc = csc_cli_type(optbl)) != CLI_EOL; optbl++) {
+		tmp[0] = 0;
 		switch (rc) {
 		case CLI_COMMENT:
 			slog(SLSHOW, "%s\n", optbl->comment);
 			continue;
 		case CLI_EXTLINE:
-			tmp[0] = 0;
 			break;
 		case CLI_SHORT:
 			sprintf(tmp, "  -%c", optbl->opt_char);

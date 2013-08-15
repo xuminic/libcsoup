@@ -35,7 +35,8 @@ int csc_strcmp_list(char *dest, char *src, ...)
 	s = va_arg(ap, char *);
 	while (s) {
 		if (!strcmp(dest, s)) {
-			return 0;
+			va_end(ap);
+			return 0;	/* return succeed */
 		}
 		s = va_arg(ap, char *);
 		n++;

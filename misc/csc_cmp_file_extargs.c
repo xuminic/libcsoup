@@ -38,7 +38,8 @@ int csc_cmp_file_extargs(char *fname, char *ext, ...)
 	s = va_arg(ap, char *);
 	while (s) {
 		if (!csc_cmp_file_extname(fname, s)) {
-			return 0;
+			va_end(ap);
+			return 0;	/* return succeed */
 		}
 		s = va_arg(ap, char *);
 		n++;

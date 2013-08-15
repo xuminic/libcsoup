@@ -32,7 +32,7 @@ int csc_extname_filter_match(void *efft, char *fname)
 	if (flt == NULL) {
 		return 1;	/* no filter means total matched */
 	}
-	if (!flt->filter || !*flt->filter) {
+	if (*flt->filter == NULL) {
 		return 1;
 	}
 	if (!csc_cmp_file_extlist(fname, flt->filter)) {
