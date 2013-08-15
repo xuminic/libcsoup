@@ -48,23 +48,24 @@ int smm_cwd_pop(void *cwid)
 
 int smm_cwd_pop(void *cwid)
 {
-	int	fid;
+	/* based on the assumption that it is always 
+	 *  sizeof(void*) >= sizeof(int) */
+	union   {
+		void	*u_poi;
+		int	u_int;
+	} fd;
 
-	if (cwid == NULL) {
-		return SMM_ERR_NONE;
+	fd.u_poi = cwid;
+
+	if (fd.u_int < 0) {
+		return smm_errno_update(SMM_ERR_NONE);
 	}
 
-#if	UINTPTR_MAX == 0xffffffff
-	fid = (int) cwid;
-#else
-	fid = (int)(int64_t) cwid;
-#endif
-
-	if (fchdir(fid) < 0) {
-		close(fid);
+	if (fchdir(fd.u_int) < 0) {
+		close(fd.u_int);
 		return smm_errno_update(SMM_ERR_CHDIR);
 	}
-	close(fid);
+	close(fd.u_int);
 	return smm_errno_update(SMM_ERR_NONE);
 }
 #endif

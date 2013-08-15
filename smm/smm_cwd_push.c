@@ -58,18 +58,18 @@ void *smm_cwd_push(void)
  * might be cut by 64 bit pointer */
 void *smm_cwd_push(void)
 {
-	int	fd;
+	/* based on the assumption that it is always 
+	 *  sizeof(void*) >= sizeof(int) */
+	union	{	
+		void	*u_poi;
+		int	u_int;
+	} fd;
 
-	if ((fd = open(".", O_RDONLY)) < 0) {
+	fd.u_poi = NULL;
+	if ((fd.u_int = open(".", O_RDONLY)) < 0) {
 		smm_errno_update(SMM_ERR_GETCWD);
-		return NULL;
 	}
-
-#if	UINTPTR_MAX == 0xffffffff
-	return (void*) fd;
-#else
-	return (void*)(int64_t)fd;
-#endif
+	return fd.u_poi;
 }
 #endif
 
