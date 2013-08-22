@@ -29,6 +29,7 @@ char	*smm_rt_name = NULL;
 
 int smm_init(int logcw, char *rtname)
 {
+	smm_error_no = logcw;		/* stop gcc complaining */
 	smm_error_no = SMM_ERR_NONE;
 	smm_codepage_reset();
 	smm_rt_name = rtname;
@@ -48,7 +49,7 @@ int smm_errno(void)
 
 int smm_errno_zip(int err)
 {
-	if (err == SMM_ERR_NONE_READ) {
+	if (err == (int) SMM_ERR_NONE_READ) {
 		err = smm_error_no;
 	}
 	return ((err >> 24) | err) & 0xff;
@@ -56,9 +57,9 @@ int smm_errno_zip(int err)
 
 int smm_errno_update(int value)
 {
-	if (value == SMM_ERR_NONE_READ) {
+	if (value == (int)SMM_ERR_NONE_READ) {
 		value = smm_error_no;		/* do nothing */
-	} else if (value == SMM_ERR_NONE) {
+	} else if (value == (int) SMM_ERR_NONE) {
 		smm_error_no = SMM_ERR_NONE;
 	} else {
 		smm_error_no = SMM_ERR(value);

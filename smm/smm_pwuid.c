@@ -45,7 +45,7 @@ int smm_pwuid(char *uname, long *uid, long *gid)
 	size_t	bufsize;
 
 	bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
-	if (bufsize == -1) {		/* Value was indeterminate */
+	if (bufsize == (size_t) -1) {		/* Value was indeterminate */
 		bufsize = 16384;	/* Should be more than enough */
 	}
 	if ((buf = malloc(bufsize)) == NULL) {
@@ -61,6 +61,7 @@ int smm_pwuid(char *uname, long *uid, long *gid)
 			*gid = (long) pwd.pw_gid;
 		}
 	}
+	uname = buf;	/* stop the gcc complaining */
 	free(buf);
 	return rc;
 }

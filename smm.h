@@ -28,6 +28,16 @@
 #ifndef	_LIBSMM_H_
 #define _LIBSMM_H_
 
+#if	(!defined(CFG_WIN32_API) && !defined(CFG_UNIX_API))
+/* automatically decide using UNIX or Win32 API */
+#if	(defined(_WIN32) || defined(__WIN32__) || defined(__MINGW32__))
+#define CFG_WIN32_API
+#else
+#define CFG_UNIX_API
+#endif
+#endif
+
+
 #ifdef  CFG_WIN32_API
 #ifndef UNICODE
 #define UNICODE
@@ -116,11 +126,15 @@ typedef int (*F_DIR)(void*, char*, int, void*);
 
 #ifdef	CFG_WIN32_API
 #define	SMM_TIME	FILETIME
+#else
+typedef	struct timeval	SMM_TIME;
+#endif
+
+#ifdef	__MINGW32__
 #define SMM_PRINT	__mingw_printf
 #define SMM_SPRINT	__mingw_sprintf
 #define SMM_VSNPRINT	__mingw_vsnprintf
-#else	/* CFG_UNIX_API */
-typedef	struct timeval	SMM_TIME;
+#else	/* should be GCC/UNIX */
 #define SMM_PRINT	printf
 #define SMM_SPRINT	sprintf
 #define SMM_VSNPRINT	vsnprintf

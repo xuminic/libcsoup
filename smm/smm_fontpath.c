@@ -187,6 +187,9 @@ static int findfont(void *option, char *path, int type, void *info)
 	case SMM_MSG_PATH_LEAVE:
 		//slogz("Leaving %s\n", path);
 		break;
+	default:	/* should never go to here */
+		slogz("Bad state %p\n", info);	/* stop gcc complaining */
+		break;
 	}
 	return SMM_NTF_PATH_NONE;
 }
