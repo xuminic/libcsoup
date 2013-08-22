@@ -158,6 +158,7 @@ static int findfont(void *option, char *path, int type, void *info)
 	struct	FTINF	*ftinfo = option;
 	char	tmp[4];
 
+	(void)info;		/* stop the gcc warning */
 	switch (type) {
 	case SMM_MSG_PATH_ENTER:
 		//slogz("Entering %s:\n", path);
@@ -186,9 +187,6 @@ static int findfont(void *option, char *path, int type, void *info)
 		break;
 	case SMM_MSG_PATH_LEAVE:
 		//slogz("Leaving %s\n", path);
-		break;
-	default:	/* should never go to here */
-		slogz("Bad state %p\n", info);	/* stop gcc complaining */
 		break;
 	}
 	return SMM_NTF_PATH_NONE;

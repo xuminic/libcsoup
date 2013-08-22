@@ -27,8 +27,10 @@
 #ifdef	CFG_WIN32_API
 int smm_pwuid(char *uname, long *uid, long *gid)
 {
-	uid = gid = (long*) uname;
-	gid = uid;	/* stop the gcc complaining */
+	/* stop the gcc complaining */
+	(void) uname;
+	(void) uid;
+	(void) gid;
 	return 0;
 }
 #endif
@@ -46,6 +48,7 @@ int smm_pwuid(char *uname, long *uid, long *gid)
 	int	rc;
 	size_t	bufsize;
 
+	(void)uname;	/* stop the gcc complaining */
 	bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
 	if (bufsize == (size_t) -1) {		/* Value was indeterminate */
 		bufsize = 16384;	/* Should be more than enough */
@@ -63,7 +66,6 @@ int smm_pwuid(char *uname, long *uid, long *gid)
 			*gid = (long) pwd.pw_gid;
 		}
 	}
-	uname = buf;	/* stop the gcc complaining */
 	free(buf);
 	return rc;
 }

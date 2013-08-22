@@ -29,7 +29,7 @@ char	*smm_rt_name = NULL;
 
 int smm_init(int logcw, char *rtname)
 {
-	smm_error_no = logcw;		/* stop gcc complaining */
+	(void)logcw;		/* stop gcc complaining */
 	smm_error_no = SMM_ERR_NONE;
 	smm_codepage_reset();
 	smm_rt_name = rtname;
