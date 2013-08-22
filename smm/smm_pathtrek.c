@@ -77,8 +77,9 @@ int smm_pathtrek(char *path, int flags, F_DIR msg, void *option)
 static int dummy_message(void *option, char *path, int type, void *info)
 {
 	option = path = info = NULL;
-	type = 0;	/* stop the gcc complaining */
-	return SMM_NTF_PATH_NONE;
+	info = option;
+	type = SMM_NTF_PATH_NONE;	/* stop the gcc complaining */
+	return type;
 }
 
 

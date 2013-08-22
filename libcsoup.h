@@ -21,7 +21,7 @@
 #ifndef	_LIBCSOUP_H_
 #define _LIBCSOUP_H_
 
-#define LIBCSOUP_VERSION	"0.1.0"
+#define LIBCSOUP_VERSION	"0.2.0"
 
 #include "slog.h"
 #include "smm.h"

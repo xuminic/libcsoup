@@ -27,6 +27,8 @@
 #ifdef	CFG_WIN32_API
 int smm_pwuid(char *uname, long *uid, long *gid)
 {
+	uid = gid = (long*) uname;
+	gid = uid;	/* stop the gcc complaining */
 	return 0;
 }
 #endif
