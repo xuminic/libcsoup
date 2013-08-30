@@ -65,7 +65,7 @@ int main(int argc, char **argv)
 	int	i;
 
 	tstdbg = slog_open(SLINFO);
-	smm_init(0, argv[0]);
+	smm_init(0);
 
 	if (argc > 1) {
 		for (i = 0; cmdlist[i].cmd; i++) {

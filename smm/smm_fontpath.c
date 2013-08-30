@@ -68,27 +68,16 @@ char *smm_fontpath(char *ftname, char **userdir)
 	/* try current directory first */
 	if (smm_fstat(ftname) == SMM_FSTAT_REGULAR) {
 		if ((home = malloc(strlen(ftname)+16)) != NULL) {
-			strcpy(home, "./");	//FIXME: is it OK in Windows?
+#ifdef	CFG_WIN32_API
+			strcpy(home, ".\\");
+#else
+			strcpy(home, "./");
+#endif
 			strcat(home, ftname);
 		}
 		return home;
 	}
 
-	/* try the runtime directory */
-	/* Note that in MinGW, or cygwin I reckon, the smm_rt_name follows
-	 * the unix convention like C:\MinGW\msys\1.0\home\User\libcsoup */
-	if (smm_rt_name && find_sep(smm_rt_name)) {
-		home = csc_strcpy_alloc(smm_rt_name, strlen(ftname) + 8);
-		if (home == NULL) {
-			return NULL;
-		}
-		bpath = find_rsep(home) + 1;
-		strcpy(bpath, ftname);
-		if (smm_fstat(home) == SMM_FSTAT_REGULAR) {
-			return home;
-		}
-		free(home);
-	}
 	/* try the user specified search path if existed */
 	if (userdir) {
 		for (i = 0; userdir[i]; i++) {
@@ -99,24 +88,6 @@ char *smm_fontpath(char *ftname, char **userdir)
 				return ftinfo.ftname;
 			}
 		}
-	}
-	/* try the user fonts in the home directory */
-	/* MinGW and Cygwin have $HOME */
-	if ((bpath = getenv("HOME")) != NULL) {
-		if ((home = csc_strcpy_alloc(bpath, 16)) == NULL) {
-			return NULL;
-		}
-		/* Unix type environment so no need to '\\' */
-		strcat(home, "/.fonts");
-
-		ftinfo.ftpath = ftname;
-		ftinfo.ftname = NULL;
-		smm_pathtrek(home, 0, findfont, &ftinfo);
-		if (ftinfo.ftname) {
-			free(home);	/* FIXME: produced a memory hole */
-			return ftinfo.ftname;
-		}
-		free(home);
 	}
 
 #ifdef	CFG_WIN32_API
@@ -129,6 +100,25 @@ char *smm_fontpath(char *ftname, char **userdir)
 			return NULL;
 		}
 		strcat(home, "\\Fonts");
+
+		ftinfo.ftpath = ftname;
+		ftinfo.ftname = NULL;
+		smm_pathtrek(home, 0, findfont, &ftinfo);
+		if (ftinfo.ftname) {
+			free(home);	/* FIXME: produced a memory hole */
+			return ftinfo.ftname;
+		}
+		free(home);
+	}
+#else
+	/* try the user fonts in the home directory */
+	/* MinGW and Cygwin have $HOME */
+	if ((bpath = getenv("HOME")) != NULL) {
+		if ((home = csc_strcpy_alloc(bpath, 16)) == NULL) {
+			return NULL;
+		}
+		/* Unix type environment so no need to '\\' */
+		strcat(home, "/.fonts");
 
 		ftinfo.ftpath = ftname;
 		ftinfo.ftname = NULL;

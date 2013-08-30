@@ -425,7 +425,7 @@ int smm_errno_update(int value);
 long long smm_filesize(char *fname);
 char *smm_fontpath(char *ftname, char **userdir);
 int smm_fstat(char *fname);
-int smm_init(int logcw, char *rtname);
+int smm_init(int logcw);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
 int smm_pwuid(char *uname, long *uid, long *gid);
 int smm_signal_break(int (*handle)(int));
