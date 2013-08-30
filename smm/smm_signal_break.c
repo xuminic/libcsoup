@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "smm.h"
+#include "libcsoup.h"
 
 static int (*sig_break)(int sig);
 

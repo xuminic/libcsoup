@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "smm.h"
+#include "libcsoup.h"
 
 #ifdef  CFG_WIN32_API
 char *smm_wcstombs(void *wcs)

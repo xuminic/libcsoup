@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "slog.h"
+#include "libcsoup.h"
 
 
 int slog_bind_stdout(void *control, F_STD func)

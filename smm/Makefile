@@ -1,6 +1,4 @@
 
-include ../Make.conf
-
 CFLAGS	+= -I..
 
 OBJS	= smm_chdir.o		\

@@ -1,3 +1,12 @@
+/* History:
+ * 20130830: V0.2.1
+ *   Merged all modules into libcsoup 0.2.1
+ * 20120820: SMM V1.1.0.0 
+ *   Replaced the error codes strategy by smm style consistently
+ *   Improved the smm_pathtrek() function
+ * 20111103: SMM V1.0.0.0 
+ *   Port to ezthum project
+*/
 /*  libcsoup.h - main head file for the CSOUP library
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
@@ -21,11 +30,14 @@
 #ifndef	_LIBCSOUP_H_
 #define _LIBCSOUP_H_
 
-#define LIBCSOUP_VERSION	"0.2.0"
+#include <stdio.h>
+#include <getopt.h>
 
-#include "slog.h"
-#include "smm.h"
+#define LIBCSOUP_VERSION	"0.2.1"
 
+/****************************************************************************
+ * Command line process functions
+ ****************************************************************************/
 #define CLIOPT_PARAM_NONE	0
 #define CLIOPT_PARAM_NUMBER	1
 #define CLIOPT_PARAM_STRING	2
@@ -47,7 +59,6 @@ struct	cliopt	{
 	char	*comment;
 };
 
-#include <getopt.h>
 struct	clirun	{
 	int	optind;
 	char	*optarg;
@@ -55,6 +66,12 @@ struct	clirun	{
 	char	**argv;
 	struct	option	oplst[1];
 };
+
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 /* see csc_cli_option.c */
 int csc_cli_type(struct cliopt *optbl);
@@ -74,6 +91,132 @@ void *csc_cli_getopt_alloc(struct cliopt *optbl);
 void *csc_cli_setopt(void *clibuf, int argc, char **argv);
 int csc_cli_getopt(void *clibuf, struct cliopt *optbl);
 
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
+
+
+
+/****************************************************************************
+ * Simple Logger Interface
+ ****************************************************************************/
+/* README:
+Debug level is 0-7 using Bit2 to Bit0 in the control word
+  0: unmaskable output (for show-off printf like information)
+  1: unmaskable error message (when error occur)
+  2: warning output (something might be functionably problem, like server 
+     returned not-so-good results. the program itself should be still intact)
+  3: information, buffered output (information maybe useful for the user)
+  4: debug (debug information for the developer)
+  5: program progress (the workflow between modules)
+  6: module workflow (the detail progress inside a function module)
+  7: function workflow (very trivial information shows how the program 
+     running detailly inside a function)
+Bit3 is used to indicate flush or non-flush mode.
+
+Module indicator uses Bit31 to Bit4 in the control word (reserved)
+
+
+slog_init(int default);
+slog_set_level(int control_word);
+slog_get_level();
+
+slog_bind_stdio();
+slog_bind_stderr();
+slog_bind_file();
+slog_bind_socket();
+slog_bind_window();
+
+slog(int control_word, char *fmt, ...);
+
+*/
+#define	SLOG_BUFFER		1024	/* maximum log buffer */
+
+#define SLOG_LVL_SHOWOFF	0
+#define SLOG_LVL_ERROR		1
+#define SLOG_LVL_WARNING	2
+#define SLOG_LVL_INFO		3
+#define SLOG_LVL_DEBUG		4
+#define SLOG_LVL_PROGRAM	5
+#define SLOG_LVL_MODULE		6
+#define SLOG_LVL_FUNC		7
+#define SLOG_LVL_MASK		7
+#define SLOG_FLUSH		8
+
+#define SLOG_LEVEL(x)	((x) & SLOG_LVL_MASK)
+#define SLOG_MODULE(x)	((x) & ~SLOG_LVL_MASK)
+
+/* short name of slog debug level */
+#define SLSHOW		SLOG_LVL_SHOWOFF
+#define SLERR		SLOG_LVL_ERROR
+#define SLWARN		SLOG_LVL_WARNING
+#define SLINFO		SLOG_LVL_INFO
+#define SLDBG		SLOG_LVL_DEBUG
+#define SLPROG		SLOG_LVL_PROGRAM
+#define SLMOD		SLOG_LVL_MODULE
+#define SLFUNC		SLOG_LVL_FUNC
+
+/* device bit mask */
+#define SLOG_TO_STDOUT		1
+#define SLOG_TO_STDERR		2
+#define SLOG_TO_FILE		4
+#define SLOG_TO_SOCKET		8
+#define SLOG_TO_WINDOW		16
+
+
+typedef int (*F_STD)(int, char*, int);
+
+
+typedef	struct		{
+	unsigned	cword;		/* control word: modules and level */
+	unsigned	device;		/* mask of output devices */
+
+	/* log file as output device */
+	char		*filename;
+	FILE		*logd;
+
+	/* standard i/o as output device */
+	F_STD		stdoutput;
+	F_STD		stderrput;
+} SMMDBG;
+
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+void slog_def_open(int cword);
+void slog_def_close(void);
+int slog_def_stdout(int flush, char *buf, int len);
+int slog_def_stderr(int flush, char *buf, int len);
+void *slog_open(int cword);
+int slog_close(void *control);
+SMMDBG *slog_control(void *control);
+int slog_validate(SMMDBG *dbgc, int cw);
+unsigned slog_control_word_read(void *control);
+unsigned slog_control_word_write(void *control, unsigned cword);
+int slog_level_read(void *control);
+int slog_level_write(void *control, int dbg_lvl);
+int slog_bind_stdout(void *control, F_STD func);
+int slog_unbind_stdout(void *control);
+int slog_bind_stderr(void *control, F_STD func);
+int slog_unbind_stderr(void *control);
+int slog_bind_file(void *control, char *fname, int append);
+int slog_unbind_file(void *control);
+int slog_output(SMMDBG *dbgc, int cw, char *buf, int len);
+int slogc(void *control, int cw, char *fmt, ...);
+int slogs(void *control, int cw, char *buf, int len);
+
+int slog(int cw, char *fmt, ...);
+int slos(int cw, char *buf);
+
+int slogz(char *fmt, ...);
+int slosz(char *buf);
+
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
 
 
 
@@ -84,6 +227,12 @@ int csc_cli_getopt(void *clibuf, struct cliopt *optbl);
 typedef struct  {
 	char	*filter[1];
 } CSEFF;
+
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 void *csc_extname_filter_open(char *s);
 int csc_extname_filter_close(void *efft);
@@ -126,6 +275,169 @@ char *csc_iso639_lang_to_iso(char *lang);
 char *csc_iso639_lang_to_short(char *lang);
 char *csc_iso639_iso_to_lang(char *iso);
 
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
+
+
+
+/****************************************************************************
+ * System Masquerade Module
+ ****************************************************************************/
+#if	(!defined(CFG_WIN32_API) && !defined(CFG_UNIX_API))
+/* automatically decide using UNIX or Win32 API */
+#if	(defined(_WIN32) || defined(__WIN32__) || defined(__MINGW32__))
+#define CFG_WIN32_API
+#else
+#define CFG_UNIX_API
+#endif
+#endif
+
+#ifdef  CFG_WIN32_API
+#ifndef UNICODE
+#define UNICODE
+#endif
+#include <windows.h>
+#endif
+
+/* Error mask is always 1000 0000 ... in 32-bit error code
+ * libsmm error mask uses 0100 0000 ... in 32-bit error code */
+#define SMM_ERR_MASK		0xC0000000	/* 1100 0000 0000 ... */
+#define SMM_ERR(x)		(SMM_ERR_MASK | (x))
+
+#define SMM_ERR_NONE		0
+#define SMM_ERR_NONE_READ	SMM_ERR(0)	/* errno read mode */
+#define SMM_ERR_LOWMEM		SMM_ERR(1)
+#define SMM_ERR_ACCESS		SMM_ERR(2)	/* access denied */
+#define SMM_ERR_EOP		SMM_ERR(3)	/* end of process */
+#define SMM_ERR_CHDIR		SMM_ERR(4)	/* change path */
+#define SMM_ERR_OPENDIR		SMM_ERR(5)	/* open directory */
+#define SMM_ERR_GETCWD		SMM_ERR(6)
+#define SMM_ERR_OPEN		SMM_ERR(7)	/* open file */
+#define SMM_ERR_STAT		SMM_ERR(8)	/* stat failed */
+#define SMM_ERR_LENGTH		SMM_ERR(9)	/* general fail of length */
+#define SMM_ERR_PWNAM		SMM_ERR(10)	/* passwd and name */
+
+
+#define SMM_FSTAT_ERROR		-1
+#define	SMM_FSTAT_REGULAR	0
+#define SMM_FSTAT_DIR		1
+#define SMM_FSTAT_DEVICE	2
+#define SMM_FSTAT_LINK		3
+
+
+/* for smm_pathtrek() */
+#define SMM_PATH_DEPTH_MASK	0x0000FFFF	/* should be deep enough */
+#define SMM_PATH_DIR_MASK	0xF0000000
+#define SMM_PATH_DIR_FIFO	0
+#define SMM_PATH_DIR_FIRST	0x10000000
+#define SMM_PATH_DIR_LAST	0x20000000
+
+#define SMM_PATH_DIR(f,x)	\
+	(((f) & ~SMM_PATH_DIR_MASK) | ((x) & SMM_PATH_DIR_MASK))
+#define SMM_PATH_DEPTH(f,x)	\
+	(((f) & ~SMM_PATH_DEPTH_MASK) | ((x) & SMM_PATH_DEPTH_MASK))
+
+
+/* message defines: from main functions to the callback function */
+/* for smm_pathtrek() */
+#define SMM_MSG_PATH_ENTER	0
+#define SMM_MSG_PATH_LEAVE	1
+#define SMM_MSG_PATH_EXEC	2
+#define SMM_MSG_PATH_STAT	3
+#define SMM_MSG_PATH_BREAK	4
+#define SMM_MSG_PATH_FLOOR	5
+
+
+/* notification defines: from callback functions to the main function */
+/* for smm_pathtrek() */
+#define SMM_NTF_PATH_NONE	0
+#define SMM_NTF_PATH_EOP	1	/* end of process: target found */
+#define SMM_NTF_PATH_NOACC	2	/* maybe access denied */
+#define SMM_NTF_PATH_DEPTH	3	/* maximum depth hit */
+#define SMM_NTF_PATH_CHDIR	4	/* can not enter the directory */
+#define SMM_NTF_PATH_CHARSET	5	/* charset error in filename */
+
+struct	smmdir	{
+	int	flags;
+
+	int	stat_dirs;
+	int	stat_files;
+
+	int	depth;		/* 0 = unlimited, 1 = command line level */
+	int	depnow;		/* current depth */
+
+	int     (*message)(void *option, char *path, int type, void *info);
+	void	*option;
+
+	int	(*path_recur)(struct smmdir *sdir, char *path);
+};
+
+typedef int (*F_DIR)(void*, char*, int, void*);
+
+#ifdef	CFG_WIN32_API
+#define	SMM_TIME	FILETIME
+#else
+typedef	struct timeval	SMM_TIME;
+#endif
+
+#ifdef	__MINGW32__
+#define SMM_PRINT	__mingw_printf
+#define SMM_SPRINT	__mingw_sprintf
+#define SMM_VSNPRINT	__mingw_vsnprintf
+#else	/* should be GCC/UNIX */
+#define SMM_PRINT	printf
+#define SMM_SPRINT	sprintf
+#define SMM_VSNPRINT	vsnprintf
+#endif
+
+/* the delimiter of path */
+#ifdef	CFG_WIN32_API
+#define SMM_DELIM	'\\'
+#define SMM_PATHD(c)	(((c) == '/') || ((c)=='\\'))
+#else	/* CFG_UNIX_API */
+#define SMM_DELIM	'/'
+#define SMM_PATHD(c)	((c) == '/')
+#endif
+
+
+extern	int	smm_error_no;
+extern	int	smm_sys_cp;
+extern	char	*smm_rt_name;
+
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+int smm_chdir(char *path);
+int smm_codepage(void);
+int smm_codepage_set(int cpno);
+int smm_codepage_reset(void);
+char *smm_cwd_alloc(int extra);
+int smm_cwd_pop(void *cwid);
+void *smm_cwd_push(void);
+int smm_destroy(void);
+int smm_errno(void);
+int smm_errno_zip(int err);
+int smm_errno_update(int value);
+long long smm_filesize(char *fname);
+char *smm_fontpath(char *ftname, char **userdir);
+int smm_fstat(char *fname);
+int smm_init(int logcw, char *rtname);
+int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
+int smm_pwuid(char *uname, long *uid, long *gid);
+int smm_signal_break(int (*handle)(int));
+int smm_sleep(int sec, int usec);
+int smm_time_diff(SMM_TIME *tmbuf);
+int smm_time_get_epoch(SMM_TIME *tmbuf);
+void *smm_mbstowcs(char *mbs);
+char *smm_wcstombs(void *wcs);
+
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
 
 #endif	/* _LIBCSOUP_H_ */
 

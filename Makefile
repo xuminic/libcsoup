@@ -1,5 +1,18 @@
 
-include Make.conf
+export	CC	= gcc
+export	AR	= ar
+export	CP	= cp
+export	RM	= rm -f
+
+PREFIX	= /usr/local
+BINDIR	= /usr/local/bin
+MANDIR	= /usr/local/man/man1
+
+SYSAPI	= 		# Options: CFG_WIN32_API, CFG_UNIX_API
+DEBUG	= -g -DDEBUG
+DEFINES = 
+
+export	CFLAGS	= -Wall -Wextra -O3 $(DEBUG) $(DEFINES) $(SYSAPI) 
 
 ifndef	RELCS
 RELCS	= libcsoup-$(shell version.sh)

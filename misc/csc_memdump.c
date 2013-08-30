@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <smm.h>
+#include "libcsoup.h"
 
 #define MEMDUMP_MODE_WID_MASK	0xff
 #define MEMDUMP_MODE_NO_GLYPH	0x100

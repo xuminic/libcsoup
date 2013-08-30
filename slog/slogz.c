@@ -28,8 +28,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "smm.h"
-#include "slog.h"
+#include "libcsoup.h"
 
 
 int slogz(char *fmt, ...)

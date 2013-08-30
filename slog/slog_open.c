@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "slog.h"
+#include "libcsoup.h"
 
 static	SMMDBG	*SlogCB = NULL;
 

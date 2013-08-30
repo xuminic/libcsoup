@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "smm.h"
+#include "libcsoup.h"
 
 
 #define	PATH_STAT_IGNORE	-1

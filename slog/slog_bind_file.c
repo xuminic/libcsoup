@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "slog.h"
+#include "libcsoup.h"
 
 
 int slog_bind_file(void *control, char *fname, int append)

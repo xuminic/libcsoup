@@ -1,6 +1,4 @@
 
-include ../Make.conf
-
 CFLAGS	+= -I..
 
 #SRCS   := $(shell echo *.c)

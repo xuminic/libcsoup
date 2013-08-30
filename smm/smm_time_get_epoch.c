@@ -19,7 +19,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "smm.h"
+#include "libcsoup.h"
 
 
 #ifdef  CFG_WIN32_API

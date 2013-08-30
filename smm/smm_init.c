@@ -19,7 +19,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "smm.h"
+#include "libcsoup.h"
 
 /* Error mask is always 1000 0000 ... in 32-bit error code
  * libsmm error mask uses 0100 0000 ... in 32-bit error code */

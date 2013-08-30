@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "smm.h"
+#include "libcsoup.h"
 
 int	smm_sys_cp;
 
