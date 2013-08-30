@@ -45,6 +45,9 @@ int slog_main(int argc, char **argv)
 {
 	int	i, level, control;
 
+	(void) argc;
+	(void) argv;
+
 	slogc(tstdbg, SLINFO, "## slog can be used before initialized\n");
 	level = SLSHOW;
 	slog(level, "%d: this is a test before initialing\n", level);

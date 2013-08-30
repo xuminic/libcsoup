@@ -30,7 +30,10 @@ int memdump_main(int argc, char **argv)
 	char	user[384];
 	int	i;
 
-	for (i = 0; i < sizeof(user); user[i] = i, i++);
+	(void) argc;
+	(void) argv;	/* stop the compiler warning */
+
+	for (i = 0; i < (int)sizeof(user); user[i] = i, i++);
 
 	csc_memdump(user, sizeof(user), 16, 7);
 	csc_memdump(user, sizeof(user), 8, 16);

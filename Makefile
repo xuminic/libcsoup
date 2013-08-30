@@ -24,9 +24,12 @@ TARGET	= libcsoup.a
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 
-.PHONY: all clean misc slog smm
+.PHONY: all clean misc slog smm main
 	
-all: $(TARGET)
+all: main
+
+main: $(TARGET)
+	make -C main all
 
 $(TARGET) : misc slog smm
 	$(RM) $(TARGET)
@@ -45,6 +48,7 @@ clean:
 	make -C misc clean
 	make -C slog clean
 	make -C smm clean
+	make -C main clean
 	$(RM) $(TARGET)
 
 release:

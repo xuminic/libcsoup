@@ -33,7 +33,10 @@ int crc_main(int argc, char **argv)
 	unsigned char	c8;
 	int		i;
 
-	for (i = 0; i < sizeof(testbuf); i++) {
+	(void) argc;
+	(void) argv;
+
+	for (i = 0; i < (int) sizeof(testbuf); i++) {
 		testbuf[i] = i + 1;
 	}
 	c32 = csc_crc32(0, testbuf, sizeof(testbuf));

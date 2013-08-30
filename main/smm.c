@@ -109,6 +109,7 @@ static int pathtrek_cb(void *option, char *path, int type, void *info)
 {
 	struct	smmdir	*sdir = info;
 
+	(void) option;		/* stop the compiler warning */
 	switch (type) {
 	case SMM_MSG_PATH_ENTER:
 		slogc(tstdbg, SLINFO, "Enter %s\n", path);

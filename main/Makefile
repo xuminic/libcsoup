@@ -1,6 +1,4 @@
 
-include ../Make.conf
-
 CFLAGS	+= -I..
 
 SRCS	= main.c fixtoken.c smm.c memdump.c slog.c crc.c fontpath.c
@@ -24,7 +22,7 @@ crc: universal_crc
 
 clean:
 	$(RM) $(TARGET)
-	$(RM) universal_crc crc*.c
+	$(RM) universal_crc
 
 
 
