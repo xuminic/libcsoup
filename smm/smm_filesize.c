@@ -35,7 +35,12 @@ long long smm_filesize(char *fname)
 		return -1;
 	}
 
-	fhdl = CreateFile(wpath, GENERIC_READ, 0, 0, OPEN_EXISTING, 0, 0);
+	/* 20131009 Open files with the sharing mode. Otherwise it would be
+	 * failed. In ezthumb a test proved when a file was opened by a media
+	 * player, ezthumb failed to retrive the file size */
+	fhdl = CreateFile(wpath, GENERIC_READ, 
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 
+			0, OPEN_EXISTING, 0, 0);
 	if (fhdl == INVALID_HANDLE_VALUE) {
 		free(wpath);
 		smm_errno_update(SMM_ERR_OPEN);

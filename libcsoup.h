@@ -1,4 +1,6 @@
 /* History:
+ * 20131009: V0.2.2
+ *   Open files with the sharing mode when retrieving file size
  * 20130830: V0.2.1
  *   Merged all modules into libcsoup 0.2.1
  * 20120820: SMM V1.1.0.0 
@@ -33,7 +35,7 @@
 #include <stdio.h>
 #include <getopt.h>
 
-#define LIBCSOUP_VERSION	"0.2.1"
+#define LIBCSOUP_VERSION	"0.2.2"
 
 /****************************************************************************
  * Command line process functions
