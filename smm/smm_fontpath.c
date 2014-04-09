@@ -52,10 +52,12 @@ char *find_rsep(char *path);
 char *smm_fontpath(char *ftname, char **userdir)
 {
 	struct	FTINF	ftinfo;
-	char	*home, *bpath;
+	char	*home;
 	int	i;
 #ifdef	CFG_WIN32_API
 	TCHAR	wpbuf[MAX_PATH];
+#else
+	char	*bpath;
 #endif
 
 	/* absolute path */
