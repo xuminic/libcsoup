@@ -246,6 +246,9 @@ int csc_fixtoken(char *sour, char **idx, int ids, char *delim);
 int csc_ziptoken(char *sour, char **idx, int ids, char *delim);
 int csc_isdelim(char *delim, int ch);
 int csc_mkargv(char *sour, char **idx, int ids);
+char *csc_cuttoken(char *sour, char **token, char *delim);
+char *csc_gettoken(char *sour, char *buffer, char *delim);
+
 
 /* see csc_cmp_file_extname.c */
 int csc_cmp_file_extname(char *fname, char *ext);

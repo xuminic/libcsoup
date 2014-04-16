@@ -11,6 +11,7 @@ SRCS	:= csc_cli_alloc_list.c	\
 	   csc_crc16c.c		\
 	   csc_crc32.c		\
 	   csc_crc8.c		\
+	   csc_cuttoken.c	\
 	   csc_cmp_file_extargs.c \
 	   csc_cmp_file_extlist.c \
 	   csc_cmp_file_extname.c \
@@ -20,6 +21,7 @@ SRCS	:= csc_cli_alloc_list.c	\
 	   csc_path_basename.c	\
 	   csc_path_path.c	\
 	   csc_fixtoken.c	\
+	   csc_gettoken.c	\
 	   csc_isdelim.c	\
 	   csc_iso639.c		\
 	   csc_memdump.c	\
