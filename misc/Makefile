@@ -2,7 +2,8 @@
 CFLAGS	+= -I..
 
 #SRCS	:= $(shell echo *.c)
-SRCS	:= csc_cli_alloc_list.c	\
+SRCS	:= csc_cdll.c		\
+	   csc_cli_alloc_list.c	\
 	   csc_cli_alloc_table.c \
 	   csc_cli_getopt_alloc.c \
 	   csc_cli_getopt.c	\
