@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <getopt.h>
 
-#define LIBCSOUP_VERSION	"0.2.2"
+#define LIBCSOUP_VERSION	"0.3.0"
 
 /****************************************************************************
  * Command line process functions
@@ -288,6 +288,7 @@ CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_search(CSCLNK *anchor, 
 		int(*compare)(void *, void *), void *refload);
+CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
 CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size);
 CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size);
 int csc_cdl_free(CSCLNK **anchor, CSCLNK *node);

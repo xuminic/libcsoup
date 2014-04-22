@@ -47,7 +47,7 @@ CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node)
 CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node)
 {
 	if (anchor == NULL) {
-		node->prev = node->next = node;
+		anchor = node->prev = node->next = node;
 	} else {
 		csc_cdl_insert_after(anchor->prev, node);
 	}
@@ -86,7 +86,21 @@ CSCLNK *csc_cdl_search(CSCLNK *anchor, int(*compare)(void *, void *), void *refl
 	}
 	return NULL;
 }
-	
+
+CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx)
+{
+	CSCLNK	*node;
+	int	i = 0;
+
+	for (node = anchor; node != NULL; node = csc_cdl_next(anchor, node)) {
+		if (idx == i) {
+			return node;
+		}
+		i++;
+	}
+	return NULL;
+}
+
 CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size)
 {
 	CSCLNK	*node;
