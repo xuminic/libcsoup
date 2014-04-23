@@ -8,14 +8,15 @@ SRCS	:= csc_cdll.c		\
 	   csc_cli_getopt_alloc.c \
 	   csc_cli_getopt.c	\
 	   csc_cli_option.c	\
+	   csc_cmp_file_extargs.c \
+	   csc_cmp_file_extlist.c \
+	   csc_cmp_file_extname.c \
+	   csc_config.c		\
 	   csc_crc16.c		\
 	   csc_crc16c.c		\
 	   csc_crc32.c		\
 	   csc_crc8.c		\
 	   csc_cuttoken.c	\
-	   csc_cmp_file_extargs.c \
-	   csc_cmp_file_extlist.c \
-	   csc_cmp_file_extname.c \
 	   csc_extname_filter_match.c \
 	   csc_extname_filter_open.c \
 	   csc_strcmp_list.c	\

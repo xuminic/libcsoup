@@ -281,7 +281,7 @@ unsigned char csc_crc8(unsigned char crc, void *buf, size_t len);
 unsigned short csc_crc_ccitt_byte(unsigned short crc, char data);
 unsigned short csc_crc_ccitt(unsigned short crc, void *buf, size_t len);
 
-/* Circular Doubly linked list functions */
+/* see csc_cdll.c: circular doubly linked list functions */
 CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
@@ -293,6 +293,12 @@ CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size);
 CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size);
 int csc_cdl_free(CSCLNK **anchor, CSCLNK *node);
 int csc_cdl_destroy(CSCLNK **anchor);
+
+/* see csc_config.c: simple configure file */
+void *csc_cfg_open(char *path, char *filename, int rdflag);
+int csc_cfg_flush(void *cfg);
+int csc_cfg_dump(void *cfg, char *mkey);
+int csc_cfg_close(void *cfg);
 
 /* see iso639.c */
 char *csc_iso639_lang_to_iso(char *lang);

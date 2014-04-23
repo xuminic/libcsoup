@@ -33,12 +33,15 @@ extern int smm_main(int argc, char **argv);
 extern int memdump_main(int argc, char **argv);
 extern int slog_main(int argc, char **argv);
 extern int crc_main(int argc, char **argv);
+extern int config_main(int argc, char **argv);
+
 
 static	struct	{
 	char	*cmd;
 	int	(*entry)(int argc, char **argv);
 	char	*comment;
 } cmdlist[] = {
+	{ "config", config_main, NULL },
 	{ "fixtoken", fixtoken_main, NULL },
 	{ "fontpath", fontpath_main, NULL },
 	{ "smm", smm_main, NULL },

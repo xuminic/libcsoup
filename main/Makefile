@@ -1,7 +1,7 @@
 
 CFLAGS	+= -I..
 
-SRCS	= main.c fixtoken.c smm.c memdump.c slog.c crc.c fontpath.c
+SRCS	= main.c fixtoken.c smm.c memdump.c slog.c crc.c fontpath.c config.c
 
 TARGET	= csoup
 
