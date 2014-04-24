@@ -19,6 +19,7 @@ SRCS	:= csc_cdll.c		\
 	   csc_cuttoken.c	\
 	   csc_extname_filter_match.c \
 	   csc_extname_filter_open.c \
+	   csc_strbody.c	\
 	   csc_strcmp_list.c	\
 	   csc_path_basename.c	\
 	   csc_path_path.c	\

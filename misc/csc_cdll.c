@@ -26,7 +26,7 @@
 #include "libcsoup.h"
 
 
-static void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)
+void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)
 {
 	refn->next->prev = node;
 	node->next = refn->next;

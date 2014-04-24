@@ -262,6 +262,8 @@ int csc_cmp_file_extname(char *fname, char *ext);
 int csc_cmp_file_extlist(char *fname, char **ext);
 int csc_cmp_file_extargs(char *fname, char *ext, ...);
 
+char *csc_strbody(const char *s, int *len);
+
 /* see csoup_strcmp_list.c */
 int csc_strcmp_list(char *dest, char *src, ...);
 
@@ -282,6 +284,7 @@ unsigned short csc_crc_ccitt_byte(unsigned short crc, char data);
 unsigned short csc_crc_ccitt(unsigned short crc, void *buf, size_t len);
 
 /* see csc_cdll.c: circular doubly linked list functions */
+void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node);
 CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
@@ -296,9 +299,21 @@ int csc_cdl_destroy(CSCLNK **anchor);
 
 /* see csc_config.c: simple configure file */
 void *csc_cfg_open(char *path, char *filename, int rdflag);
+int csc_cfg_abort(void *cfg);
+int csc_cfg_save(void *cfg);
 int csc_cfg_flush(void *cfg);
-int csc_cfg_dump(void *cfg, char *mkey);
 int csc_cfg_close(void *cfg);
+char *csc_cfg_read(void *cfg, char *mkey, char *skey);
+char *csc_cfg_copy(void *cfg, char *mkey, char *skey, int extra);
+int csc_cfg_write(void *cfg, char *mkey, char *skey, char *value);
+int csc_cfg_read_long(void *cfg, char *mkey, char *skey, long *val);
+int csc_cfg_write_long(void *cfg, char *mkey, char *skey, long val);
+int csc_cfg_read_longlong(void *cfg, char *mkey, char *skey, long long *val);
+int csc_cfg_write_longlong(void *cfg, char *mkey, char *skey, long long val);
+void *csc_cfg_copy_bin(void *cfg, char *mkey, char *skey, int *bsize);
+int csc_cfg_save_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize);
+int csc_cfg_dump_kcb(void *cfg);
+int csc_cfg_dump(void *cfg, char *mkey);
 
 /* see iso639.c */
 char *csc_iso639_lang_to_iso(char *lang);
@@ -347,6 +362,8 @@ char *csc_iso639_iso_to_lang(char *iso);
 #define SMM_ERR_STAT		SMM_ERR(8)	/* stat failed */
 #define SMM_ERR_LENGTH		SMM_ERR(9)	/* general fail of length */
 #define SMM_ERR_PWNAM		SMM_ERR(10)	/* passwd and name */
+#define SMM_ERR_NULL		SMM_ERR(32)	/* empty content */
+#define SMM_ERR_OBJECT		SMM_ERR(33)	/* wrong object */
 
 
 #define SMM_FSTAT_ERROR		-1

@@ -44,7 +44,8 @@ int config_main(int argc, char **argv)
 	}*/
 	root = csc_cfg_open("/home/xum1/.config/ezthumb", "ezthumb.test", 1);
 	csc_cfg_dump(root, NULL);
-	csc_cfg_close(root);
+	csc_cfg_save(root);
+	csc_cfg_abort(root);
 	return 0;
 }
 
