@@ -69,10 +69,12 @@
 #define CFGF_TYPE_KEY	3	/* common key */
 #define CFGF_TYPE_PART	4	/* partial key */
 #define CFGF_TYPE_MASK	0xf
-
 #define CFGF_RDONLY	0x10
 
-#define CFGF_MAGIC_CB	(('K' << 24) | ('Y' << 16) | ('C' << 8) | 'B')
+#define CFGF_MAGIC	(('K' << 24) | ('Y' << 16) | ('C' << 8) | 'B')
+
+#define	CFGF_BLOCK_WID		48
+#define CFGF_BLOCK_MAGIC	"BINARY"
 
 
 typedef	struct	_KEYCB	{
@@ -117,14 +119,14 @@ static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag);
 static int csc_cfg_read_next_line(FILE *fp, char *buf);
 static int csc_cfg_write_next_line(FILE *fp, KEYCB *kp);
 static int csc_cfg_strcmp(char *sour, char *dest);
-static int csc_cfg_binary_to_hex(char *src, int slen, char *buf);
-static int csc_cfg_hex_to_binary(char *src, char *buf);
+static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
+static int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
 
 static inline KEYCB *CFGF_GETOBJ(void *objc)
 {
 	KEYCB   *kcb = objc;
 
-	if (kcb->majesty != CFGF_MAGIC_CB) {
+	if (kcb->majesty != CFGF_MAGIC) {
 		return NULL;
 	}
 	return kcb;
@@ -134,7 +136,7 @@ static inline int CFGF_TYPE_SET(void *objc, int type)
 {
 	KEYCB	*kcb = objc;
 
-	if (kcb->majesty != CFGF_MAGIC_CB) {
+	if (kcb->majesty != CFGF_MAGIC) {
 		return -1;
 	}
 	kcb->flags = (kcb->flags & ~CFGF_TYPE_MASK) | type;
@@ -145,7 +147,7 @@ static inline int CFGF_TYPE_GET(void *objc)
 {
 	KEYCB	*kcb = objc;
 
-	if (kcb->majesty != CFGF_MAGIC_CB) {
+	if (kcb->majesty != CFGF_MAGIC) {
 		return -1;
 	}
 	return kcb->flags & CFGF_TYPE_MASK;
@@ -480,38 +482,152 @@ int csc_cfg_write_longlong(void *cfg, char *mkey, char *skey, long long val)
 	return csc_cfg_write(cfg, mkey, skey, buf);
 }
 
-void *csc_cfg_copy_bin(void *cfg, char *mkey, char *skey, int *bsize)
+int csc_cfg_read_bin(void *cfg, char *mkey, char *skey, char *buf, int blen)
 {
-	char	*buf, *src, *value;
+	char	*src, *value;
 	int	len;
 
 	if ((value = csc_cfg_read(cfg, mkey, skey)) == NULL) {
-		return NULL;
+		return SMM_ERR_NULL;
 	}
 
 	src = csc_strbody(value, NULL);	/* strip the white space */
-	len = csc_cfg_hex_to_binary(src, NULL);
+	len = csc_cfg_hex_to_binary(src, buf, blen);
+	return len;
+}
+
+void *csc_cfg_copy_bin(void *cfg, char *mkey, char *skey, int *bsize)
+{
+	char	*buf;
+	int	len;
+
+	if ((len = csc_cfg_read_bin(cfg, mkey, skey, NULL, 0)) <= 0) {
+		return NULL;
+	}
+	if ((buf = malloc(len)) == NULL) {
+		return NULL;
+	}
 	if (bsize) {
 		*bsize = len;
 	}
-
-	if ((buf = malloc(len+4)) == NULL) {
-		return NULL;
-	}
-	csc_cfg_hex_to_binary(src, buf);
+	csc_cfg_read_bin(cfg, mkey, skey, buf, len);
 	return buf;
 }
 
-int csc_cfg_save_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize)
+int csc_cfg_write_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize)
 {
 	char	*buf;
 
 	if ((buf = calloc(bsize+1, 2)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
-	csc_cfg_binary_to_hex(bin, bsize, buf);
+	csc_cfg_binary_to_hex(bin, bsize, buf, (bsize+1)*2);
 	bsize = csc_cfg_write(cfg, mkey, skey, buf);
 	free(buf);
+	return bsize;
+}
+
+int csc_cfg_read_block(void *cfg, char *mkey, char *buf, int blen)
+{
+	KEYCB	*mcb, *scb;
+	char	*src, tmp[256];
+	int	len, amnt;
+
+	if ((mcb = csc_cfg_find_key(cfg, mkey, CFGF_TYPE_MAIN)) == NULL) {
+		return -1;
+	}
+	if (strcmp(mcb->value, CFGF_BLOCK_MAGIC)) {
+		return -2;
+	}
+	if ((scb = csc_cfg_find_key(mcb, NULL, CFGF_TYPE_PART)) == NULL) {
+		return 0;	/* empty block */
+	}
+	csc_cfg_recent_setup(cfg, mcb, scb);
+
+	amnt = 0;
+	do {
+		/* convert ASC to binary */
+		src = csc_strbody(scb->key, NULL); /* strip the space */
+		len = csc_cfg_hex_to_binary(src, tmp, sizeof(tmp));
+
+		/* store to the buffer */
+		if (blen && (blen < (amnt + len))) {
+			break;
+		}
+		if (buf) {
+			memcpy(buf + amnt, tmp, len);
+		}
+		amnt += len;
+	} while ((scb = csc_cfg_recent_update(cfg, CFGF_TYPE_PART)) != NULL);
+	return amnt;
+}
+
+void *csc_cfg_copy_block(void *cfg, char *mkey, int *bsize)
+{
+	char	*buf;
+	int	len;
+
+	if ((len = csc_cfg_read_block(cfg, mkey, NULL, 0)) <= 0) {
+		return NULL;
+	}
+	if ((buf = malloc(len)) == NULL) {
+		return NULL;
+	}
+	csc_cfg_read_block(cfg, mkey, buf, len);
+	if (bsize) {
+		*bsize = len;
+	}
+	return buf;
+}
+
+int csc_cfg_write_block(void *cfg, char *mkey, void *bin, int bsize)
+{
+	KEYCB	*mcb, *scb, *root;
+	char	*src, tmp[256];
+	int	len, rest;
+
+	if (!bin || !bsize) {
+		return SMM_ERR_NULL;
+	}
+	if ((root = CFGF_GETOBJ(cfg)) == NULL) {
+		return SMM_ERR_OBJECT;
+	}
+	if ((mcb = csc_cfg_find_key(cfg, mkey, CFGF_TYPE_MAIN)) == NULL) {
+		/* if the main key doesn't exist, create a new key and
+		 * insert to the tail */
+		if (strchr(mkey, '[') == NULL) {
+			return SMM_ERR_OBJECT;
+		}
+		mcb = csc_cfg_kcb_create(mkey, CFGF_BLOCK_MAGIC, NULL);
+		if (mcb == NULL) {
+			return SMM_ERR_LOWMEM;
+		}
+		root->anchor = csc_cdl_insert_tail(root->anchor, (CSCLNK*)mcb);
+	} else  if (strcmp(mcb->value, CFGF_BLOCK_MAGIC)) {
+		/* you can't write blocks into other types of main keys */
+		return SMM_ERR_ACCESS;
+	} else {
+		/* if the main key does exist, destory its contents */
+		csc_cdl_destroy(&mcb->anchor);
+		mcb->update = 0;
+	}
+	root->update++;
+
+	for (src = bin, rest = bsize; rest > 0; rest -= CFGF_BLOCK_WID) {
+		/* convert the binary to hex codes */
+		len = rest > CFGF_BLOCK_WID ? CFGF_BLOCK_WID : rest;
+		csc_cfg_binary_to_hex(src, len, tmp, sizeof(tmp));
+		src += len;
+
+		/* insert to the tail */
+		if ((scb = csc_cfg_kcb_create(tmp, NULL, NULL)) == NULL) {
+			return SMM_ERR_LOWMEM;
+		}
+		scb->update++;
+		mcb->update++;
+		mcb->anchor = csc_cdl_insert_tail(mcb->anchor, (CSCLNK*)scb);
+		csc_cfg_recent_setup(cfg, mcb, scb);
+	}
 	return bsize;
 }
 
@@ -573,6 +689,9 @@ int csc_cfg_dump(void *cfg, char *mkey)
 		if ((ckey = CFGF_GETOBJ(p)) == NULL) {
 			break;
 		}
+		if (mkey && strcmp(ckey->key, mkey)) {
+			continue;
+		}
 		csc_cfg_dump_kcb(ckey);
 		if (CFGF_TYPE_GET(ckey) == CFGF_TYPE_MAIN) {
 			for (k = ckey->anchor; k != NULL; k = csc_cdl_next(ckey->anchor, k)) {
@@ -596,7 +715,7 @@ static KEYCB *csc_cfg_kcb_alloc(int psize)
 
 	memset(kp, 0, psize);
 	kp->size   = psize;
-	kp->majesty = CFGF_MAGIC_CB;
+	kp->majesty = CFGF_MAGIC;
 	return kp;
 }
 
@@ -893,24 +1012,26 @@ static int csc_cfg_strcmp(char *sour, char *dest)
 	return slen - dlen;
 }
 
-static int csc_cfg_binary_to_hex(char *src, int slen, char *buf)
+static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen)
 {
 	char	temp[4];
 	int	i;
 
-	if (buf) {
-		*buf = 0;
-	}
 	for (i = 0; i < slen; i++) {
 		sprintf(temp, "%02X", (unsigned char) *src++);
-		if (buf) {
-			strcat(buf, temp);
+		if (buf && (blen > 1)) {
+			blen -= 2;
+			*buf++ = temp[0];
+			*buf++ = temp[1];
 		}
 	}
-	return slen*2;	/* return the length of the hex string */
+	if (buf && (blen > 0)) {
+		*buf++ = 0;
+	}
+	return slen * 2;	/* return the length of the hex string */
 }
 
-static int csc_cfg_hex_to_binary(char *src, char *buf)
+static int csc_cfg_hex_to_binary(char *src, char *buf, int blen)
 {
 	char	temp[4];
 	int	amnt = 0;
@@ -926,8 +1047,9 @@ static int csc_cfg_hex_to_binary(char *src, char *buf)
 		}
 		temp[2] = 0;
 
-		if (buf) {
+		if (buf && blen) {
 			*buf++ = (char)strtol(temp, 0, 16);
+			blen--;
 		}
 		amnt++;
 	}

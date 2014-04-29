@@ -49,7 +49,7 @@ static int config_open_rdonly(void)
 static int config_key_test(void)
 {
 	void	*root;
-	int	i;
+	int	i, n;
 	char	*val, *key;
 	char	nkey[64], mkey[64];
 	time_t	tmtick;
@@ -86,17 +86,101 @@ static int config_key_test(void)
 		}
 	}
 
+	/* read an integer */
+	csc_cfg_read_long(root, rdlist[2][0], rdlist[2][1], (long*)&i);
+	slogz("READLONG %s: %s = %d\n", rdlist[2][0], rdlist[2][1], i);
+
+	/* write a new main key */
 	time(&tmtick);
 	ltm = localtime(&tmtick);
 	sprintf(mkey, "[%u]", (unsigned) tmtick);
-	//sprintf(mkey, "[main]");
 	sprintf(nkey, "timestamp");
 	csc_cfg_write(root, mkey, nkey, ctime(&tmtick));
-	slogz("WRITE %s: %s = %s\n", mkey, nkey, 
+	slogz("WRITENEW %s: %s = %s\n", mkey, nkey, 
 			csc_cfg_read(root, mkey, nkey));
 
+	/* write to the root key */
+	csc_cfg_write(root, NULL, nkey, ctime(&tmtick));
+	slogz("WRITEROOT: %s = %s\n", nkey, csc_cfg_read(root, NULL, nkey));
+
+	/* write something longer than orignal */
+	val = csc_cfg_copy(root, rdlist[4][0], rdlist[4][1], 64);
+	strcat(val, ":appendix");
+	csc_cfg_write(root, rdlist[4][0], rdlist[4][1], val);
+	slogz("WRITEEXT %s: %s = %s\n", rdlist[4][0], rdlist[4][1],
+			csc_cfg_read(root, rdlist[4][0], rdlist[4][1]));
+	free(val);
+
+	/* write something shorter than orignal */
+	val = csc_cfg_copy(root, rdlist[6][0], rdlist[6][1], 0);
+	for (i = 0; val[i]; i++) {
+		if ((val[i] >= 'A') && (val[i] <= 'Z')) {
+			val[i] += 'a' - 'A';
+		} else if ((val[i] >= 'a') && (val[i] <= 'z')) {
+			val[i] -= 'a' - 'A';
+		}
+	}
+	csc_cfg_write(root, rdlist[6][0], rdlist[6][1], val);
+	slogz("WRITECUT %s: %s = %s\n", rdlist[6][0], rdlist[6][1],
+			csc_cfg_read(root, rdlist[6][0], rdlist[6][1]));
+	free(val);
+
+	csc_cfg_write_bin(root, "[what]", "Binary", root, 48);
+	val = csc_cfg_copy_bin(root, "[what]", "Binary", &n);
+	slogz("BINARY %s: %s = (%d) ", "[what]", "Binary", n);
+	for (i = 0; i < n; i++) {
+		slogz("%02x ", (unsigned char)val[i]);
+	}
+	slogz("\n");
 
 	csc_cfg_close(root);
+	return 0;
+}
+
+
+int config_block_test(char *fname)
+{
+	FILE	*fp;
+	char	*fbuf, *kbuf, key[128];
+	int	i, flen, klen;
+	void	*root;
+
+	if ((fp = fopen(fname, "r")) == NULL) {
+		perror(fname);
+		return -1;
+	}
+	fseek(fp, 0, SEEK_END);
+	flen = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	if ((fbuf = malloc(flen)) == NULL) {
+		fclose(fp);
+		return -2;
+	}
+	fread(fbuf, flen, 1, fp);
+	fclose(fp);
+
+	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 0)) == NULL) {
+		free(fbuf);
+		return -3;
+	}
+	sprintf(key, "[%s]", fname);
+	csc_cfg_write_block(root, key, fbuf, flen);
+	
+	kbuf = csc_cfg_copy_block(root, key, &klen);
+	if (klen != flen) {
+		slogz("BLOCK %s: %d != %d\n", key, klen, flen);
+	} else if (memcmp(fbuf, kbuf, klen)) {
+		for (i = 0; i < klen; i++) {
+			if (fbuf[i] != kbuf[i]) {
+				break;
+			}
+		}
+		slogz("BLOCK %s: %d at %x %x\n", key, i, fbuf[i], kbuf[i]);
+	}
+	csc_cfg_close(root);
+	
+	free(kbuf);
+	free(fbuf);
 	return 0;
 }
 
@@ -110,15 +194,18 @@ int config_main(int argc, char **argv)
 			config_open_rdonly();
 		} else if (!strcmp(*argv, "--key-test")) {
 			config_key_test();
+		} else if (!strcmp(*argv, "--block")) {
+			argv++;
+			argc--;
+			if (argc > 0) {
+				config_block_test(*argv);
+			}
 		} else {
 			slogz("Unknown option. [%s]\n", *argv);
 			return -1;
 		}
 	}
 	/*if (argc > 0) {
-		fdir = smm_fontpath(*argv, argv+1);
-		slogz("%s\n", fdir);
-		free(fdir);
 	}*/
 	return 0;
 }

@@ -313,8 +313,12 @@ int csc_cfg_read_long(void *cfg, char *mkey, char *skey, long *val);
 int csc_cfg_write_long(void *cfg, char *mkey, char *skey, long val);
 int csc_cfg_read_longlong(void *cfg, char *mkey, char *skey, long long *val);
 int csc_cfg_write_longlong(void *cfg, char *mkey, char *skey, long long val);
+int csc_cfg_read_bin(void *cfg, char *mkey, char *skey, char *buf, int blen);
 void *csc_cfg_copy_bin(void *cfg, char *mkey, char *skey, int *bsize);
-int csc_cfg_save_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize);
+int csc_cfg_write_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize);
+int csc_cfg_read_block(void *cfg, char *mkey, char *buf, int blen);
+void *csc_cfg_copy_block(void *cfg, char *mkey, int *bsize);
+int csc_cfg_write_block(void *cfg, char *mkey, void *bin, int bsize);
 int csc_cfg_dump_kcb(void *cfg);
 int csc_cfg_dump(void *cfg, char *mkey);
 
