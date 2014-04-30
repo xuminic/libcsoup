@@ -271,7 +271,34 @@ char *csc_path_basename(char *path, char *buffer, int blen);
 char *csc_path_path(char *path, char *buffer, int blen);
 
 /* see memdump.c */
-int csc_memdump(void *mem, int range, int column, int mode);
+#define CSC_MEMDUMP_BIT_8	0
+#define CSC_MEMDUMP_BIT_16	1
+#define CSC_MEMDUMP_BIT_32	2
+#define CSC_MEMDUMP_BIT_64	3
+#define CSC_MEMDUMP_BIT_FLOAT	4
+#define CSC_MEMDUMP_BIT_DOUBLE	5
+#define CSC_MEMDUMP_BIT_MASK	0xf	/* 8/16/32/64 */
+
+#define CSC_MEMDUMP_TYPE_HEXU	0	/* uppercased hexadecimal */
+#define CSC_MEMDUMP_TYPE_HEXL	0x10	/* lowercased hexadecimal */
+#define CSC_MEMDUMP_TYPE_UDEC	0x20	/* unsigned decimal */
+#define CSC_MEMDUMP_TYPE_IDEC	0x30	/* signed decimal */
+#define CSC_MEMDUMP_TYPE_OCT	0x40	/* unsigned octal */
+#define CSC_MEMDUMP_TYPE_EE	0x50	/* float, size depend on BIT_MASK */
+#define CSC_MEMDUMP_TYPE_MASK	0xf0	
+
+#define CSC_MEMDUMP_WID_MASK	0xf00	/* always plus 2 */
+#define CSC_MEMDUMP_WIDTH(n)	(((n)<<8) & CSC_MEMDUMP_WID_MASK)
+
+#define CSC_MEMDUMP_NO_GLYPH	0x1000	/* don't show ASC glyphes */
+#define CSC_MEMDUMP_NO_ADDR	0x2000	/* don't show address */
+#define CSC_MEMDUMP_NO_FILLING	0x4000	/* don't fill leading 0 */
+#define CSC_MEMDUMP_NO_SPACE	0x8000	/* don't fill space between numbers */
+#define CSC_MEMDUMP_ALIGN_LEFT	0x10000	/* align to left */
+#define CSC_MEMDUMP_REVERSE	0x20000	/* reverse display */
+
+int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen);
+int csc_memdump(void *mem, int range, int column, int flags);
 
 /* see csc_crc*.c */
 unsigned short csc_crc16_byte(unsigned short crc, char data);

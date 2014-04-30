@@ -27,22 +27,58 @@ extern SMMDBG  *tstdbg;
 
 int memdump_main(int argc, char **argv)
 {
-	char	user[384];
-	int	i;
+	char	user[384], buf[256];
+	int	i, len;
+	int	flags[] = {
+		CSC_MEMDUMP_BIT_16,
+		CSC_MEMDUMP_BIT_32,
+		CSC_MEMDUMP_BIT_64,
+		CSC_MEMDUMP_BIT_FLOAT | CSC_MEMDUMP_TYPE_EE,
+		CSC_MEMDUMP_BIT_DOUBLE | CSC_MEMDUMP_TYPE_EE,
+		CSC_MEMDUMP_TYPE_HEXL | CSC_MEMDUMP_WIDTH(3) | 
+			CSC_MEMDUMP_ALIGN_LEFT | CSC_MEMDUMP_NO_FILLING,
+		CSC_MEMDUMP_TYPE_UDEC,
+		CSC_MEMDUMP_TYPE_IDEC | CSC_MEMDUMP_BIT_64,
+		CSC_MEMDUMP_TYPE_OCT,
+		CSC_MEMDUMP_NO_GLYPH,
+		CSC_MEMDUMP_NO_ADDR,
+		CSC_MEMDUMP_NO_SPACE,
+		0
+	};
 
 	(void) argc;
 	(void) argv;	/* stop the compiler warning */
 
 	for (i = 0; i < (int)sizeof(user); user[i] = i, i++);
 
-	csc_memdump(user, sizeof(user), 16, 7);
-	csc_memdump(user, sizeof(user), 8, 16);
-	csc_memdump(user, sizeof(user), 6, 32);
-	csc_memdump(user, sizeof(user), 3, 64);
-	csc_memdump(user+sizeof(user), -(int)(sizeof(user)), 6, 32);
-	csc_memdump(user+sizeof(user), -(int)(sizeof(user)), 16, 8);
-	slogc(tstdbg, SLINFO, "sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld\n",
-			sizeof(int), sizeof(long), sizeof(short), sizeof(long long), sizeof(long int));
+	for (i = 0; i < (int)(sizeof(flags)/sizeof(int)); i++) {
+		len = csc_memdump_line(user, 16, flags[i], buf, sizeof(buf));
+		slogz("%s\n", buf);
+		if (len != (int)strlen(buf)) {
+			slogz("BOOM!\n");
+			break;
+		}
+	}
+
+	/* reverse test */
+	csc_memdump_line(user + sizeof(user), 16, 
+			CSC_MEMDUMP_BIT_32 | CSC_MEMDUMP_REVERSE, 
+			buf, sizeof(buf));
+	slogz("%s\n", buf);
+
+	/* length test */
+	slogz("SIZE=%d\n", csc_memdump_line(user + sizeof(user), 16, 
+			CSC_MEMDUMP_BIT_32 | CSC_MEMDUMP_REVERSE, NULL, 0));
+
+	csc_memdump(user, sizeof(user), 16, 0);
+	csc_memdump(user, sizeof(user), 4, CSC_MEMDUMP_BIT_32 | 
+			CSC_MEMDUMP_NO_GLYPH | CSC_MEMDUMP_NO_ADDR | CSC_MEMDUMP_NO_SPACE);
+	csc_memdump(user + sizeof(user), sizeof(user), 16, CSC_MEMDUMP_REVERSE);
+	slogz("sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld "
+			"float=%d double=%d\n",
+			sizeof(int), sizeof(long), sizeof(short), 
+			sizeof(long long), sizeof(long int), 
+			sizeof(float), sizeof(double));
 	return 0;
 }
 

@@ -19,80 +19,241 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "libcsoup.h"
 
-#define MEMDUMP_MODE_WID_MASK	0xff
-#define MEMDUMP_MODE_NO_GLYPH	0x100
 
-#define MEMDUMP_COL_MAX	32	/* no display more than this column a line */
+#define CSC_MEMDUMP_TYPE_SIGNED(f)	\
+	(((f) & CSC_MEMDUMP_TYPE_MASK) == CSC_MEMDUMP_TYPE_IDEC)
 
-int csc_memdump(void *mem, int range, int column, int mode)
+#define CSC_MEMDUMP_TYPE_HEX(f)		\
+	((((f) & CSC_MEMDUMP_TYPE_MASK) == CSC_MEMDUMP_TYPE_HEXL) ||\
+		(((f) & CSC_MEMDUMP_TYPE_MASK) == CSC_MEMDUMP_TYPE_HEXU))
+
+static int csc_memdump_find_step(int flags)
 {
-	char	lbuf[MEMDUMP_COL_MAX * 17];
-	char	abuf[MEMDUMP_COL_MAX + 4], tmp[32];
-	int	i, step, ccnt, cidx, direct;
-
-	direct = 0;
-	if (range < 0) {
-		direct = -1;
-		range  = - range;
+	/* calculate the unit step of each number */
+	switch (flags & CSC_MEMDUMP_BIT_MASK) {
+	case CSC_MEMDUMP_BIT_16:
+		return 2; 
+	case CSC_MEMDUMP_BIT_32:
+		return 4;
+	case CSC_MEMDUMP_BIT_64:
+		return 8;
+	case CSC_MEMDUMP_BIT_FLOAT:
+		return (int) sizeof(float);
+	case CSC_MEMDUMP_BIT_DOUBLE:
+		return (int) sizeof(double);
 	}
-	if (column > MEMDUMP_COL_MAX) {
-		column = MEMDUMP_COL_MAX;
+	return 1;
+}
+
+int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
+{
+	char	*mp, format[32], tmp[64];
+	int	n, sp, step, amnt;
+
+	step = csc_memdump_find_step(flags);
+
+	/* prepair the print format string */
+	strcpy(format, "%");
+	if (flags & CSC_MEMDUMP_ALIGN_LEFT) {
+		strcat(format, "-");
+	}
+	/* define the display width of each number */
+	n = (flags & CSC_MEMDUMP_WID_MASK) >> 8;
+	if (n > 0) {	/* if the width is explicitly given */
+		if (flags & CSC_MEMDUMP_NO_FILLING) {
+			sprintf(tmp, "%d", n);
+		} else {
+			sprintf(tmp, "0%d", n);
+		}
+	} else if (flags & CSC_MEMDUMP_NO_FILLING) {	/* natural width */
+		strcpy(tmp, "");
+	} else if (CSC_MEMDUMP_TYPE_HEX(flags)) {
+		sprintf(tmp, "0%d", step * 2);
+	} else if ((flags & CSC_MEMDUMP_TYPE_MASK) == CSC_MEMDUMP_TYPE_OCT) {
+		sprintf(tmp, "0%d", step * 3);
+	} else {
+		strcpy(tmp, "");
+	}
+	strcat(format, tmp);
+	/* 64-bit integer need the prefix */
+	if ((flags & CSC_MEMDUMP_BIT_MASK) == CSC_MEMDUMP_BIT_64) {
+		strcat(format, "ll");
 	}
 
-	ccnt = cidx = 0;
-	sprintf(lbuf, "%p: ", mem);
-	while (range > 0) {
-		switch (mode & MEMDUMP_MODE_WID_MASK) {
-		case 16:
-			step = 2;
-			sprintf(tmp, "%04x ", *((unsigned short *)mem));
+	switch (flags & CSC_MEMDUMP_TYPE_MASK) {
+	case CSC_MEMDUMP_TYPE_HEXL:
+		strcat(format, "x");
+		break;
+	case CSC_MEMDUMP_TYPE_UDEC:
+		strcat(format, "u");
+		break;
+	case CSC_MEMDUMP_TYPE_IDEC:
+		strcat(format, "d");
+		break;
+	case CSC_MEMDUMP_TYPE_OCT:
+		strcat(format, "o");
+		break;
+	default:
+		if ((flags & CSC_MEMDUMP_BIT_MASK) == CSC_MEMDUMP_BIT_FLOAT) {
+			strcat(format, "f");
 			break;
-		case 32:
-			step = 4;
-			sprintf(tmp, "%08x ", *((unsigned *)mem));
+		}
+		if ((flags & CSC_MEMDUMP_BIT_MASK) == CSC_MEMDUMP_BIT_DOUBLE){
+			strcat(format, "e");
 			break;
-		case 64:
-			step = 8;
-			SMM_SPRINT(tmp, "%016lld ", 
-					*((unsigned long long *)mem));
+		}
+		strcat(format, "X");
+		break;
+	}
+	if ((flags & CSC_MEMDUMP_NO_SPACE) == 0) {
+		strcat(format, " ");
+	}
+
+	//printf("%s %d\n", format, step);
+	
+	/* begin to print; try print the address first */
+	amnt = 0;
+	if ((flags & CSC_MEMDUMP_NO_ADDR) == 0) {
+		switch (sizeof(void*)) {
+		case 8:
+			n = sprintf(tmp, "%llX: ", (unsigned long long) mem);
+			break;
+		case 4:
+			n = sprintf(tmp, "%lX: ", (unsigned long) mem);
 			break;
 		default:
-			step = 1;
-			sprintf(tmp, "%02x ", *((unsigned char *)mem));
+			n = sprintf(tmp, "%p: ", mem);
 			break;
 		}
-		strcat(lbuf, tmp);
-		memcpy(&abuf[cidx], mem, step);
-
-		cidx  += step;
-		range -= step;
-		if (direct < 0) {
-			mem = (void*)((unsigned long)mem - step);
-		} else {
-			mem = (void*)((unsigned long)mem + step);
+		if (buf && (blen > n)) {
+			strcpy(buf, tmp);
+			buf  += n;
+			blen -= n;
 		}
+		amnt += n;
+	}
 
-		ccnt++;
-		if (ccnt == column) {
-			for (i = 0; i < cidx; i++) {
-				if ((abuf[i] < ' ') || (abuf[i] > 0x7e)) {
-					abuf[i] = '.';
-				}
-			}
-			abuf[i] = 0;
-
-			if (mode & MEMDUMP_MODE_NO_GLYPH) {
-				printf("%s\n", lbuf);
+	/* start to dump the data */
+	mp = mem;
+	sp = msize;
+	while (sp >= step) {
+		switch (flags & CSC_MEMDUMP_BIT_MASK) {
+		case CSC_MEMDUMP_BIT_16:
+			if (CSC_MEMDUMP_TYPE_SIGNED(flags)) {
+				n = sprintf(tmp, format, *((short *)mp));
 			} else {
-				printf("%s %s\n", lbuf, abuf);
+				n = sprintf(tmp, format, 
+						*((unsigned short *)mp));
 			}
+			break;
+		case CSC_MEMDUMP_BIT_32:
+			if (CSC_MEMDUMP_TYPE_SIGNED(flags)) {
+				n = sprintf(tmp, format, *((int *)mp));
+			} else {
+				n = sprintf(tmp, format, *((unsigned *)mp));
+			}
+			break;
+		case CSC_MEMDUMP_BIT_64:
+			if (CSC_MEMDUMP_TYPE_SIGNED(flags)) {
+				n = SMM_SPRINT(tmp, format, 
+						*((long long *)mp));
+			} else {
+				n = SMM_SPRINT(tmp, format,	
+						*((unsigned long long *)mp));
+			}
+			break;
+		case CSC_MEMDUMP_BIT_FLOAT:
+			n = sprintf(tmp, format, *((float *)mp));
+			break;
+		case CSC_MEMDUMP_BIT_DOUBLE:
+			n = sprintf(tmp, format, *((double *)mp));
+			break;
+		default:
+			if (CSC_MEMDUMP_TYPE_SIGNED(flags)) {
+				n = sprintf(tmp, format, *mp);
+			} else {
+				n = sprintf(tmp, format, 
+						*((unsigned char *)mp));
+			}
+			break;
+		}
+		if (buf && blen >= n) {
+			strcpy(buf, tmp);
+			buf  += n;
+			blen -= n;
+		}
+		amnt += n;
 
-			ccnt = cidx = 0;
-			sprintf(lbuf, "%p: ", mem);
+		if (flags & CSC_MEMDUMP_REVERSE) {
+			mp -= step;
+		} else {
+			mp += step;
+		}
+		sp -= step;
+	}
+	if (flags & CSC_MEMDUMP_NO_GLYPH) {
+		return amnt;
+	}
+
+	if (buf && blen > 0) {
+		strcpy(buf, " ");
+		buf++;
+		blen--;
+	}
+	amnt++;
+	mp = mem;
+	sp = msize;
+	while (sp) {
+		if (buf && blen > 0) {
+			if ((*mp < ' ') || (*mp > 0x7e)) {
+				*buf++ = '.';
+			} else {
+				*buf++ = *mp;
+			}
+			blen--;
+		}
+		if (flags & CSC_MEMDUMP_REVERSE) {
+			mp--;
+		} else {
+			mp++;
+		}
+		sp--;
+		amnt++;
+	}
+	if (buf && blen > 0) {
+		*buf++ = 0;
+	}
+	return amnt;
+}
+
+int csc_memdump(void *mem, int msize, int column, int flags)
+{
+	char	*buf, *mp;
+	int	bsize, csize, len;
+
+	csize = csc_memdump_find_step(flags) * column;
+	bsize = csize * 6 + 32;		/* should be big enough */
+	if ((buf = malloc(bsize)) == NULL) {
+		return SMM_ERR_LOWMEM;
+	}
+
+	mp = mem;
+	while (msize) {
+		len = csize < msize ? csize : msize;
+		csc_memdump_line(mp, len, flags, buf, bsize);
+		slogz("%s\n", buf);
+
+		msize -= len;
+		if (flags & CSC_MEMDUMP_REVERSE) {
+			mp -= len;
+		} else {
+			mp += len;
 		}
 	}
+	free(buf);
 	return 0;
 }
