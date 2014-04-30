@@ -60,7 +60,7 @@ int smm_mkdir(char *path)
 	}
 
 	for (i = rc = 0; i < argcs; i++) {
-		printf("[%d] %s\n", i, argvs[i]);
+		//printf("[%d] %s\n", i, argvs[i]);
 		if (*argvs[i] == 0) {
 			continue;
 		}

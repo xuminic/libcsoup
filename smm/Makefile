@@ -3,6 +3,7 @@ CFLAGS	+= -I..
 
 OBJS	= smm_chdir.o		\
 	  smm_codepage.o	\
+	  smm_config.o		\
 	  smm_cwd_alloc.o	\
 	  smm_cwd_pop.o		\
 	  smm_cwd_push.o	\
