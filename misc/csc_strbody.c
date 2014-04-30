@@ -24,7 +24,7 @@
 #include <string.h>
 
 
-char *csc_strbody(const char *s, int *len)
+char *csc_strbody(char *s, int *len)
 {
 	int	n;
 

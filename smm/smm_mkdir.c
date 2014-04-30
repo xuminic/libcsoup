@@ -27,18 +27,45 @@
 #ifdef	CFG_WIN32_API
 int smm_mkdir(char *path)
 {
-	TCHAR	*wpath;
+	char	**argvs, *root = "\\";
+	int	i, rc, argcs;
 
-	if ((wpath = smm_mbstowcs(path)) == NULL) {
-		return smm_errno_update(SMM_ERR_NONE_READ);
+	if (isalpha(path[0]) && (path[1] == ':')) {
+		/* C:/sss/sss/sss */
+	} else if (!strcmp(path, "\\\\?\\", 4)) {
+		/* \\?\UNC\ComputerName\SharedFolder\Resource
+		 * \\?\C:\File */
+	} else if (!strcmp(path, "\\\\", 2)) {
+		/* \\ComputerName\SharedFolder\Resource */
 	}
 
-	if (SetCurrentDirectory(wpath) == 0) {
-		free(wpath);
-		return smm_errno_update(SMM_ERR_CHDIR);
+	argvs = csc_fixtoken_copy(path, "/\\", &argcs);
+	if (*argvs[0] == 0) {	/* make up the root directory */
+		argvs[0] = root;
 	}
 
-	free(wpath);
+	for (i = rc = 0; i < argcs; i++) {
+		//printf("[%d] %s\n", i, argvs[i]);
+		if (*argvs[i] == 0) {
+			continue;
+		}
+		if ((rc = chdir(argvs[i])) == 0) {
+			continue;
+		}
+		if (errno != ENOENT) {	/* error condition */
+			rc = SMM_ERR_CHDIR;
+			break;
+		}
+		if ((rc = mkdir(argvs[i], 0755)) != 0) {
+			rc = SMM_ERR_MKDIR;
+			break;
+		}
+		if ((rc = chdir(argvs[i])) != 0) {
+			rc = SMM_ERR_CHDIR;
+			break;
+		}
+	}
+	free(argvs);
 	return smm_errno_update(SMM_ERR_NONE);
 }
 #endif

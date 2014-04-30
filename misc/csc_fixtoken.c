@@ -26,6 +26,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 extern int csc_isdelim(char *delim, int ch);

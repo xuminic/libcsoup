@@ -118,17 +118,7 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 	/* begin to print; try print the address first */
 	amnt = 0;
 	if ((flags & CSC_MEMDUMP_NO_ADDR) == 0) {
-		switch (sizeof(void*)) {
-		case 8:
-			n = sprintf(tmp, "%llX: ", (unsigned long long) mem);
-			break;
-		case 4:
-			n = sprintf(tmp, "%lX: ", (unsigned long) mem);
-			break;
-		default:
-			n = sprintf(tmp, "%p: ", mem);
-			break;
-		}
+		n = sprintf(tmp, "%lX: ", (unsigned long) mem);
 		if (buf && (blen > n)) {
 			strcpy(buf, tmp);
 			buf  += n;

@@ -264,7 +264,7 @@ int csc_cmp_file_extname(char *fname, char *ext);
 int csc_cmp_file_extlist(char *fname, char **ext);
 int csc_cmp_file_extargs(char *fname, char *ext, ...);
 
-char *csc_strbody(const char *s, int *len);
+char *csc_strbody(char *s, int *len);
 
 /* see csoup_strcmp_list.c */
 int csc_strcmp_list(char *dest, char *src, ...);
@@ -510,6 +510,7 @@ long long smm_filesize(char *fname);
 char *smm_fontpath(char *ftname, char **userdir);
 int smm_fstat(char *fname);
 int smm_init(int logcw);
+int smm_mkdir(char *path);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
 int smm_pwuid(char *uname, long *uid, long *gid);
 int smm_signal_break(int (*handle)(int));

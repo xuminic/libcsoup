@@ -478,7 +478,7 @@ int csc_cfg_write_longlong(void *cfg, char *mkey, char *skey, long long val)
 {
 	char	buf[32];
 
-	sprintf(buf, "%lld", val);
+	SMM_SPRINT(buf, "%lld", val);
 	return csc_cfg_write(cfg, mkey, skey, buf);
 }
 
