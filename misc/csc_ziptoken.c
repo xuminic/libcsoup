@@ -66,4 +66,29 @@ int csc_ziptoken(char *sour, char **idx, int ids, char *delim)
 	return i;
 }
 
+char **csc_ziptoken_copy(char *sour, char *delim, int *ids)
+{
+	char	**token;
+	int	i, n;
+
+	for (i = n = 0; sour[i]; i++) {
+		if (csc_isdelim(delim, *sour)) {
+			n++;
+		}
+	}
+	n++;	/* safty edge */
+
+	if ((token = malloc(n*sizeof(char*) + strlen(sour) + 16)) == NULL) {
+		return NULL;
+	}
+	strcpy((char*)&token[n], sour);
+
+	n = csc_ziptoken((char*)&token[n], token, n, delim);
+	if (ids) {
+		*ids = n;
+	}
+	return token;
+}
+
+
 

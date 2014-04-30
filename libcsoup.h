@@ -250,7 +250,9 @@ int csc_extname_filter_match(void *efft, char *fname);
 size_t csc_strlcpy(char *dst, const char *src, size_t siz);
 char *csc_strcpy_alloc(const char *src, int extra);
 int csc_fixtoken(char *sour, char **idx, int ids, char *delim);
+char **csc_fixtoken_copy(char *sour, char *delim, int *ids);
 int csc_ziptoken(char *sour, char **idx, int ids, char *delim);
+char **csc_ziptoken_copy(char *sour, char *delim, int *ids);
 int csc_isdelim(char *delim, int ch);
 int csc_mkargv(char *sour, char **idx, int ids);
 char *csc_cuttoken(char *sour, char **token, char *delim);
@@ -396,6 +398,7 @@ char *csc_iso639_iso_to_lang(char *iso);
 #define SMM_ERR_STAT		SMM_ERR(8)	/* stat failed */
 #define SMM_ERR_LENGTH		SMM_ERR(9)	/* general fail of length */
 #define SMM_ERR_PWNAM		SMM_ERR(10)	/* passwd and name */
+#define SMM_ERR_MKDIR		SMM_ERR(11)
 #define SMM_ERR_NULL		SMM_ERR(32)	/* empty content */
 #define SMM_ERR_OBJECT		SMM_ERR(33)	/* wrong object */
 

@@ -184,6 +184,16 @@ int config_block_test(char *fname)
 	return 0;
 }
 
+int config_create_new(void)
+{
+	void	*root;
+
+	root = csc_cfg_open("/home/xum1/.config/myowntest/path1/./../path2/", "mytest.rc", 0);
+	//root = csc_cfg_open("/home/xum1/.config/myowntest", "mytest.rc", 0);
+	csc_cfg_close(root);
+	return 0;
+}
+
 int config_main(int argc, char **argv)
 {
 	while (--argc && (**++argv == '-')) {
@@ -200,6 +210,8 @@ int config_main(int argc, char **argv)
 			if (argc > 0) {
 				config_block_test(*argv);
 			}
+		} else if (!strcmp(*argv, "--create")) {
+			config_create_new();
 		} else {
 			slogz("Unknown option. [%s]\n", *argv);
 			return -1;

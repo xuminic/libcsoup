@@ -11,6 +11,7 @@ OBJS	= smm_chdir.o		\
 	  smm_fstat.o		\
 	  smm_init.o		\
 	  smm_lstat.o		\
+	  smm_mkdir.o		\
 	  smm_wcstombs.o	\
 	  smm_pathtrek.o	\
 	  smm_pwuid.o		\

@@ -126,7 +126,7 @@ static inline KEYCB *CFGF_GETOBJ(void *objc)
 {
 	KEYCB   *kcb = objc;
 
-	if (kcb->majesty != CFGF_MAGIC) {
+	if (kcb && (kcb->majesty != CFGF_MAGIC)) {
 		return NULL;
 	}
 	return kcb;
@@ -934,8 +934,7 @@ static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag)
 		}
 	} else {
 		if (smm_chdir(path) != SMM_ERR_NONE) {
-			printf("FIXME! create %s\n", path);
-			return NULL;
+			smm_mkdir(path);
 		}
 		if (smm_chdir(path) != SMM_ERR_NONE) {
 			return NULL;	/* permittion denied */
