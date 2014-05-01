@@ -159,7 +159,6 @@ void *csc_cfg_open(char *path, char *filename, int rdflag)
 	FILE	*fp;
 	int	len;
 
-
 	/* try to open the configure file. If the file doesn't exist 
 	 * while it's the read/write mode, then create it */
 	if ((fp = csc_cfg_open_file(path, filename, rdflag)) == NULL) {
@@ -311,6 +310,9 @@ char *csc_cfg_read(void *cfg, char *mkey, char *skey)
 {
 	KEYCB	*mcb, *scb;
 
+	if (CFGF_GETOBJ(cfg) == NULL) {
+		return NULL;
+	}
 	if ((mcb = csc_cfg_find_key(cfg, mkey, CFGF_TYPE_MAIN)) == NULL) {
 		return NULL;
 	}
@@ -342,6 +344,9 @@ char *csc_cfg_read_next(void *cfg, char **key)
 {
 	KEYCB	*scb;
 
+	if (CFGF_GETOBJ(cfg) == NULL) {
+		return NULL;
+	}
 	if ((scb = csc_cfg_recent_update(cfg, CFGF_TYPE_KEY)) == NULL) {
 		return NULL;
 	}
@@ -366,13 +371,13 @@ int csc_cfg_write(void *cfg, char *mkey, char *skey, char *value)
 	KEYCB	*mcb, *scb, *ncb, *root;
 	int	olen, nlen;
 
+	if ((root = CFGF_GETOBJ(cfg)) == NULL) {
+		return SMM_ERR_OBJECT;
+	}
 	if ((mcb = csc_cfg_find_key(cfg, mkey, CFGF_TYPE_MAIN)) == NULL) {
 		/* if the main key doesn't exist, create a new key and
 		 * insert to the tail */
 		if (strchr(mkey, '[') == NULL) {
-			return SMM_ERR_NULL;
-		}
-		if ((root = CFGF_GETOBJ(cfg)) == NULL) {
 			return SMM_ERR_NULL;
 		}
 		if ((mcb = csc_cfg_kcb_create(mkey, NULL, NULL)) == NULL) {
@@ -518,6 +523,9 @@ int csc_cfg_write_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize)
 {
 	char	*buf;
 
+	if (!bin || !bsize) {
+		return SMM_ERR_NULL;
+	}
 	if ((buf = calloc(bsize+1, 2)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
@@ -785,7 +793,7 @@ static int csc_cfg_kcb_fillup(KEYCB *kp)
 	}
 	/* 'i' should be indicating either '#', '\n' or '\0' now */
 	for (i--; i >= 0; i--) {
-		if (!isspace(kp->pool[i])) {
+		if (!SMM_ISSPACE(kp->pool[i])) {
 			break;
 		}
 	}
@@ -922,30 +930,23 @@ static KEYCB *csc_cfg_recent_update(void *cfg, int type)
 static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag)
 {
 	FILE	*fp;
+	char	*fullpath;
+
+	if ((fullpath = csc_strcpy_alloc(path, strlen(fname)+4)) == NULL) {
+		return NULL;
+	}
+	strcat(fullpath, SMM_DEF_DELIM);
+	strcat(fullpath, fname);
 
 	if (rdflag) {
-		if (smm_chdir(path) != SMM_ERR_NONE) {
-			perror("smm_chdir");
-			return NULL;	/* path doesn't exist */
-		}
-		if ((fp = fopen(fname, "r")) == NULL) {
-			perror("fopen");
-			return NULL;	/* file doesn't exist */
-		}
+		fp = fopen(fullpath, "r");
 	} else {
-		if (smm_chdir(path) != SMM_ERR_NONE) {
-			smm_mkdir(path);
-		}
-		if (smm_chdir(path) != SMM_ERR_NONE) {
-			return NULL;	/* permittion denied */
-		}
-		if ((fp = fopen(fname, "r+")) == NULL) {
-			fp = fopen(fname, "w+");
-		}
-		if (fp == NULL) {
-			return NULL;	/* permittion denied */
+		smm_mkpath(path);
+		if ((fp = fopen(fullpath, "r+")) == NULL) {
+			fp = fopen(fullpath, "w+");
 		}
 	}
+	free(fullpath);
 	return fp;
 }
 

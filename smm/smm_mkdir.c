@@ -19,96 +19,84 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "libcsoup.h"
 
 #ifdef	CFG_WIN32_API
 int smm_mkdir(char *path)
 {
-	char	**argvs, *root = "\\";
-	int	i, rc, argcs;
+	TCHAR	*wpath;
 
-	if (isalpha(path[0]) && (path[1] == ':')) {
-		/* C:/sss/sss/sss */
-	} else if (!strcmp(path, "\\\\?\\", 4)) {
-		/* \\?\UNC\ComputerName\SharedFolder\Resource
-		 * \\?\C:\File */
-	} else if (!strcmp(path, "\\\\", 2)) {
-		/* \\ComputerName\SharedFolder\Resource */
+	if ((wpath = smm_mbstowcs(path)) == NULL) {
+		return smm_errno_update(SMM_ERR_NONE_READ);
 	}
-
-	argvs = csc_fixtoken_copy(path, "/\\", &argcs);
-	if (*argvs[0] == 0) {	/* make up the root directory */
-		argvs[0] = root;
+	if (CreateDirectory(wpath, NULL)) {
+		free(wpath);
+		return smm_errno_update(SMM_ERR_NONE);
 	}
-
-	for (i = rc = 0; i < argcs; i++) {
-		//printf("[%d] %s\n", i, argvs[i]);
-		if (*argvs[i] == 0) {
-			continue;
-		}
-		if ((rc = chdir(argvs[i])) == 0) {
-			continue;
-		}
-		if (errno != ENOENT) {	/* error condition */
-			rc = SMM_ERR_CHDIR;
-			break;
-		}
-		if ((rc = mkdir(argvs[i], 0755)) != 0) {
-			rc = SMM_ERR_MKDIR;
-			break;
-		}
-		if ((rc = chdir(argvs[i])) != 0) {
-			rc = SMM_ERR_CHDIR;
-			break;
-		}
+	free(wpath);
+	if (GetLastError() == ERROR_ALREADY_EXISTS) {
+		return smm_errno_update(SMM_ERR_NONE);
 	}
-	free(argvs);
-	return smm_errno_update(SMM_ERR_NONE);
+	return smm_errno_update(SMM_ERR_MKDIR);
 }
 #endif
 
 #ifdef	CFG_UNIX_API
-#include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 int smm_mkdir(char *path)
 {
-	char	**argvs, *root = "/";
-	int	i, rc, argcs;
-
-	argvs = csc_fixtoken_copy(path, "/", &argcs);
-	if (*argvs[0] == 0) {	/* make up the root directory */
-		argvs[0] = root;
+	//printf("%s\n", path);
+	if (mkdir(path, 0755) == 0) {
+		return smm_errno_update(SMM_ERR_NONE);
 	}
-
-	for (i = rc = 0; i < argcs; i++) {
-		//printf("[%d] %s\n", i, argvs[i]);
-		if (*argvs[i] == 0) {
-			continue;
-		}
-		if ((rc = chdir(argvs[i])) == 0) {
-			continue;
-		}
-		if (errno != ENOENT) {	/* error condition */
-			rc = SMM_ERR_CHDIR;
-			break;
-		}
-		if ((rc = mkdir(argvs[i], 0755)) != 0) {
-			rc = SMM_ERR_MKDIR;
-			break;
-		}
-		if ((rc = chdir(argvs[i])) != 0) {
-			rc = SMM_ERR_CHDIR;
-			break;
-		}
+	if (errno == EEXIST) {	/* path name already exists */
+		return smm_errno_update(SMM_ERR_NONE);
 	}
-	free(argvs);
-	return smm_errno_update(rc);
+	return smm_errno_update(SMM_ERR_MKDIR);
 }
 #endif
+
+int smm_mkpath(char *path)
+{
+	char	*pco, store;
+	int	i;
+
+	if ((pco = csc_strcpy_alloc(csc_strbody(path, NULL), 4)) == NULL) {
+		return SMM_ERR_LOWMEM;
+	}
+
+	/* remove the tailing whitespaces and keep one delimit */
+	for (i = strlen(pco) - 1; i >=0; i--) {
+		if (csc_isdelim(SMM_PATH_DELIM " ", pco[i])) {
+			pco[i] = 0;
+		} else {
+			break;
+		}
+	}
+	strcat(pco, SMM_DEF_DELIM);
+
+	for (i = 1; i < (int) strlen(pco); i++) {
+		if (!csc_isdelim(SMM_PATH_DELIM, pco[i])) {
+			continue;
+		}
+		store = pco[i];
+		pco[i] = 0;
+		if (smm_mkdir(pco) != SMM_ERR_NONE) {
+			free(pco);
+			return smm_errno_update(SMM_ERR_MKDIR);
+		}
+		pco[i] = store;
+	}
+	free(pco);
+	return smm_errno_update(SMM_ERR_NONE);
+}
+
 

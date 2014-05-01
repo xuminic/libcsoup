@@ -35,7 +35,7 @@ char *csc_path_basename(char *path, char *buffer, int blen)
 	char	*p;
 
 	for (p = path + strlen(path) - 1; p >= path; p--) {
-		if (SMM_PATHD(*p)) {
+		if (csc_isdelim(SMM_PATH_DELIM, *p)) {
 			break;
 		}
 	}

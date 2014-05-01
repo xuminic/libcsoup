@@ -1,4 +1,4 @@
-/*  csc_path_path.c
+/*  csc_file_store.c - store the memory contents into file. 
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -17,37 +17,36 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+
 #include <stdio.h>
 #include <string.h>
 
 #include "libcsoup.h"
 
-/* return the directory from an input path. 
- * for example:
- * /abc/def/ghi      buffer = /abc/def/         return ghi
- * /abc/def/ghi/     buffer = /abc/def/ghi/     return ""
- * abc               buffer = ./                return abc
- */
-char *csc_path_path(char *path, char *buffer, int blen)
+int csc_file_store(char *path, int ovrd, char *src, int len)
 {
-	int	i;
+	FILE	*fp;
+	int	n, amnt;
 
-	for (i = strlen(path) - 1; i >= 0; i--) {
-		if (csc_isdelim(SMM_PATH_DELIM, path[i])) {
+	if (ovrd) {
+		fp = fopen(path, "w");
+	} else {
+		fp = fopen(path, "a");
+	}
+	if (fp == NULL) {
+		return SMM_ERR_OPEN;
+	}
+
+	amnt = 0;
+	while (1) {
+		n = fwrite(src + amnt, 1, len - amnt, fp);
+		amnt += n;
+		if (amnt == len) {
 			break;
 		}
 	}
-	if (i >= 0) {
-		i++;
-		if (buffer) {
-			csc_strlcpy(buffer, path, i > blen ? blen : i);
-		}
-		return path + i;
-	}
-	if (buffer && (blen > 3)) {
-		strcpy(buffer, ".");
-		strcat(buffer, SMM_DEF_DELIM);
-	}
-	return path;
+	fclose(fp);
+	return amnt;
 }
+
 

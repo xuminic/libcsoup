@@ -8,7 +8,8 @@ PREFIX	= /usr/local
 BINDIR	= /usr/local/bin
 MANDIR	= /usr/local/man/man1
 
-SYSAPI	= -DCFG_WIN32_API # Options: CFG_WIN32_API, CFG_UNIX_API
+# Options: CFG_WIN32_API, CFG_UNIX_API
+SYSAPI	= 
 DEBUG	= -g -DDEBUG
 DEFINES = 
 

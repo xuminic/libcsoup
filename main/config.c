@@ -25,20 +25,62 @@
 
 #include "libcsoup.h"
 
-#define	TESTPATH	"/home/xum1/.config/ezthumb"
-#define TESTINPUT	"ezthumb.test"
-#define TESTOUTPUT	"ezthumb.out"
+#define	TESTPATH	"longpath/shortpath/config/myconfig"
+#define TESTINPUT	"myconfig.test"
+#define TESTOUTPUT	"myconfig.out"
+
+static	char	*testconf = "\
+window_width=4096\n\
+grid_column=690\n\
+zoom_height=how do i know\n\
+last_directory=/home/xuxx/zvtest\n\
+\n\
+[main]\n\
+timestamp=Mon Apr 28 16:42:30 2014\n\
+simple_profile=8M4x2:10L10x100x1.027000:100R4x320:appendix:appendix:appendix:appendix\n\
+grid_define=Auto\n\
+zoom_define=Auto\n\
+\n\
+window_width=1280\n\
+window_height=1024\n\
+\n\
+   [hello]\n\
+# this is a comment\n\
+window_width=897\n\
+window_height=500\n\
+window_state=0\n\
+grid_column=4=690\n\
+grid_row=4\n\
+\n\
+[what]=purely unknown           # for test only\n\
+Binary=00710B0200000000D0720B02000000004243594B74000000F4620B02000000000F630B02000000000000000000000000\n\
+time_step=0\n\
+zoom_ratio=50\n\
+zoom_width=0\n\
+zoom_height=0\n\
+canvas_width=0\n\
+\n\
+[print]  #this is a print page\n\
+duration_mode=12288\n\
+file_format=jpg@85\n\
+transparency=no\n\
+last_directory=/HOME/XUM1/vMACHINE/sHARED/EZVTEST\n\
+";
+
 
 static int config_open_rdonly(void)
 {
 	void	*root;
 
-	root = csc_cfg_open(TESTPATH, TESTINPUT, 1);
+	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 1)) == NULL) {
+		slogz("can't open\n");
+		return -1;
+	}
 	csc_cfg_dump(root, NULL);
 	if (csc_cfg_save(root) == SMM_ERR_NONE) {
 		slogz("FATAL: should be read only\n");
 		csc_cfg_abort(root);
-		return 0;
+		return -2;
 	}
 
 	csc_cfg_saveas(root, TESTPATH, TESTOUTPUT);
@@ -66,7 +108,10 @@ static int config_key_test(void)
 		{ NULL, NULL }
 	};
 
-	root = csc_cfg_open(TESTPATH, TESTINPUT, 0);
+	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 0)) == NULL) {
+		slogz("Weird!\n");
+		return -1;
+	}
 	for (i = 0; rdlist[i][0] || rdlist[i][1]; i++) {
 		slogz("READ %s: %s = %s\n", rdlist[i][0], rdlist[i][1],
 				csc_cfg_read(root, rdlist[i][0], rdlist[i][1]));
@@ -105,7 +150,11 @@ static int config_key_test(void)
 
 	/* write something longer than orignal */
 	val = csc_cfg_copy(root, rdlist[4][0], rdlist[4][1], 64);
-	strcat(val, ":appendix");
+	if (val == NULL) {
+		val = csc_strcpy_alloc(":appendix", 0);
+	} else {
+		strcat(val, ":appendix");
+	}
 	csc_cfg_write(root, rdlist[4][0], rdlist[4][1], val);
 	slogz("WRITEEXT %s: %s = %s\n", rdlist[4][0], rdlist[4][1],
 			csc_cfg_read(root, rdlist[4][0], rdlist[4][1]));
@@ -113,23 +162,28 @@ static int config_key_test(void)
 
 	/* write something shorter than orignal */
 	val = csc_cfg_copy(root, rdlist[6][0], rdlist[6][1], 0);
-	for (i = 0; val[i]; i++) {
-		if ((val[i] >= 'A') && (val[i] <= 'Z')) {
-			val[i] += 'a' - 'A';
-		} else if ((val[i] >= 'a') && (val[i] <= 'z')) {
-			val[i] -= 'a' - 'A';
+	if (val) {
+		for (i = 0; val[i]; i++) {
+			if ((val[i] >= 'A') && (val[i] <= 'Z')) {
+				val[i] += 'a' - 'A';
+			} else if ((val[i] >= 'a') && (val[i] <= 'z')) {
+				val[i] -= 'a' - 'A';
+			}
 		}
+		csc_cfg_write(root, rdlist[6][0], rdlist[6][1], val);
+		slogz("WRITECUT %s: %s = %s\n", rdlist[6][0], rdlist[6][1],
+				csc_cfg_read(root, rdlist[6][0], rdlist[6][1]));
+		free(val);
 	}
-	csc_cfg_write(root, rdlist[6][0], rdlist[6][1], val);
-	slogz("WRITECUT %s: %s = %s\n", rdlist[6][0], rdlist[6][1],
-			csc_cfg_read(root, rdlist[6][0], rdlist[6][1]));
-	free(val);
 
 	csc_cfg_write_bin(root, "[what]", "Binary", root, 48);
 	val = csc_cfg_copy_bin(root, "[what]", "Binary", &n);
 	slogz("BINARY %s: %s = (%d) ", "[what]", "Binary", n);
-	for (i = 0; i < n; i++) {
-		slogz("%02x ", (unsigned char)val[i]);
+	if (val) {
+		for (i = 0; i < n; i++) {
+			slogz("%02x ", (unsigned char)val[i]);
+		}
+		free(val);
 	}
 	slogz("\n");
 
@@ -145,20 +199,10 @@ int config_block_test(char *fname)
 	int	i, flen, klen;
 	void	*root;
 
-	if ((fp = fopen(fname, "r")) == NULL) {
-		perror(fname);
+	flen = 0;
+	if ((fbuf = csc_file_load(fname, NULL, &flen)) == NULL) {
 		return -1;
 	}
-	fseek(fp, 0, SEEK_END);
-	flen = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-	if ((fbuf = malloc(flen)) == NULL) {
-		fclose(fp);
-		return -2;
-	}
-	fread(fbuf, flen, 1, fp);
-	fclose(fp);
-
 	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 0)) == NULL) {
 		free(fbuf);
 		return -3;
@@ -186,11 +230,16 @@ int config_block_test(char *fname)
 
 int config_create_new(void)
 {
-	void	*root;
+	char	*path;
 
-	root = csc_cfg_open("/home/xum1/.config/myowntest/path1/./../path2/", "mytest.rc", 0);
-	//root = csc_cfg_open("/home/xum1/.config/myowntest", "mytest.rc", 0);
-	csc_cfg_close(root);
+	if ((path = csc_strcpy_alloc(TESTPATH, strlen(TESTINPUT)+4)) == NULL) {
+		return -1;
+	}
+	strcat(path, SMM_DEF_DELIM);
+	strcat(path, TESTINPUT);
+
+	csc_file_store(path, testconf, sizeof(testconf));
+	free(path);
 	return 0;
 }
 

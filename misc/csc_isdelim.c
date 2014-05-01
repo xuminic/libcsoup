@@ -21,18 +21,14 @@
 #include <stdio.h>
 #include <string.h>
 
-/* isspace() macro has a problem in Cygwin when compiling it with -mno-cygwin.
- * I assume it is caused by minGW because it works fine with cygwin head files.
- * The problem is it treats some Chinese characters as space characters.
- * A sample is: 0xC5 0xF3 0xD3 0xD1 */
-#define IsSpace(c)	((((c) >= 9) && ((c) <= 0xd)) || ((c) == 0x20))
+#include "libcsoup.h"
 
 int csc_isdelim(char *delim, int ch)
 {
 	while (*delim) {
 		if (*delim == (char) ch) {
 			return 1;
-		} else if ((*delim == ' ') && IsSpace(ch)) {
+		} else if (SMM_ISSPACE(*delim) && SMM_ISSPACE(ch)) {
 			return 1;
 		}
 		delim++;

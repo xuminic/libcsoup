@@ -356,6 +356,9 @@ char *csc_iso639_lang_to_iso(char *lang);
 char *csc_iso639_lang_to_short(char *lang);
 char *csc_iso639_iso_to_lang(char *iso);
 
+int csc_file_store(char *path, int ovrd, char *src, int len);
+char *csc_file_load(char *path, char *buf, int *len);
+
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
@@ -477,12 +480,21 @@ typedef	struct timeval	SMM_TIME;
 
 /* the delimiter of path */
 #ifdef	CFG_WIN32_API
-#define SMM_DELIM	'\\'
-#define SMM_PATHD(c)	(((c) == '/') || ((c)=='\\'))
+#define SMM_DEF_DELIM	"\\"
+#define SMM_PATH_DELIM  "\\/"
 #else	/* CFG_UNIX_API */
-#define SMM_DELIM	'/'
-#define SMM_PATHD(c)	((c) == '/')
+#define SMM_DEF_DELIM	"/"
+#define SMM_PATH_DELIM  "/"
 #endif
+
+/* isspace() macro has a problem in Cygwin when compiling it with -mno-cygwin.
+ * I assume it is caused by minGW because it works fine with cygwin head files.
+ * The problem is it treats some Chinese characters as space characters.
+ * A sample is: 0xC5 0xF3 0xD3 0xD1 */
+/* In the "C" and "POSIX" locales, white space should be: space, form-feed
+ * ('\f'), newline ('\n'), carriage return ('\r'), horizontal tab ('\t'), 
+ * and vertical tab ('\v'). */
+#define SMM_ISSPACE(c)	((((c) >= 9) && ((c) <= 0xd)) || ((c) == 0x20))
 
 
 extern	int	smm_error_no;
@@ -511,6 +523,7 @@ char *smm_fontpath(char *ftname, char **userdir);
 int smm_fstat(char *fname);
 int smm_init(int logcw);
 int smm_mkdir(char *path);
+int smm_mkpath(char *path);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
 int smm_pwuid(char *uname, long *uid, long *gid);
 int smm_signal_break(int (*handle)(int));

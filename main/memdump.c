@@ -23,8 +23,6 @@
 
 #include "libcsoup.h"
 
-extern SMMDBG  *tstdbg;
-
 int memdump_main(int argc, char **argv)
 {
 	char	user[384], buf[256];
@@ -74,11 +72,9 @@ int memdump_main(int argc, char **argv)
 	csc_memdump(user, sizeof(user), 4, CSC_MEMDUMP_BIT_32 | 
 			CSC_MEMDUMP_NO_GLYPH | CSC_MEMDUMP_NO_ADDR | CSC_MEMDUMP_NO_SPACE);
 	csc_memdump(user + sizeof(user), sizeof(user), 16, CSC_MEMDUMP_REVERSE);
-	slogz("sizeof int=%ld long=%ld short=%ld long long=%ld long int=%ld "
-			"float=%d double=%d\n",
+	slogz("Sizeof: int=%ld long=%ld short=%ld longlong=%ld float=%d double=%d\n",
 			sizeof(int), sizeof(long), sizeof(short), 
-			sizeof(long long), sizeof(long int), 
-			sizeof(float), sizeof(double));
+			sizeof(long long), sizeof(float), sizeof(double));
 	return 0;
 }
 

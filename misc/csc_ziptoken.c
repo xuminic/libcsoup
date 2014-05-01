@@ -73,7 +73,7 @@ char **csc_ziptoken_copy(char *sour, char *delim, int *ids)
 	int	i, n;
 
 	for (i = n = 0; sour[i]; i++) {
-		if (csc_isdelim(delim, *sour)) {
+		if (csc_isdelim(delim, sour[i])) {
 			n++;
 		}
 	}

@@ -53,6 +53,28 @@ static int do_smm_chdir(char *path)
 	return 0;
 }
 
+static int do_smm_mkpath(char *path)
+{
+	static	char	*plist[] = {
+		NULL,
+		"Press/any/key to/continue/./../1234",
+		NULL
+	};
+	int	i;
+
+	plist[0] = path;
+	for (i = 0; plist[i]; i++) {
+		slogc(tstdbg, SLINFO, "MKDIR: %s\n", plist[i]);
+		smm_mkpath(plist[i]);
+		if (smm_fstat(plist[i]) != SMM_FSTAT_DIR) {
+			slogc(tstdbg, SLINFO, "FAILED!\n");
+			return -1;
+		}
+	}
+	slogc(tstdbg, SLINFO, "GOOD!\n");
+	return 0;
+}
+
 static int do_push_dir(char *path)
 {
 	char	*cwd, *cid;
@@ -141,6 +163,7 @@ static int do_path_trek(char *path, int flags)
 static	struct	cliopt	clist[] = {
 	{   0, NULL,      0, "OPTIONS:" },
 	{ 'c', NULL,      2, "change current working directory" },
+	{ 'm', NULL,	  2, "make directory" },
 	{ 'p', NULL,      2, "push/pop current working directory" },
 	{ 's', NULL,      2, "state of the file" },
 	{ 'r', NULL,      2, "process directory recurrsively" },
@@ -194,6 +217,9 @@ int smm_main(int argc, char **argv)
 			break;
 		case 'c':
 			do_smm_chdir(optarg);
+			break;
+		case 'm':
+			do_smm_mkpath(optarg);
 			break;
 		case 'p':
 			do_push_dir(optarg);

@@ -1,4 +1,4 @@
-/*  csc_path_path.c
+/*  csc_file_load.c - load file contents into memory
 
     Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
@@ -17,37 +17,54 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "libcsoup.h"
 
-/* return the directory from an input path. 
- * for example:
- * /abc/def/ghi      buffer = /abc/def/         return ghi
- * /abc/def/ghi/     buffer = /abc/def/ghi/     return ""
- * abc               buffer = ./                return abc
- */
-char *csc_path_path(char *path, char *buffer, int blen)
+char *csc_file_load(char *path, char *buf, long *len)
 {
-	int	i;
+	FILE	*fp;
+	long	n, flen, amnt;
 
-	for (i = strlen(path) - 1; i >= 0; i--) {
-		if (csc_isdelim(SMM_PATH_DELIM, path[i])) {
-			break;
+	if ((fp = fopen(path, "r")) == NULL) {
+		return NULL;
+	}
+	if (fseek(fp, 0, SEEK_END) == 0) {	
+		flen = ftell(fp);
+		rewind(fp);
+		if (len && *len && (*len < flen)) {
+			flen = *len;
 		}
+	} else if (buf && len && *len) {	/* unseekable */
+		flen = *len;
+	} else {
+		/* unseekable file need buffer and size */
+		fclose(fp);
+		return NULL;
 	}
-	if (i >= 0) {
-		i++;
-		if (buffer) {
-			csc_strlcpy(buffer, path, i > blen ? blen : i);
-		}
-		return path + i;
+
+	if (buf == NULL) {
+		buf = malloc(flen);
 	}
-	if (buffer && (blen > 3)) {
-		strcpy(buffer, ".");
-		strcat(buffer, SMM_DEF_DELIM);
+	if (buf == NULL) {
+		fclose(fp);
+		return NULL;
 	}
-	return path;
+
+	/* read contents */
+	amnt = 0;
+	while (amnt < flen) {
+		n = fread(buf + amnt, 1, flen - amnt, fp);
+		amnt += n;	
+	}
+	if (len) {
+		*len = amnt;
+	}
+	fclose(fp);
+	return buf;
 }
+
 

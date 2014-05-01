@@ -23,19 +23,20 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "libcsoup.h"
 
 char *csc_strbody(char *s, int *len)
 {
 	int	n;
 
 	/* skip the heading white spaces */
-	while (*s && isspace(*s)) s++;
+	while (*s && SMM_ISSPACE(*s)) s++;
 
 	/* skip the tailing white spaces */
 	n = strlen(s);
 	if (n > 0) {
 		n--;
-		while ((n >= 0) && isspace(s[n])) n--;
+		while ((n >= 0) && SMM_ISSPACE(s[n])) n--;
 		n++;
 	}
 
