@@ -66,37 +66,66 @@ int smm_mkdir(char *path)
 
 int smm_mkpath(char *path)
 {
-	char	*pco, store;
-	int	i;
+	char	*pco, *p, store;
+	int	rc;
 
 	if ((pco = csc_strcpy_alloc(csc_strbody(path, NULL), 4)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
 
-	/* remove the tailing whitespaces and keep one delimit */
-	for (i = strlen(pco) - 1; i >=0; i--) {
-		if (csc_isdelim(SMM_PATH_DELIM " ", pco[i])) {
-			pco[i] = 0;
-		} else {
-			break;
-		}
+	/* remove the tailing whitespaces and keep one delimiter */
+	p = pco + strlen(pco) - 1;
+	pco--;		/* setup the end mark */
+	while ((p != pco) && csc_isdelim(SMM_PATH_DELIM " ", *p)) {
+		*p-- = 0;
 	}
-	strcat(pco, SMM_DEF_DELIM);
+	strcat(++pco, SMM_DEF_DELIM);	/* and clear the end mark */
 
-	for (i = 1; i < (int) strlen(pco); i++) {
-		if (!csc_isdelim(SMM_PATH_DELIM, pco[i])) {
-			continue;
+	/* UNC in Windows:
+	 *   \\ComputerName[@SSL][@Port]\SharedFolder\Resource
+	 *   \\?\UNC\ComputerName\SharedFolder\Resource
+	 *   \\?\C:\SharedFolder\Resource
+	 * Traditional in Windows:
+	 *   C:\SharedFolder\Resource
+	 *   C:SharedFolder\Resource
+	 *   \SharedFolder\Resource
+	 *   .\SharedFolder\Resource
+	 * POSIX:
+	 *   /root/home/user/folder/file
+	 *   ./user/folder/file
+	 *   user/folder/file
+	 */
+	/* skip the leading delimiters, dot path, UNC, etc which could
+	 * not be mkdir-ed anyway */
+#ifdef  CFG_UNIX_API
+	for (p = pco; *p && csc_isdelim(SMM_PATH_DELIM ".", *p); p++);
+#else	/* CFG_WIN32_API */
+	for (p = pco; *p && csc_isdelim(SMM_PATH_DELIM "?.", *p); p++);
+	if (isalpha(*p) && (p[1] == ':')) {
+		p += 2;
+	}
+	for ( ; *p && csc_isdelim(SMM_PATH_DELIM ".", *p); p++);
+#endif
+
+	rc = SMM_ERR_NONE;
+	while (*p) {
+		if (csc_isdelim(SMM_PATH_DELIM, *p)) {
+			store = *p;
+			*p = 0;
+			//puts(pco);
+			/* we only store the last status of mkdir()
+			 * because it maybe fail in the intermediate 
+			 * directories, which we don't care actually.
+			 * Things happened in Windows UNC like:
+			 *   \\VBOXSVR\Shared\Hello
+			 * where VBOXSVR and Shared could not create */
+			rc = smm_mkdir(pco);
+			*p = store;
 		}
-		store = pco[i];
-		pco[i] = 0;
-		if (smm_mkdir(pco) != SMM_ERR_NONE) {
-			free(pco);
-			return smm_errno_update(SMM_ERR_MKDIR);
-		}
-		pco[i] = store;
+		p++;
 	}
 	free(pco);
-	return smm_errno_update(SMM_ERR_NONE);
+	return smm_errno_update(rc);
 }
 
 

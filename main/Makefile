@@ -1,4 +1,9 @@
 
+CC      = gcc
+AR      = ar
+CP      = cp
+RM      = rm -f
+
 CFLAGS	+= -I..
 
 SRCS	= main.c fixtoken.c smm.c memdump.c slog.c crc.c fontpath.c config.c

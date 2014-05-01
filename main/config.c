@@ -194,12 +194,11 @@ static int config_key_test(void)
 
 int config_block_test(char *fname)
 {
-	FILE	*fp;
 	char	*fbuf, *kbuf, key[128];
-	int	i, flen, klen;
+	int	i, klen;
+	long	flen = 0;
 	void	*root;
 
-	flen = 0;
 	if ((fbuf = csc_file_load(fname, NULL, &flen)) == NULL) {
 		return -1;
 	}
@@ -208,11 +207,11 @@ int config_block_test(char *fname)
 		return -3;
 	}
 	sprintf(key, "[%s]", fname);
-	csc_cfg_write_block(root, key, fbuf, flen);
+	csc_cfg_write_block(root, key, fbuf, (int)flen);
 	
 	kbuf = csc_cfg_copy_block(root, key, &klen);
-	if (klen != flen) {
-		slogz("BLOCK %s: %d != %d\n", key, klen, flen);
+	if (klen != (int)flen) {
+		slogz("BLOCK %s: %d != %ld\n", key, klen, flen);
 	} else if (memcmp(fbuf, kbuf, klen)) {
 		for (i = 0; i < klen; i++) {
 			if (fbuf[i] != kbuf[i]) {
@@ -238,7 +237,7 @@ int config_create_new(void)
 	strcat(path, SMM_DEF_DELIM);
 	strcat(path, TESTINPUT);
 
-	csc_file_store(path, testconf, sizeof(testconf));
+	csc_file_store(path, 1, testconf, sizeof(testconf));
 	free(path);
 	return 0;
 }

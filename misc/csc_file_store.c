@@ -23,10 +23,10 @@
 
 #include "libcsoup.h"
 
-int csc_file_store(char *path, int ovrd, char *src, int len)
+long csc_file_store(char *path, int ovrd, char *src, long len)
 {
 	FILE	*fp;
-	int	n, amnt;
+	long	n, amnt;
 
 	if (ovrd) {
 		fp = fopen(path, "w");

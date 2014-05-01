@@ -356,8 +356,8 @@ char *csc_iso639_lang_to_iso(char *lang);
 char *csc_iso639_lang_to_short(char *lang);
 char *csc_iso639_iso_to_lang(char *iso);
 
-int csc_file_store(char *path, int ovrd, char *src, int len);
-char *csc_file_load(char *path, char *buf, int *len);
+long csc_file_store(char *path, int ovrd, char *src, long len);
+char *csc_file_load(char *path, char *buf, long *len);
 
 #ifdef __cplusplus
 } // __cplusplus defined.

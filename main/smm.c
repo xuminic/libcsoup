@@ -55,23 +55,40 @@ static int do_smm_chdir(char *path)
 
 static int do_smm_mkpath(char *path)
 {
+#ifdef	CFG_UNIX_API
 	static	char	*plist[] = {
 		NULL,
 		"Press/any/key to/continue/./../1234",
+		"/root/home/user/folder/file",
+		"./user/folder/file",
+		"",
 		NULL
 	};
+#else	/* CFG_WIN32_API */
+	static	char	*plist[] = {
+		NULL,
+		//"\\\\UNC@SSL@Port\\SharedFolder\\Resource",
+		//"\\\\?\\UNC\\ComputerName\\SharedFolder\\Resource",
+		//"\\\\?\\C:\\SharedFolder\\Resource",
+		"\\\\VBOXSVR\\Shared\\HelloWorld",
+		"C:\\SharedFolder\\Resource",
+		"C:SharedFolder\\Resource",
+		".\\SharedFolder\\Resource",
+		"",
+		NULL
+	};
+#endif
 	int	i;
 
 	plist[0] = path;
 	for (i = 0; plist[i]; i++) {
 		slogc(tstdbg, SLINFO, "MKDIR: %s\n", plist[i]);
-		smm_mkpath(plist[i]);
-		if (smm_fstat(plist[i]) != SMM_FSTAT_DIR) {
+		if (smm_mkpath(plist[i]) != SMM_ERR_NONE) {
+			slogc(tstdbg, SLINFO, "Boo!\n");
+		} else if (smm_fstat(plist[i]) != SMM_FSTAT_DIR) {
 			slogc(tstdbg, SLINFO, "FAILED!\n");
-			return -1;
 		}
 	}
-	slogc(tstdbg, SLINFO, "GOOD!\n");
 	return 0;
 }
 
