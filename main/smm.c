@@ -53,13 +53,20 @@ static int do_smm_chdir(char *path)
 	return 0;
 }
 
+#ifdef	CFG_WIN32_API
+#define TEST_PATH	"My\\Com\\pany"
+#else
+#define TEST_PATH	"My/Com/pany"
+#endif
+#define TEST_FILE	"MyProduct"
+
 static int do_smm_config(char *path)
 {
 	void	*root;
 	char	*val;
 	long	vlong;
 
-	if ((root = smm_config_open(0, "My\\Com\\pany", "MyProduct")) == NULL) {
+	if ((root = smm_config_open(0, TEST_PATH, TEST_FILE)) == NULL) {
 		slogc(tstdbg, SLINFO, "Failed\n");
 		return -1;
 	}
@@ -74,7 +81,7 @@ static int do_smm_config(char *path)
 	smm_config_close(root);
 
 	if (!strcmp(path, "del")) {
-		smm_config_delete(0, "My\\Com\\pany", "MyProduct");
+		smm_config_delete(0, TEST_PATH, TEST_FILE);
 	}
 	return 0;
 }

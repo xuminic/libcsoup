@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "libcsoup.h"
 
@@ -429,38 +430,100 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 #endif
 
 #ifdef	CFG_UNIX_API
+#include <unistd.h>
+#include <errno.h>
+
+static char *smm_config_mkpath(int sysroot, char *path, int extra);
 
 void *smm_config_open(int sysroot, char *path, char *fname)
 {
+	void	*root;
+
+	if ((path = smm_config_mkpath(sysroot, path, 0)) == NULL) {
+		return NULL;
+	}
+	if (sysroot == SMM_CFGROOT_SYSTEM) {
+		root = csc_cfg_open(path, fname, 1);	/* read only */
+	} else {
+		root = csc_cfg_open(path, fname, 0);	/* R/W */
+	}
+	free(path);
+	return root;
 }
 
 int smm_config_flush(void *cfg)
 {
+	return csc_cfg_flush(cfg);
 }
 
 int smm_config_close(void *cfg)
 {
+	return csc_cfg_close(cfg);
 }
 
-int smm_config_delete(void *cfg)
+int smm_config_delete(int sysroot, char *path, char *fname)
 {
+	if ((path = smm_config_mkpath(sysroot, path, strlen(fname)))==NULL) {
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+	strcat(path, "/");
+	strcat(path, fname);
+	
+	if (unlink(path) == 0) {
+		return smm_errno_update(SMM_ERR_NONE);
+	}
+	if (errno == EACCES) {
+		return smm_errno_update(SMM_ERR_ACCESS);
+	}
+	return smm_errno_update(SMM_ERR_NULL);
 }
 
 char *smm_config_read(void *cfg, char *mkey, char *skey)
 {
+	return csc_cfg_copy(cfg, mkey, skey, 4);
 }
 
 int smm_config_write(void *cfg, char *mkey, char *skey, char *value)
 {
+	return csc_cfg_write(cfg, mkey, skey, value);
 }
 
 int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
 {
+	return csc_cfg_read_long(cfg, mkey, skey, val);
 }
 
 int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
 {
+	return csc_cfg_write_long(cfg, mkey, skey, val);
 }
 
+static char *smm_config_mkpath(int sysroot, char *path, int extra)
+{
+	char	*fullpath;
+
+	extra += strlen(path) + 4;
+	switch (sysroot) {
+	case SMM_CFGROOT_USER:
+		fullpath = csc_strcpy_alloc(getenv("HOME"), extra);
+		break;
+	case SMM_CFGROOT_SYSTEM:
+		fullpath = csc_strcpy_alloc("/etc", extra);
+		break;
+	default:	/* SMM_CFGROOT_DESKTOP */
+		fullpath = csc_strcpy_alloc(getenv("HOME"), extra + 16);
+		if (fullpath) {
+			strcat(fullpath, "/.config");
+		}
+		break;
+	}
+	if (fullpath == NULL) {
+		smm_errno_update(SMM_ERR_LOWMEM);
+		return NULL;
+	}
+	strcat(fullpath, "/");
+	strcat(fullpath, path);
+	return fullpath;
+}
 #endif
 
