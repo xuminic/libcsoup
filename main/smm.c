@@ -53,6 +53,32 @@ static int do_smm_chdir(char *path)
 	return 0;
 }
 
+static int do_smm_config(char *path)
+{
+	void	*root;
+	char	*val;
+	long	vlong;
+
+	if ((root = smm_config_open(0, "My\\Com\\pany", "MyProduct")) == NULL) {
+		slogc(tstdbg, SLINFO, "Failed\n");
+		return -1;
+	}
+	smm_config_write(root, NULL, "Hello", "This is a hello key");
+	smm_config_write(root, "[main]", "World", "This is a world key");
+	smm_config_write_long(root, "[main]", "Width", (long)1024);
+
+	val = smm_config_read(root, "[main]", "World");
+	puts(val);
+	smm_config_read_long(root, "[main]", "Width", &vlong);
+	printf("%ld\n", vlong);
+	smm_config_close(root);
+
+	if (!strcmp(path, "del")) {
+		smm_config_delete(0, "My\\Com\\pany", "MyProduct");
+	}
+	return 0;
+}
+
 static int do_smm_mkpath(char *path)
 {
 #ifdef	CFG_UNIX_API
@@ -180,10 +206,11 @@ static int do_path_trek(char *path, int flags)
 static	struct	cliopt	clist[] = {
 	{   0, NULL,      0, "OPTIONS:" },
 	{ 'c', NULL,      2, "change current working directory" },
+	{ 'f', NULL,	  2, "configure file process" },
 	{ 'm', NULL,	  2, "make directory" },
 	{ 'p', NULL,      2, "push/pop current working directory" },
-	{ 's', NULL,      2, "state of the file" },
 	{ 'r', NULL,      2, "process directory recurrsively" },
+	{ 's', NULL,      2, "state of the file" },
 	{   1, "help",    0, "*Display the help message" },
 	{   2, "version", 0, "*Display the version message" },
 	{   3, "dir-fifo", 0, NULL },
@@ -234,6 +261,9 @@ int smm_main(int argc, char **argv)
 			break;
 		case 'c':
 			do_smm_chdir(optarg);
+			break;
+		case 'f':
+			do_smm_config(optarg);
 			break;
 		case 'm':
 			do_smm_mkpath(optarg);

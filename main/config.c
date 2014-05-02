@@ -95,7 +95,6 @@ static int config_key_test(void)
 	char	*val, *key;
 	char	nkey[64], mkey[64];
 	time_t	tmtick;
-	struct	tm	*ltm;
 	char	*rdlist[][2] = {
 		{ "[hello]", "grid_column" },
 		{ "[hello]", "grid_column=4" },
@@ -137,7 +136,6 @@ static int config_key_test(void)
 
 	/* write a new main key */
 	time(&tmtick);
-	ltm = localtime(&tmtick);
 	sprintf(mkey, "[%u]", (unsigned) tmtick);
 	sprintf(nkey, "timestamp");
 	csc_cfg_write(root, mkey, nkey, ctime(&tmtick));
