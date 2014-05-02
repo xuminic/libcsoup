@@ -32,7 +32,7 @@ static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen);
 static int RegReadLong(HKEY hMainKey, char *skey, long *val);
 static int RegWriteString(HKEY hMainKey, char *skey, char *value);
 static int RegWriteLong(HKEY hMainKey, char *skey, long val);
-static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey);
+static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int klen);
 
 void *smm_config_open(int sysroot, char *path, char *fname)
 {
@@ -80,7 +80,7 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	}
 	MultiByteToWideChar(smm_codepage(), 0, fname, -1, wkey, MAX_PATH - 1);
 
-	rcode = RegDelnodeRecurse(hPathKey, wkey);
+	rcode = RegDelnodeRecurse(hPathKey, wkey, MAX_PATH * 2);
 
 	RegCloseKey(hPathKey);
 	free(wkey);
@@ -365,8 +365,8 @@ static int RegWriteLong(HKEY hMainKey, char *skey, long val)
 }
 
 
-/* FIXME: This code was picked form MSDN, a little modified */
-static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey)
+/* This code was picked form MSDN, a little modified */
+static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 {
 	LPTSTR	lpEnd;
 	LONG	lResult;
@@ -389,6 +389,9 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey)
 	}
 
 	/* Check for an ending slash and add one if it is missing. */
+	if (lstrlen(lpSubKey) >= buflen) {
+		return FALSE;	/* low buffer memory */
+	}
 	lpEnd = lpSubKey + lstrlen(lpSubKey);
 	if (*(lpEnd - 1) != TEXT('\\')) {
 		*lpEnd++ = TEXT('\\');
@@ -401,9 +404,11 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey)
 			NULL, NULL, NULL);
 	if (lResult == ERROR_SUCCESS) {
 		do {
-			//StringCchCopy (lpEnd, MAX_PATH*2, szName);
+			if (lstrlen(lpSubKey) + lstrlen(szName) >= buflen) {
+				break;	/* path is too long */
+			}
 			lstrcpy(lpEnd, szName);
-			if (!RegDelnodeRecurse(hKeyRoot, lpSubKey)) {
+			if (!RegDelnodeRecurse(hKeyRoot, lpSubKey, buflen)) {
 				break;
 			}
 			dwSize = MAX_PATH;
