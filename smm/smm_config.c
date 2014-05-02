@@ -28,34 +28,22 @@
 static HKEY RegCreateMainKey(HKEY hRootKey, char *mkey);
 static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey);
 static HKEY RegCreatePath(int sysroot, char *path);
+static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen);
+static int RegReadLong(HKEY hMainKey, char *skey, long *val);
+static int RegWriteString(HKEY hMainKey, char *skey, char *value);
+static int RegWriteLong(HKEY hMainKey, char *skey, long val);
 static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey);
 
 void *smm_config_open(int sysroot, char *path, char *fname)
 {
 	HKEY	hRootKey, hPathKey;
-	LONG	rc;
-	TCHAR	*wkey;
 
 	if ((hPathKey = RegCreatePath(sysroot, path)) == NULL) {
 		return NULL;
 	}
-
-	if ((wkey = smm_mbstowcs(fname)) == NULL) {
-		smm_errno_update(SMM_ERR_LOWMEM);
-		RegCloseKey(hPathKey);
-		return NULL;
-	}
-
-	rc = RegCreateKeyEx(hPathKey, wkey, 0, NULL, 0,
-			KEY_ALL_ACCESS, NULL, &hRootKey, NULL);
-	
-	free(wkey);
+	hRootKey = RegCreateMainKey(hPathKey, fname);
 	RegCloseKey(hPathKey);
-	
-	if (rc == ERROR_SUCCESS) { 
-		return hRootKey;
-	}
-	return NULL;
+	return hRootKey;
 }
 
 int smm_config_flush(void *cfg)
@@ -103,144 +91,76 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	return smm_errno_update(SMM_ERR_ACCESS);
 }
 
-//FIXME: memory hole
-long smm_config_read(void *cfg, char *mkey, char *skey, char *buf, int blen)
-{
-}
-
-char *smm_config_copy(void *cfg, char *mkey, char *skey)
+char *smm_config_read(void *cfg, char *mkey, char *skey)
 {
 	HKEY	hMainKey;
-	LONG	rc;
-	DWORD	slen;
-	TCHAR	*wkey, *wval;
-	char	*rtval;
+	char	*buf;
+	int	blen;
 
-	if ((wkey = smm_mbstowcs(skey)) == NULL) {
-		smm_errno_update(SMM_ERR_LOWMEM);
-		return NULL;
-	}
 	if ((hMainKey = RegOpenMainKey(cfg, mkey)) == NULL) {
-		free(wkey);
 		smm_errno_update(SMM_ERR_ACCESS);
 		return NULL;
 	}
 
-	rtval = NULL;
-	rc = RegQueryValueEx(hMainKey, wkey, NULL, NULL, NULL, &slen);
-	if (rc == ERROR_SUCCESS) {
-		if ((wval = malloc(slen)) != NULL) {
-			rc = RegQueryValueEx(hMainKey, wkey, NULL, NULL,
-					(BYTE*) wval, &slen);
-			if (rc == ERROR_SUCCESS) {
-				rtval = smm_wcstombs(wval);
-			}
-			free(wval);
-		}
+	buf = NULL;
+	if ((blen = RegReadString(hMainKey, skey, NULL, 0)) > 0) {
+		blen += 2;
+		buf = malloc(blen);
+		RegReadString(hMainKey, skey, buf, blen);
 	}
+
 	if (hMainKey != cfg) {
 		RegCloseKey(hMainKey);
 	}
-	free(wkey);
-
-	if (rc == ERROR_SUCCESS) {
-		smm_errno_update(SMM_ERR_NONE);
-		return rtval;
-	}
-	smm_errno_update(SMM_ERR_ACCESS);
-	return rtval;
+	return buf;
 }
 
 int smm_config_write(void *cfg, char *mkey, char *skey, char *value)
 {
 	HKEY	hMainKey;
-	LONG	rc;
-	TCHAR	*wkey, *wval;
+	int	rc;
 
-	if ((wkey = smm_mbstowcs(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	if ((wval = smm_mbstowcs(value)) == NULL) {
-		free(wkey);
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
 	if ((hMainKey = RegCreateMainKey(cfg, mkey)) == NULL) {
-		free(wval);
-		free(wkey);
 		return smm_errno_update(SMM_ERR_NULL);
 	}
-
-	rc = RegSetValueEx(hMainKey, wkey, 0, REG_SZ, (const BYTE *) wval, 
-			(lstrlen(wval)+1) * sizeof(TCHAR));
+	rc = RegWriteString(hMainKey, skey, value);
 
 	if (hMainKey != cfg) {
 		RegCloseKey(hMainKey);
 	}
-	free(wval);
-	free(wkey);
-
-	if (rc == ERROR_SUCCESS) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_ACCESS);
-
+	return rc;
 }
 
 int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
 {
 	HKEY	hMainKey;
-	LONG	rc;
-	DWORD	vlen;
-	TCHAR	*wkey;
+	int	rc;
 
-	if ((wkey = smm_mbstowcs(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
 	if ((hMainKey = RegOpenMainKey(cfg, mkey)) == NULL) {
-		free(wkey);
 		return smm_errno_update(SMM_ERR_ACCESS);
 	}
-
-	vlen = sizeof(long);
-	rc = RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) val, &vlen);
+	rc = RegReadLong(hMainKey, skey, val);
 
 	if (hMainKey != cfg) {
 		RegCloseKey(hMainKey);
 	}
-	free(wkey);
-
-	if (rc == ERROR_SUCCESS) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_ACCESS);
+	return rc;
 }
 
 int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
 {
 	HKEY	hMainKey;
-	LONG	rc;
-	TCHAR	*wkey;
+	int	rc;
 
-	if ((wkey = smm_mbstowcs(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
 	if ((hMainKey = RegCreateMainKey(cfg, mkey)) == NULL) {
-		free(wkey);
 		return smm_errno_update(SMM_ERR_NULL);
 	}
-
-	rc = RegSetValueEx(hMainKey, wkey, 0, REG_DWORD, 
-			(const BYTE *) &val, sizeof(long));
+	rc = RegWriteLong(hMainKey, skey, val);
 
 	if (hMainKey != cfg) {
 		RegCloseKey(hMainKey);
 	}
-	free(wkey);
-
-	if (rc == ERROR_SUCCESS) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_ACCESS);
+	return rc;
 }
 
 static HKEY RegCreateMainKey(HKEY hRootKey, char *mkey)
@@ -341,8 +261,111 @@ static HKEY RegCreatePath(int sysroot, char *path)
 	return NULL;
 }
 
+static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen)
+{
+	TCHAR	*wkey, *wval;
+	DWORD	slen;
+	int	vlen;
 
-/* This code was picked form MSDN, a little modified */
+	if ((wkey = smm_mbstowcs(skey)) == NULL) {
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, NULL, &slen)
+			!= ERROR_SUCCESS) {
+		free(wkey);
+		return smm_errno_update(SMM_ERR_ACCESS);
+	}
+	slen += 2;
+	if ((wval = malloc(slen)) == NULL) {
+		free(wkey);
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) wval, &slen)
+			!= ERROR_SUCCESS) {
+		free(wval);
+		free(wkey);
+		return smm_errno_update(SMM_ERR_ACCESS);
+	}
+
+	/* see smm_wcstombs.c for details */
+	vlen = WideCharToMultiByte(smm_codepage(), 
+			0, wval, -1, NULL, 0, NULL, NULL);
+	if (vlen <= 0) {
+		free(wval);
+		free(wkey);
+		return smm_errno_update(SMM_ERR_LENGTH);
+	}
+	if (buf && (blen > vlen)) {
+		WideCharToMultiByte(smm_codepage(), 
+				0, wval, -1, buf, blen, NULL, NULL);
+	}
+	free(wval);
+	free(wkey);
+	return vlen;
+}
+
+static int RegReadLong(HKEY hMainKey, char *skey, long *val)
+{
+	DWORD	vlen;
+	TCHAR	*wkey;
+
+	if ((wkey = smm_mbstowcs(skey)) == NULL) {
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+	vlen = sizeof(long);
+	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) val, &vlen)
+			== ERROR_SUCCESS) {
+		free(wkey);
+		return smm_errno_update(SMM_ERR_NONE);
+	}
+	free(wkey);
+	return smm_errno_update(SMM_ERR_ACCESS);
+}
+
+static int RegWriteString(HKEY hMainKey, char *skey, char *value)
+{
+	TCHAR	*wkey, *wval;
+	LONG	rc;
+
+	if ((wkey = smm_mbstowcs(skey)) == NULL) {
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+	if ((wval = smm_mbstowcs(value)) == NULL) {
+		free(wkey);
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+
+	rc = RegSetValueEx(hMainKey, wkey, 0, REG_SZ, (const BYTE *) wval, 
+			(lstrlen(wval)+1) * sizeof(TCHAR));
+
+	free(wval);
+	free(wkey);
+
+	if (rc == ERROR_SUCCESS) {
+		return smm_errno_update(SMM_ERR_NONE);
+	}
+	return smm_errno_update(SMM_ERR_ACCESS);
+}
+
+static int RegWriteLong(HKEY hMainKey, char *skey, long val)
+{
+	TCHAR	*wkey;
+
+	if ((wkey = smm_mbstowcs(skey)) == NULL) {
+		return smm_errno_update(SMM_ERR_LOWMEM);
+	}
+
+	if (RegSetValueEx(hMainKey, wkey, 0, REG_DWORD, (BYTE *) &val, 
+				sizeof(long)) == ERROR_SUCCESS) {
+		free(wkey);
+		return smm_errno_update(SMM_ERR_NONE);
+	}
+	free(wkey);
+	return smm_errno_update(SMM_ERR_ACCESS);
+}
+
+
+/* FIXME: This code was picked form MSDN, a little modified */
 static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey)
 {
 	LPTSTR	lpEnd;

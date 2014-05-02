@@ -524,7 +524,6 @@ void *smm_config_open(int sysroot, char *path, char *fname);
 int smm_config_flush(void *cfg);
 int smm_config_close(void *cfg);
 int smm_config_delete(int sysroot, char *path, char *fname);
-long smm_config_read(void *cfg, char *mkey, char *skey, char *buf, int blen);
 char *smm_config_read(void *cfg, char *mkey, char *skey);
 int smm_config_write(void *cfg, char *mkey, char *skey, char *value);
 int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val);
