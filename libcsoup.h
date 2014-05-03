@@ -1,15 +1,14 @@
-/**
-   \file libcsoup.h
+/*!\file libcsoup.h
    \brief Head file of CSOUP library, the Chicken Soup for the C
 
    \details This file is part of CSOUP library, the Chicken Soup for the C.
-   CSOUP is a group of functions for reusing purpose.
+   CSOUP is a group of functions for general reusing purpose.
 
    \author "Andy Xuming" <xuming@users.sourceforge.net>
    
    \copyright GNU Public License.
-
-   Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
+*/
+/* Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
    CSOUP is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -319,7 +318,7 @@ CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node);
-CSCLNK *csc_cdl_search(CSCLNK *anchor, 
+CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 		int(*compare)(void *, void *), void *refload);
 CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
 CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size);

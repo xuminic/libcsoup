@@ -34,13 +34,14 @@ extern int memdump_main(int argc, char **argv);
 extern int slog_main(int argc, char **argv);
 extern int crc_main(int argc, char **argv);
 extern int config_main(int argc, char **argv);
-
+extern int csc_cdll_main(int argc, char **argv);
 
 static	struct	{
 	char	*cmd;
 	int	(*entry)(int argc, char **argv);
 	char	*comment;
 } cmdlist[] = {
+	{ "cdll", csc_cdll_main, NULL },
 	{ "config", config_main, NULL },
 	{ "fixtoken", fixtoken_main, NULL },
 	{ "fontpath", fontpath_main, NULL },
