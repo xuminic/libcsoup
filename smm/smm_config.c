@@ -75,7 +75,7 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	}
 
 	/* fabricate the key name */
-	if ((wkey = malloc(MAX_PATH * 2 * sizeof(TCHAR))) == NULL) {
+	if ((wkey = smm_alloc(MAX_PATH * 2 * sizeof(TCHAR))) == NULL) {
 		RegCloseKey(hPathKey);
 		return smm_errno_update(SMM_ERR_LOWMEM);
 	}
@@ -84,7 +84,7 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	rcode = RegDelnodeRecurse(hPathKey, wkey, MAX_PATH * 2);
 
 	RegCloseKey(hPathKey);
-	free(wkey);
+	smm_free(wkey);
        
 	if (rcode == TRUE) {
 		return smm_errno_update(SMM_ERR_NONE);
@@ -106,7 +106,7 @@ char *smm_config_read(void *cfg, char *mkey, char *skey)
 	buf = NULL;
 	if ((blen = RegReadString(hMainKey, skey, NULL, 0)) > 0) {
 		blen += 2;
-		buf = malloc(blen);
+		buf = smm_alloc(blen);
 		RegReadString(hMainKey, skey, buf, blen);
 	}
 
@@ -181,7 +181,7 @@ static HKEY RegCreateMainKey(HKEY hRootKey, char *mkey)
 	rc = RegCreateKeyEx(hRootKey, wkey, 0, NULL, 0, KEY_ALL_ACCESS, 
 			NULL, &hMainKey, NULL);
 
-	free(wkey);			
+	smm_free(wkey);			
 	if (rc == ERROR_SUCCESS) {
 		smm_errno_update(SMM_ERR_NONE);
 		return hMainKey;
@@ -206,7 +206,7 @@ static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey)
 
 	rc = RegOpenKeyEx(hRootKey, wkey, 0, KEY_READ, &hMainKey);
 
-	free(wkey);			
+	smm_free(wkey);			
 	if (rc == ERROR_SUCCESS) {
 		smm_errno_update(SMM_ERR_NONE);
 		return hMainKey;
@@ -243,7 +243,7 @@ static HKEY RegCreatePath(int sysroot, char *path)
 	strcat(pkey, path);
 
 	if ((wkey = smm_mbstowcs(pkey)) == NULL) {
-		free(pkey);
+		smm_free(pkey);
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}
@@ -253,8 +253,8 @@ static HKEY RegCreatePath(int sysroot, char *path)
 	rc = RegCreateKeyEx(hSysKey, wkey, 0, NULL, 0,
 			KEY_ALL_ACCESS, NULL, &hPathKey, NULL);
 
-	free(wkey);
-	free(pkey);
+	smm_free(wkey);
+	smm_free(pkey);
 
 	if (rc == ERROR_SUCCESS) { 
 		return hPathKey;
@@ -273,18 +273,18 @@ static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen)
 	}
 	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, NULL, &slen)
 			!= ERROR_SUCCESS) {
-		free(wkey);
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_ACCESS);
 	}
 	slen += 2;
-	if ((wval = malloc(slen)) == NULL) {
-		free(wkey);
+	if ((wval = smm_alloc(slen)) == NULL) {
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_LOWMEM);
 	}
 	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) wval, &slen)
 			!= ERROR_SUCCESS) {
-		free(wval);
-		free(wkey);
+		smm_free(wval);
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_ACCESS);
 	}
 
@@ -292,16 +292,16 @@ static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen)
 	vlen = WideCharToMultiByte(smm_codepage(), 
 			0, wval, -1, NULL, 0, NULL, NULL);
 	if (vlen <= 0) {
-		free(wval);
-		free(wkey);
+		smm_free(wval);
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_LENGTH);
 	}
 	if (buf && (blen > vlen)) {
 		WideCharToMultiByte(smm_codepage(), 
 				0, wval, -1, buf, blen, NULL, NULL);
 	}
-	free(wval);
-	free(wkey);
+	smm_free(wval);
+	smm_free(wkey);
 	return vlen;
 }
 
@@ -316,10 +316,10 @@ static int RegReadLong(HKEY hMainKey, char *skey, long *val)
 	vlen = sizeof(long);
 	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) val, &vlen)
 			== ERROR_SUCCESS) {
-		free(wkey);
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_NONE);
 	}
-	free(wkey);
+	smm_free(wkey);
 	return smm_errno_update(SMM_ERR_ACCESS);
 }
 
@@ -332,15 +332,15 @@ static int RegWriteString(HKEY hMainKey, char *skey, char *value)
 		return smm_errno_update(SMM_ERR_LOWMEM);
 	}
 	if ((wval = smm_mbstowcs(value)) == NULL) {
-		free(wkey);
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_LOWMEM);
 	}
 
 	rc = RegSetValueEx(hMainKey, wkey, 0, REG_SZ, (const BYTE *) wval, 
 			(lstrlen(wval)+1) * sizeof(TCHAR));
 
-	free(wval);
-	free(wkey);
+	smm_free(wval);
+	smm_free(wkey);
 
 	if (rc == ERROR_SUCCESS) {
 		return smm_errno_update(SMM_ERR_NONE);
@@ -358,10 +358,10 @@ static int RegWriteLong(HKEY hMainKey, char *skey, long val)
 
 	if (RegSetValueEx(hMainKey, wkey, 0, REG_DWORD, (BYTE *) &val, 
 				sizeof(long)) == ERROR_SUCCESS) {
-		free(wkey);
+		smm_free(wkey);
 		return smm_errno_update(SMM_ERR_NONE);
 	}
-	free(wkey);
+	smm_free(wkey);
 	return smm_errno_update(SMM_ERR_ACCESS);
 }
 
@@ -447,7 +447,7 @@ void *smm_config_open(int sysroot, char *path, char *fname)
 	} else {
 		root = csc_cfg_open(path, fname, 0);	/* R/W */
 	}
-	free(path);
+	smm_free(path);
 	return root;
 }
 

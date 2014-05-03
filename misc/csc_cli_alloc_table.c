@@ -34,7 +34,7 @@ void *csc_cli_alloc_table(struct cliopt *optbl)
 	struct	option	*table, *p;
 	int	rc;
 
-	table = calloc(csc_cli_table_size(optbl) + 1, sizeof(struct option));
+	table = smm_alloc((csc_cli_table_size(optbl)+1)*sizeof(struct option));
 	if (table == NULL) {
 		return NULL;
 	}

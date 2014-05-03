@@ -227,7 +227,7 @@ int csc_memdump(void *mem, int msize, int column, int flags)
 
 	csize = csc_memdump_find_step(flags) * column;
 	bsize = csize * 6 + 32;		/* should be big enough */
-	if ((buf = malloc(bsize)) == NULL) {
+	if ((buf = smm_alloc(bsize)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
 
@@ -244,6 +244,6 @@ int csc_memdump(void *mem, int msize, int column, int flags)
 			mp += len;
 		}
 	}
-	free(buf);
+	smm_free(buf);
 	return 0;
 }

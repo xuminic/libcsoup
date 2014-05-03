@@ -69,7 +69,7 @@ void *slog_open(int cword)
 {
 	SMMDBG	*dbgc;
 
-	if ((dbgc = calloc(sizeof(SMMDBG), 1)) != NULL) {
+	if ((dbgc = smm_alloc(sizeof(SMMDBG))) != NULL) {
 		dbgc->cword  = (unsigned) cword;
 		dbgc->device = SLOG_TO_STDOUT;
 
@@ -98,7 +98,7 @@ int slog_close(void *control)
 		fclose(dbgc->logd);
 	}
 
-	free(dbgc);
+	smm_free(dbgc);
 	return 0;
 }
 

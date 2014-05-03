@@ -34,7 +34,7 @@ void *csc_extname_filter_open(char *s)
 	len = strlen(s);
 	fno = len / 2;
 	len += fno * sizeof(char*) + sizeof(CSEFF) + 16;
-	if ((flt = malloc(len)) == NULL) {
+	if ((flt = smm_alloc(len)) == NULL) {
 		return NULL;
 	}
 
@@ -48,7 +48,7 @@ void *csc_extname_filter_open(char *s)
 
 int csc_extname_filter_close(void *efft)
 {
-	free(efft);
+	smm_free(efft);
 	return 0;
 }
 

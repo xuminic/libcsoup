@@ -48,11 +48,11 @@ unsigned short csc_crc16_byte(unsigned short crc, char data)
 	return (crc >> 8) ^ crc16_table[(crc ^ (unsigned char) data) & 0xff];
 }
 
-/**
+/*
  * crc16 - compute the CRC-16 for the data buffer
- * @crc:	previous CRC value
- * @buffer:	data pointer
- * @len:	number of bytes in the buffer
+ * crc:	previous CRC value
+ * buffer:	data pointer
+ * len:	number of bytes in the buffer
  *
  * Returns the updated CRC value.
  */

@@ -69,7 +69,7 @@ char *smm_fontpath(char *ftname, char **userdir)
 	}
 	/* try current directory first */
 	if (smm_fstat(ftname) == SMM_FSTAT_REGULAR) {
-		if ((home = malloc(strlen(ftname)+16)) != NULL) {
+		if ((home = smm_alloc(strlen(ftname)+16)) != NULL) {
 #ifdef	CFG_WIN32_API
 			strcpy(home, ".\\");
 #else
@@ -107,10 +107,10 @@ char *smm_fontpath(char *ftname, char **userdir)
 		ftinfo.ftname = NULL;
 		smm_pathtrek(home, 0, findfont, &ftinfo);
 		if (ftinfo.ftname) {
-			free(home);	/* FIXME: produced a memory hole */
+			smm_free(home);	/* FIXME: produced a memory hole */
 			return ftinfo.ftname;
 		}
-		free(home);
+		smm_free(home);
 	}
 #else
 	/* try the user fonts in the home directory */
@@ -126,10 +126,10 @@ char *smm_fontpath(char *ftname, char **userdir)
 		ftinfo.ftname = NULL;
 		smm_pathtrek(home, 0, findfont, &ftinfo);
 		if (ftinfo.ftname) {
-			free(home);	/* FIXME: produced a memory hole */
+			smm_free(home);	/* FIXME: produced a memory hole */
 			return ftinfo.ftname;
 		}
-		free(home);
+		smm_free(home);
 	}
 #endif
 

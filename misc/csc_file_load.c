@@ -47,7 +47,7 @@ char *csc_file_load(char *path, char *buf, long *len)
 	}
 
 	if (buf == NULL) {
-		buf = malloc(flen);
+		buf = smm_alloc(flen);
 	}
 	if (buf == NULL) {
 		fclose(fp);

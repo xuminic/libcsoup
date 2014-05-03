@@ -35,10 +35,10 @@ int smm_mkdir(char *path)
 		return smm_errno_update(SMM_ERR_NONE_READ);
 	}
 	if (CreateDirectory(wpath, NULL)) {
-		free(wpath);
+		smm_free(wpath);
 		return smm_errno_update(SMM_ERR_NONE);
 	}
-	free(wpath);
+	smm_free(wpath);
 	if (GetLastError() == ERROR_ALREADY_EXISTS) {
 		return smm_errno_update(SMM_ERR_NONE);
 	}
@@ -124,7 +124,7 @@ int smm_mkpath(char *path)
 		}
 		p++;
 	}
-	free(pco);
+	smm_free(pco);
 	return smm_errno_update(rc);
 }
 

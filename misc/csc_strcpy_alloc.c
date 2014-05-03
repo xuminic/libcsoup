@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "libcsoup.h"
 
 char *csc_strcpy_alloc(const char *src, int extra)
 {
@@ -31,7 +32,7 @@ char *csc_strcpy_alloc(const char *src, int extra)
 	}
 
 	extra = (extra + strlen(src) + 20) / 16 * 16;
-	if ((dst = malloc(extra)) == NULL) {
+	if ((dst = smm_alloc(extra)) == NULL) {
 		return NULL;
 	}
 	return strcpy(dst, src);

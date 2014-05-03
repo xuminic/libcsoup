@@ -42,13 +42,13 @@ long long smm_filesize(char *fname)
 			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 
 			0, OPEN_EXISTING, 0, 0);
 	if (fhdl == INVALID_HANDLE_VALUE) {
-		free(wpath);
+		smm_free(wpath);
 		smm_errno_update(SMM_ERR_OPEN);
 		return -1;
 	}
 	
 	sizel = GetFileSize(fhdl, &sizeh);
-	free(wpath);
+	smm_free(wpath);
 	CloseHandle(fhdl);
 	
 	if (sizel == 0xffffffff && (GetLastError() != NO_ERROR)) {

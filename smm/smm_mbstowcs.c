@@ -36,7 +36,7 @@ void *smm_mbstowcs(char *mbs)
 		smm_errno_update(SMM_ERR_LENGTH);
                 return NULL;
 	}		
-	if ((buf = malloc((len + 1) * sizeof(TCHAR))) == NULL) {
+	if ((buf = smm_alloc((len + 1) * sizeof(TCHAR))) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}
@@ -58,7 +58,7 @@ void *smm_mbstowcs(char *mbs)
 		smm_errno_update(SMM_ERR_LENGTH);
 		return NULL;
 	}
-	if ((buf = malloc((len + 1) * sizeof(wchar_t))) == NULL) {
+	if ((buf = smm_alloc((len + 1) * sizeof(wchar_t))) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}

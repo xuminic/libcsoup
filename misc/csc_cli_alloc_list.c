@@ -33,7 +33,7 @@ char *csc_cli_alloc_list(struct cliopt *optbl)
 	char	*list, *p;
 	int	rc;
 
-	if ((list = calloc(csc_cli_table_size(optbl) + 1, 2)) == NULL) {
+	if ((list = smm_alloc((csc_cli_table_size(optbl)+1)*2)) == NULL) {
 		return NULL;
 	}
 

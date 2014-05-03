@@ -37,7 +37,7 @@ char *smm_wcstombs(void *wcs)
 		smm_errno_update(SMM_ERR_LENGTH);
 		return NULL;
 	}
-	if ((buf = malloc(len + 1)) == NULL) {
+	if ((buf = smm_alloc(len + 1)) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}
@@ -59,7 +59,7 @@ char *smm_wcstombs(void *wcs)
 		smm_errno_update(SMM_ERR_LENGTH);
 		return NULL;
 	}
-	if ((buf = malloc(len + 1)) == NULL) {
+	if ((buf = smm_alloc(len + 1)) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}

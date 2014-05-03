@@ -25,7 +25,7 @@ TARGET	= libcsoup.a
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 
-.PHONY: all clean misc slog smm main
+.PHONY: all clean misc slog smm main doc
 	
 all: main
 
@@ -44,6 +44,9 @@ slog:
 
 smm:
 	make -C smm all
+
+doc:
+	doxygen doc/Doxyfile
 
 clean:
 	make -C misc clean

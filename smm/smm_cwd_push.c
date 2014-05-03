@@ -36,13 +36,13 @@ void *smm_cwd_push(void)
 		return NULL;
 	}
 	len++;	/* expend it for the null char */
-	if ((wpath = malloc(sizeof(TCHAR) * len)) == NULL) {
+	if ((wpath = smm_alloc(sizeof(TCHAR) * len)) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}
 	if (GetCurrentDirectory(len, wpath) == 0) {
 		smm_errno_update(SMM_ERR_CHDIR);
-		free(wpath);
+		smm_free(wpath);
 		return NULL;
 	}
 	return (void*) wpath;

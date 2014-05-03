@@ -53,7 +53,7 @@ int smm_pwuid(char *uname, long *uid, long *gid)
 	if (bufsize == (size_t) -1) {		/* Value was indeterminate */
 		bufsize = 16384;	/* Should be more than enough */
 	}
-	if ((buf = malloc(bufsize)) == NULL) {
+	if ((buf = smm_alloc(bufsize)) == NULL) {
 		return smm_errno_update(SMM_ERR_LOWMEM);
 	}
 	if ((rc = getpwnam_r(optarg, &pwd, buf, bufsize, &result)) != 0) {
@@ -66,7 +66,7 @@ int smm_pwuid(char *uname, long *uid, long *gid)
 			*gid = (long) pwd.pw_gid;
 		}
 	}
-	free(buf);
+	smm_free(buf);
 	return rc;
 }
 #endif

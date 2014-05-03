@@ -34,7 +34,7 @@ void *csc_cli_getopt_alloc(struct cliopt *optbl)
 
 	n  = csc_cli_table_size(optbl) + 1;
 	rc = n * (sizeof(struct option) + 4) + sizeof(struct clirun);
-	if ((rtbuf = calloc(rc, 1)) == NULL) {
+	if ((rtbuf = smm_alloc(rc)) == NULL) {
 		return NULL;
 	}
 

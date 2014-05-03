@@ -28,8 +28,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "libcsoup.h"
 
-extern int csc_isdelim(char *delim, int ch);
 
 /* This function splits the string into tokens. It extracts everything 
    between delimiter.
@@ -75,7 +75,7 @@ char **csc_fixtoken_copy(char *sour, char *delim, int *ids)
 	}
 	n++;	/* safty edge */
 
-	if ((token = malloc(n*sizeof(char*) + strlen(sour) + 16)) == NULL) {
+	if ((token = smm_alloc(n*sizeof(char*) + strlen(sour) + 16)) == NULL) {
 		return NULL;
 	}
 	strcpy((char*)&token[n], sour);

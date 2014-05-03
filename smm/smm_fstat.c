@@ -36,7 +36,7 @@ int smm_fstat(char *fname)
 		return SMM_FSTAT_ERROR;
 	}
 	fattr = GetFileAttributes(wpath);
-	free(wpath);
+	smm_free(wpath);
 
 	if (fattr == INVALID_FILE_ATTRIBUTES) {
 		smm_errno_update(SMM_ERR_STAT);

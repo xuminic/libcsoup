@@ -1,7 +1,15 @@
 
-/* csc_cdll.c - Circular Doubly linked list
+/*!\file       csc_cdll.c
+   \brief      The management function of circular doubly linked list.
 
-   Copyright (C) 1998-2014  Xuming <xuming@users.sourceforge.net>
+   This file supplies a group of functions to process the circular doubly 
+   linked list.
+
+   \author     "Andy Xuming" <xuming@users.sourceforge.net>
+   \date       2013-2014
+   \copyright  GNU Public License.
+*/
+/* Copyright (C) 1998-2014  Xuming <xuming@users.sourceforge.net>
    
    This program is free software; you can redistribute it and/or 
    modify it under the terms of the GNU General Public License as 
@@ -19,13 +27,15 @@
    Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "libcsoup.h"
 
 
+/*!\brief Insert a node after the reference node
+
+   \param[in]  refn The reference node where to insert after   
+   \param[in]  node 
+   \return     void
+*/
 void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)
 {
 	refn->next->prev = node;
@@ -105,7 +115,7 @@ CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size)
 {
 	CSCLNK	*node;
 
-	if ((node = calloc(sizeof(CSCLNK)+size, 1)) == NULL) {
+	if ((node = smm_alloc(sizeof(CSCLNK)+size)) == NULL) {
 		return NULL;
 	}
 	*anchor = csc_cdl_insert_head(*anchor, node);
@@ -116,7 +126,7 @@ CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size)
 {
 	CSCLNK	*node;
 
-	if ((node = calloc(sizeof(CSCLNK)+size, 1)) == NULL) {
+	if ((node = smm_alloc(sizeof(CSCLNK)+size)) == NULL) {
 		return NULL;
 	}
 	*anchor = csc_cdl_insert_tail(*anchor, node);
@@ -126,7 +136,7 @@ CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size)
 int csc_cdl_free(CSCLNK **anchor, CSCLNK *node)
 {
 	*anchor = csc_cdl_remove(*anchor, node);
-	free(node);
+	smm_free(node);
 	return 0;
 }
 
@@ -138,7 +148,7 @@ int csc_cdl_destroy(CSCLNK **anchor)
 	while (node != NULL) {
 		cur = node;
 		node = csc_cdl_next(*anchor, node);
-		free(cur);
+		smm_free(cur);
 	}
 	*anchor = NULL;
 	return 0;

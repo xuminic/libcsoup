@@ -1,32 +1,28 @@
-/* History:
- * 20131009: V0.2.2
- *   Open files with the sharing mode when retrieving file size
- * 20130830: V0.2.1
- *   Merged all modules into libcsoup 0.2.1
- * 20120820: SMM V1.1.0.0 
- *   Replaced the error codes strategy by smm style consistently
- *   Improved the smm_pathtrek() function
- * 20111103: SMM V1.0.0.0 
- *   Port to ezthum project
-*/
-/*  libcsoup.h - main head file for the CSOUP library
+/**
+   \file libcsoup.h
+   \brief Head file of CSOUP library, the Chicken Soup for the C
 
-    Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
+   \details This file is part of CSOUP library, the Chicken Soup for the C.
+   CSOUP is a group of functions for reusing purpose.
 
-    This file is part of CSOUP, Chicken Soup library
+   \author "Andy Xuming" <xuming@users.sourceforge.net>
+   
+   \copyright GNU Public License.
 
-    CSOUP is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+   Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
 
-    CSOUP is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+   CSOUP is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   CSOUP is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifndef	_LIBCSOUP_H_
@@ -35,7 +31,12 @@
 #include <stdio.h>
 #include <getopt.h>
 
-#define LIBCSOUP_VERSION	"0.3.0"
+#define LIBCSOUP_VERSION	"0.4.0"
+#define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
+#define LIBCSOUP_VER_MINOR	4		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
+#define LIBCSOUP_VER_NUMBER	((LIBCSOUP_VER_MAJOR << 24) | \
+			(LIBCSOUP_VER_MINOR << 12) | LIBCSOUP_VER_BUGFIX)
 
 /****************************************************************************
  * Command line process functions
@@ -516,6 +517,8 @@ extern "C"
 {
 #endif
 
+void *smm_alloc(size_t size);
+int smm_free(void *ptr);
 int smm_chdir(char *path);
 int smm_codepage(void);
 int smm_codepage_set(int cpno);

@@ -54,11 +54,11 @@ unsigned short csc_crc_ccitt_byte(unsigned short crc, char c)
 	return (crc >> 8) ^ crc_ccitt_table[(crc ^ (unsigned char) c) & 0xff];
 }
 
-/**
+/*
  *	crc_ccitt - recompute the CRC for the data buffer
- *	@crc: previous CRC value
- *	@buffer: data pointer
- *	@len: number of bytes in the buffer
+ *	crc: previous CRC value
+ *	buffer: data pointer
+ *	len: number of bytes in the buffer
  */
 unsigned short csc_crc_ccitt(unsigned short crc, void *buf, size_t len)
 {

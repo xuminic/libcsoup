@@ -509,7 +509,7 @@ void *csc_cfg_copy_bin(void *cfg, char *mkey, char *skey, int *bsize)
 	if ((len = csc_cfg_read_bin(cfg, mkey, skey, NULL, 0)) <= 0) {
 		return NULL;
 	}
-	if ((buf = malloc(len)) == NULL) {
+	if ((buf = smm_alloc(len)) == NULL) {
 		return NULL;
 	}
 	if (bsize) {
@@ -526,12 +526,12 @@ int csc_cfg_write_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize)
 	if (!bin || !bsize) {
 		return SMM_ERR_NULL;
 	}
-	if ((buf = calloc(bsize+1, 2)) == NULL) {
+	if ((buf = smm_alloc((bsize+1)*2)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
 	csc_cfg_binary_to_hex(bin, bsize, buf, (bsize+1)*2);
 	bsize = csc_cfg_write(cfg, mkey, skey, buf);
-	free(buf);
+	smm_free(buf);
 	return bsize;
 }
 
@@ -578,7 +578,7 @@ void *csc_cfg_copy_block(void *cfg, char *mkey, int *bsize)
 	if ((len = csc_cfg_read_block(cfg, mkey, NULL, 0)) <= 0) {
 		return NULL;
 	}
-	if ((buf = malloc(len)) == NULL) {
+	if ((buf = smm_alloc(len)) == NULL) {
 		return NULL;
 	}
 	csc_cfg_read_block(cfg, mkey, buf, len);
@@ -717,7 +717,7 @@ static KEYCB *csc_cfg_kcb_alloc(int psize)
 
 	psize += sizeof(KEYCB) + 4;
 	psize = (psize + 3) / 4 * 4;	/* round up to 32-bit boundry */
-	if ((kp = malloc(psize)) == NULL) {
+	if ((kp = smm_alloc(psize)) == NULL) {
 		return NULL;
 	}
 
@@ -946,7 +946,7 @@ static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag)
 			fp = fopen(fullpath, "w+");
 		}
 	}
-	free(fullpath);
+	smm_free(fullpath);
 	return fp;
 }
 

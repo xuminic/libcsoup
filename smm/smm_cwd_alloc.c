@@ -38,7 +38,7 @@ char *smm_cwd_alloc(int extra)
 
 	/* first 3*len buffer is reserved for the multibyte convert and
 	 * the last len size is for the getcwd call */
-	if ((wpath = malloc(sizeof(TCHAR) * len * 4 + extra)) == NULL) {
+	if ((wpath = smm_alloc(sizeof(TCHAR) * len * 4 + extra)) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;	/* low memory */
 	}
@@ -63,14 +63,14 @@ char *smm_cwd_alloc(int extra)
 	int	i, len = PATH_MAX;
 
 	for (i = 0; i < 8; i++) {
-		if ((path = malloc(len + extra)) == NULL) {
+		if ((path = smm_alloc(len + extra)) == NULL) {
 			smm_errno_update(SMM_ERR_LOWMEM);
 			return NULL;
 		}
 		if (getcwd(path, len) != NULL) {
 			return path;	/* successfully retrieve the CWD */
 		}
-		free(path);
+		smm_free(path);
 		if (errno != ERANGE) {	/* system call failed */
 			smm_errno_update(SMM_ERR_GETCWD);
 			return NULL;

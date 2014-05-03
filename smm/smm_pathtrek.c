@@ -115,7 +115,7 @@ static int wpath_enter(struct smmdir *sdir, TCHAR *wpath)
 		fname = smm_wcstombs(wpath);
 		rc = sdir->message(sdir->option, fname, 
 				SMM_MSG_PATH_EXEC, sdir);
-		free(fname);
+		smm_free(fname);
 		if (rc != SMM_NTF_PATH_EOP) {
 			rc = SMM_NTF_PATH_CHDIR;
 		}
@@ -129,7 +129,7 @@ static int wpath_enter(struct smmdir *sdir, TCHAR *wpath)
 	if ((sdir->depth > 0) && (sdir->depnow >= sdir->depth)) {
 		fname = smm_wcstombs(wpath);
 		sdir->message(sdir->option, fname, SMM_MSG_PATH_FLOOR, sdir);
-		free(fname);
+		smm_free(fname);
 		return SMM_NTF_PATH_DEPTH;
 	}
 	
@@ -141,7 +141,7 @@ static int wpath_enter(struct smmdir *sdir, TCHAR *wpath)
 	sdir->stat_dirs++;
 	fname = smm_wcstombs(wpath);
 	rc = sdir->message(sdir->option, fname, SMM_MSG_PATH_ENTER, sdir);
-	free(fname);
+	smm_free(fname);
 	return rc;
 }
 
@@ -153,7 +153,7 @@ static int wpath_leave(struct smmdir *sdir, TCHAR *wpath)
 
 	fname = smm_wcstombs(wpath);
 	sdir->message(sdir->option, fname, SMM_MSG_PATH_LEAVE, sdir);
-	free(fname);
+	smm_free(fname);
 	sdir->depnow--;
 	return SMM_NTF_PATH_NONE;
 }
@@ -173,7 +173,7 @@ static int win_path_recur_fifo(struct smmdir *sdir, TCHAR *wpath)
 	if (ffdh == INVALID_HANDLE_VALUE) {
 		fname = smm_wcstombs(wpath);
 		sdir->message(sdir->option, fname, SMM_MSG_PATH_BREAK, NULL);
-		free(fname);
+		smm_free(fname);
 		wpath_leave(sdir, wpath);
 		return SMM_NTF_PATH_NOACC;
 	}
@@ -192,7 +192,7 @@ static int win_path_recur_fifo(struct smmdir *sdir, TCHAR *wpath)
 			fname = smm_wcstombs(ffdata.cFileName);
 			rc = sdir->message(sdir->option, fname,
 					SMM_MSG_PATH_EXEC, sdir);
-			free(fname);
+			smm_free(fname);
 			break;
 		}
 		if (rc == SMM_NTF_PATH_EOP) {
@@ -201,7 +201,7 @@ static int win_path_recur_fifo(struct smmdir *sdir, TCHAR *wpath)
 			fname = smm_wcstombs(ffdata.cFileName);
 			sdir->message(sdir->option, fname,
 					SMM_MSG_PATH_BREAK, &rc);
-			free(fname);
+			smm_free(fname);
 			break;
 		}
 	} while (FindNextFile(ffdh, &ffdata));
@@ -226,7 +226,7 @@ static int win_path_recur_first(struct smmdir *sdir, TCHAR *wpath)
 	if (ffdh == INVALID_HANDLE_VALUE) {
 		fname = smm_wcstombs(wpath);
 		sdir->message(sdir->option, fname, SMM_MSG_PATH_BREAK, NULL);
-		free(fname);
+		smm_free(fname);
 		wpath_leave(sdir, wpath);
 		return SMM_NTF_PATH_NOACC;
 	}
@@ -244,7 +244,7 @@ static int win_path_recur_first(struct smmdir *sdir, TCHAR *wpath)
 			fname = smm_wcstombs(ffdata.cFileName);
 			sdir->message(sdir->option, fname,
 					SMM_MSG_PATH_BREAK, &rc);
-			free(fname);
+			smm_free(fname);
 			break;
 		}
 	} while (FindNextFile(ffdh, &ffdata));
@@ -261,7 +261,7 @@ static int win_path_recur_first(struct smmdir *sdir, TCHAR *wpath)
 		fname = smm_wcstombs(ffdata.cFileName);
 		rc = sdir->message(sdir->option, fname,
 				SMM_MSG_PATH_EXEC, sdir);
-		free(fname);
+		smm_free(fname);
 		
 		if (rc == SMM_NTF_PATH_EOP) {
 			break;
@@ -288,7 +288,7 @@ static int win_path_recur_last(struct smmdir *sdir, TCHAR *wpath)
 	if (ffdh == INVALID_HANDLE_VALUE) {
 		fname = smm_wcstombs(wpath);
 		sdir->message(sdir->option, fname, SMM_MSG_PATH_BREAK, NULL);
-		free(fname);
+		smm_free(fname);
 		wpath_leave(sdir, wpath);
 		return SMM_NTF_PATH_NOACC;
 	}
@@ -302,7 +302,7 @@ static int win_path_recur_last(struct smmdir *sdir, TCHAR *wpath)
 		fname = smm_wcstombs(ffdata.cFileName);
 		rc = sdir->message(sdir->option, fname,
 				SMM_MSG_PATH_EXEC, sdir);
-		free(fname);
+		smm_free(fname);
 		
 		if (rc == SMM_NTF_PATH_EOP) {
 			FindClose(ffdh);
@@ -324,7 +324,7 @@ static int win_path_recur_last(struct smmdir *sdir, TCHAR *wpath)
 			fname = smm_wcstombs(ffdata.cFileName);
 			sdir->message(sdir->option, fname,
 					SMM_MSG_PATH_BREAK, &rc);
-			free(fname);
+			smm_free(fname);
 			break;
 		}
 	} while (FindNextFile(ffdh, &ffdata));
@@ -343,7 +343,7 @@ static int path_recur_fifo(struct smmdir *sdir, char *path)
 		return SMM_NTF_PATH_CHARSET;
 	}
 	rc = win_path_recur_fifo(sdir, wpath);
-	free(wpath);
+	smm_free(wpath);
 	return rc;
 }
 
@@ -356,7 +356,7 @@ static int path_recur_first(struct smmdir *sdir, char *path)
 		return SMM_NTF_PATH_CHARSET;
 	}
 	rc = win_path_recur_first(sdir, wpath);
-	free(wpath);
+	smm_free(wpath);
 	return rc;
 }
 
@@ -369,7 +369,7 @@ static int path_recur_last(struct smmdir *sdir, char *path)
 		return SMM_NTF_PATH_CHARSET;
 	}
 	rc = win_path_recur_last(sdir, wpath);
-	free(wpath);
+	smm_free(wpath);
 	return rc;
 }
 #endif	/* CFG_WIN32_API */
