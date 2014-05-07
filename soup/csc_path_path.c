@@ -3,7 +3,6 @@
 
    \author     "Andy Xuming" <xuming@users.sourceforge.net>
    \date       2013-2014
-   \copyright  GNU Public License.
 */
 /* Copyright (C) 1998-2014  "Andy Xuming" <xuming@users.sourceforge.net>
 

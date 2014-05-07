@@ -3,11 +3,6 @@ CFLAGS	+= -I..
 
 #SRCS	:= $(shell echo *.c)
 SRCS	:= csc_cdll.c		\
-	   csc_cli_alloc_list.c	\
-	   csc_cli_alloc_table.c \
-	   csc_cli_getopt_alloc.c \
-	   csc_cli_getopt.c	\
-	   csc_cli_option.c	\
 	   csc_cmp_file_extargs.c \
 	   csc_cmp_file_extlist.c \
 	   csc_cmp_file_extname.c \
@@ -30,7 +25,6 @@ SRCS	:= csc_cdll.c		\
 	   csc_isdelim.c	\
 	   csc_iso639.c		\
 	   csc_memdump.c	\
-	   csc_mkargs.c		\
 	   csc_strcpy_alloc.c	\
 	   csc_strlcpy.c	\
 	   csc_ziptoken.c
