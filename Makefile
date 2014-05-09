@@ -69,4 +69,6 @@ release:
 	$(CP) -a cli main slog smm soup $(RELCS)
 	$(CP) doc/Doxyfile $(RELCS)/doc
 	make -C $(RELCS) clean
+	$(RM) $(RELCS).tar.gz
+	tar czf $(RELCS).tar.gz $(RELCS)
 
