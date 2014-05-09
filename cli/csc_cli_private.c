@@ -22,10 +22,9 @@
 
 #include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "libcsoup.h"
+#include "csc_cli_private.h"
 
 
 int csc_cli_type(struct cliopt *optbl)
@@ -62,52 +61,20 @@ int csc_cli_table_size(struct cliopt *optbl)
 	return i;
 }
 
-int csc_cli_print(struct cliopt *optbl)
+int csc_cli_table_type(struct cliopt *optbl)
 {
-	char	tmp[128];
-	int	rc;
+	int	rc, type = 0;
 
-	for ( ; (rc = csc_cli_type(optbl)) != CLI_EOL; optbl++) {
-		tmp[0] = 0;
-		switch (rc) {
-		case CLI_COMMENT:
-			slog(SLSHOW, "%s\n", optbl->comment);
-			continue;
-		case CLI_EXTLINE:
-			break;
-		case CLI_SHORT:
-			sprintf(tmp, "  -%c", optbl->opt_char);
-			break;
-		case CLI_LONG:
-			sprintf(tmp, "     --%s", optbl->opt_long);
-			break;
-		case CLI_BOTH:
-			sprintf(tmp, "  -%c,--%s", 
-				optbl->opt_char, optbl->opt_long);
-			break;
+	while ((rc = csc_cli_type(optbl)) != CLI_EOL) {
+		if (rc == CLI_LONG) {
+			type |= CLI_LONG;
+		} else if (rc == CLI_SHORT) {
+			type |= CLI_SHORT;
+		} else if (rc == CLI_BOTH) {
+			type |= CLI_BOTH;
 		}
-                  
-		if (optbl->param == 1) {
-			strcat(tmp, " N");
-		} else if (optbl->param > 1) {
-			strcat(tmp, " C");
-		}
-
-		if (optbl->comment == NULL) {
-			slog(SLSHOW, "%s\n", tmp);
-		} else if (*optbl->comment == '*') {
-			continue;	/* hidden option */
-		} else if ((rc = strlen(tmp)) < CLI_LF_GATE) {
-			memset(tmp + rc, ' ', CLI_LF_GATE - rc);
-			tmp[CLI_LF_GATE] = 0;
-			slog(SLSHOW, "%s  %s\n", tmp, optbl->comment);
-		} else {
-			slog(SLSHOW, "%s\n", tmp);
-			memset(tmp, ' ', CLI_LF_GATE);
-			tmp[CLI_LF_GATE] = 0;
-			slog(SLSHOW, "%s  %s\n", tmp, optbl->comment);
-		}
+		optbl++;
 	}
-	return 0;
+	return type;
 }
 

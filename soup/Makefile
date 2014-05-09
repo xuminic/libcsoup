@@ -16,8 +16,6 @@ SRCS	:= csc_cdll.c		\
 	   csc_extname_filter_open.c \
 	   csc_file_load.c	\
 	   csc_file_store.c	\
-	   csc_strbody.c	\
-	   csc_strcmp_list.c	\
 	   csc_path_basename.c	\
 	   csc_path_path.c	\
 	   csc_fixtoken.c	\
@@ -25,7 +23,10 @@ SRCS	:= csc_cdll.c		\
 	   csc_isdelim.c	\
 	   csc_iso639.c		\
 	   csc_memdump.c	\
+	   csc_strbody.c	\
+	   csc_strcmp_list.c	\
 	   csc_strcpy_alloc.c	\
+	   csc_strfill.c	\
 	   csc_strlcpy.c	\
 	   csc_ziptoken.c
 
