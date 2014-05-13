@@ -26,8 +26,7 @@
 #include "libcsoup.h"
 
 #ifdef	CFG_WIN32_API
-static HKEY RegCreateMainKey(HKEY hRootKey, char *mkey);
-static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey);
+static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey, int mode);
 static HKEY RegCreatePath(int sysroot, char *path);
 static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen);
 static int RegReadLong(HKEY hMainKey, char *skey, long *val);
@@ -35,14 +34,14 @@ static int RegWriteString(HKEY hMainKey, char *skey, char *value);
 static int RegWriteLong(HKEY hMainKey, char *skey, long val);
 static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int klen);
 
-void *smm_config_open(int sysroot, char *path, char *fname)
+void *smm_config_open(int sysroot, int mode, char *path, char *fname)
 {
 	HKEY	hRootKey, hPathKey;
 
 	if ((hPathKey = RegCreatePath(sysroot, path)) == NULL) {
 		return NULL;
 	}
-	hRootKey = RegCreateMainKey(hPathKey, fname);
+	hRootKey = RegOpenMainKey(hPathKey, fname, mode);
 	RegCloseKey(hPathKey);
 	return hRootKey;
 }
@@ -98,7 +97,8 @@ char *smm_config_read(void *cfg, char *mkey, char *skey)
 	char	*buf;
 	int	blen;
 
-	if ((hMainKey = RegOpenMainKey(cfg, mkey)) == NULL) {
+	hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RDONLY);
+	if (hMainKey == NULL) {
 		smm_errno_update(SMM_ERR_ACCESS);
 		return NULL;
 	}
@@ -121,7 +121,7 @@ int smm_config_write(void *cfg, char *mkey, char *skey, char *value)
 	HKEY	hMainKey;
 	int	rc;
 
-	if ((hMainKey = RegCreateMainKey(cfg, mkey)) == NULL) {
+	if ((hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RWC)) == NULL) {
 		return smm_errno_update(SMM_ERR_NULL);
 	}
 	rc = RegWriteString(hMainKey, skey, value);
@@ -137,7 +137,8 @@ int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
 	HKEY	hMainKey;
 	int	rc;
 
-	if ((hMainKey = RegOpenMainKey(cfg, mkey)) == NULL) {
+	hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RDONLY);
+	if (hMainKey == NULL) {
 		return smm_errno_update(SMM_ERR_ACCESS);
 	}
 	rc = RegReadLong(hMainKey, skey, val);
@@ -153,7 +154,7 @@ int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
 	HKEY	hMainKey;
 	int	rc;
 
-	if ((hMainKey = RegCreateMainKey(cfg, mkey)) == NULL) {
+	if ((hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RWC)) == NULL) {
 		return smm_errno_update(SMM_ERR_NULL);
 	}
 	rc = RegWriteLong(hMainKey, skey, val);
@@ -164,7 +165,7 @@ int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
 	return rc;
 }
 
-static HKEY RegCreateMainKey(HKEY hRootKey, char *mkey)
+static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey, int mode)
 {
 	HKEY	hMainKey;
 	TCHAR	*wkey;
@@ -178,33 +179,18 @@ static HKEY RegCreateMainKey(HKEY hRootKey, char *mkey)
 		return NULL;
 	}
 
-	rc = RegCreateKeyEx(hRootKey, wkey, 0, NULL, 0, KEY_ALL_ACCESS, 
-			NULL, &hMainKey, NULL);
-
-	smm_free(wkey);			
-	if (rc == ERROR_SUCCESS) {
-		smm_errno_update(SMM_ERR_NONE);
-		return hMainKey;
+	switch (mode) {
+	case SMM_CFGMODE_RDONLY:
+		rc = RegOpenKeyEx(hRootKey, wkey, 0, KEY_READ, &hMainKey);
+		break;
+	case SMM_CFGMODE_RWC:
+		rc = RegCreateKeyEx(hRootKey, wkey, 0, NULL, 0, 
+				KEY_ALL_ACCESS, NULL, &hMainKey, NULL);
+		break;
+	default:	/* SMM_CFGMODE_RDWR */
+		rc = RegOpenKeyEx(hRootKey, wkey, 0, KEY_ALL_ACCESS, &hMainKey);
+		break;
 	}
-	smm_errno_update(SMM_ERR_ACCESS);
-	return NULL;
-}
-
-static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey)
-{
-	HKEY	hMainKey;
-	TCHAR	*wkey;
-	LONG	rc;
-
-	if (mkey == NULL) {
-		return hRootKey;
-	}
-	if ((wkey = smm_mbstowcs(mkey)) == NULL) {
-		smm_errno_update(SMM_ERR_LOWMEM);
-		return NULL;
-	}
-
-	rc = RegOpenKeyEx(hRootKey, wkey, 0, KEY_READ, &hMainKey);
 
 	smm_free(wkey);			
 	if (rc == ERROR_SUCCESS) {
@@ -435,18 +421,14 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 
 static char *smm_config_mkpath(int sysroot, char *path, int extra);
 
-void *smm_config_open(int sysroot, char *path, char *fname)
+void *smm_config_open(int sysroot, int mode, char *path, char *fname)
 {
 	void	*root;
 
 	if ((path = smm_config_mkpath(sysroot, path, 0)) == NULL) {
 		return NULL;
 	}
-	if (sysroot == SMM_CFGROOT_SYSTEM) {
-		root = csc_cfg_open(path, fname, 1);	/* read only */
-	} else {
-		root = csc_cfg_open(path, fname, 0);	/* R/W */
-	}
+	root = csc_cfg_open(path, fname, mode);
 	smm_free(path);
 	return root;
 }

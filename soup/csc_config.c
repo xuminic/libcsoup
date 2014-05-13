@@ -115,7 +115,7 @@ static int csc_cfg_update(void *cfg);
 static KEYCB *csc_cfg_find_key(void *cfg, char *key, int type);
 static int csc_cfg_recent_setup(void *cfg, KEYCB *mkey, KEYCB *kcb);
 static KEYCB *csc_cfg_recent_update(void *cfg, int type);
-static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag);
+static FILE *csc_cfg_open_file(char *path, char *fname, int mode);
 static int csc_cfg_read_next_line(FILE *fp, char *buf);
 static int csc_cfg_write_next_line(FILE *fp, KEYCB *kp);
 static int csc_cfg_strcmp(char *sour, char *dest);
@@ -153,7 +153,7 @@ static inline int CFGF_TYPE_GET(void *objc)
 	return kcb->flags & CFGF_TYPE_MASK;
 }
 
-void *csc_cfg_open(char *path, char *filename, int rdflag)
+void *csc_cfg_open(char *path, char *filename, int mode)
 {
 	KEYCB	*root, *ckey, *kp;
 	FILE	*fp;
@@ -161,18 +161,19 @@ void *csc_cfg_open(char *path, char *filename, int rdflag)
 
 	/* try to open the configure file. If the file doesn't exist 
 	 * while it's the read/write mode, then create it */
-	if ((fp = csc_cfg_open_file(path, filename, rdflag)) == NULL) {
+	if ((fp = csc_cfg_open_file(path, filename, mode)) == NULL) {
 		return NULL;
 	}
 
 	/* create the root control block */
-	if ((root = csc_cfg_kcb_alloc(strlen(path) + strlen(filename))) == NULL) {
+	root = csc_cfg_kcb_alloc(strlen(path) + strlen(filename));
+	if (root == NULL) {
 		fclose(fp);
 		return NULL;
 	}
 
 	/* initialize the root control block */
-	root->flags = rdflag ? CFGF_RDONLY : 0;
+	root->flags = (mode == SMM_CFGMODE_RDONLY) ? CFGF_RDONLY : 0;
 	root->flags = CFGF_TYPE_SET(root, CFGF_TYPE_ROOT);
 	root->key = root->pool;
 	strcpy(root->key, path);
@@ -927,7 +928,7 @@ static KEYCB *csc_cfg_recent_update(void *cfg, int type)
 	return NULL;
 }
 
-static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag)
+static FILE *csc_cfg_open_file(char *path, char *fname, int mode)
 {
 	FILE	*fp;
 	char	*fullpath;
@@ -938,13 +939,19 @@ static FILE *csc_cfg_open_file(char *path, char *fname, int rdflag)
 	strcat(fullpath, SMM_DEF_DELIM);
 	strcat(fullpath, fname);
 
-	if (rdflag) {
+	switch (mode) {
+	case SMM_CFGMODE_RDONLY:
 		fp = fopen(fullpath, "r");
-	} else {
+		break;
+	case SMM_CFGMODE_RWC:
 		smm_mkpath(path);
 		if ((fp = fopen(fullpath, "r+")) == NULL) {
 			fp = fopen(fullpath, "w+");
 		}
+		break;
+	default:	/* SMM_CFGMODE_RDWR */
+		fp = fopen(fullpath, "r+");
+		break;
 	}
 	smm_free(fullpath);
 	return fp;

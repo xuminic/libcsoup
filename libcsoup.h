@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	5		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
 
 
 /****************************************************************************
@@ -323,7 +323,7 @@ int csc_cdl_free(CSCLNK **anchor, CSCLNK *node);
 int csc_cdl_destroy(CSCLNK **anchor);
 
 /* see csc_config.c: simple configure file */
-void *csc_cfg_open(char *path, char *filename, int rdflag);
+void *csc_cfg_open(char *path, char *filename, int mode);
 int csc_cfg_abort(void *cfg);
 int csc_cfg_save(void *cfg);
 int csc_cfg_saveas(void *cfg, char *path, char *filename);
@@ -491,6 +491,9 @@ typedef	struct timeval	SMM_TIME;
 /* /etc or HKEY_LOCAL_MACHINE\\SOFTWARE\\ */
 #define SMM_CFGROOT_SYSTEM      2
 
+#define SMM_CFGMODE_RDONLY	0	/* read only */
+#define SMM_CFGMODE_RDWR	1	/* read and write */
+#define SMM_CFGMODE_RWC		2	/* read, write and create */
 
 /* isspace() macro has a problem in Cygwin when compiling it with -mno-cygwin.
  * I assume it is caused by minGW because it works fine with cygwin head files.
@@ -518,7 +521,7 @@ int smm_chdir(char *path);
 int smm_codepage(void);
 int smm_codepage_set(int cpno);
 int smm_codepage_reset(void);
-void *smm_config_open(int sysroot, char *path, char *fname);
+void *smm_config_open(int sysroot, int mode, char *path, char *fname);
 int smm_config_flush(void *cfg);
 int smm_config_close(void *cfg);
 int smm_config_delete(int sysroot, char *path, char *fname);

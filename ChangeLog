@@ -1,4 +1,8 @@
 
+20140513: 0.5.1
+	* smm_config.c: updated smm_config_open() with a mode option.
+	* csc_config.c: updated csc_cfg_open() with an extended mode option.
+
 20140509: 0.5.0
 	* cli: a lot of changes in the command line interface.
 
