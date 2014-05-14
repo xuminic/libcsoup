@@ -30,8 +30,8 @@
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	5		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
+#define LIBCSOUP_VER_MINOR	6		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
 
 
 /****************************************************************************
@@ -217,16 +217,6 @@ int slosz(char *buf);
 #endif
 
 
-
-/* Extended File Name Filter setting
- *  * Input string could be "avi,wmv,mkv" or "+avi:wmv:-mkv"
- *   * Stored format will be "*.avi", "*.wmv", "*.mkv"
- *    */
-typedef struct  {
-	char	*filter[1];
-} CSEFF;
-
-
 typedef	struct	_CSCLNK {
 	struct	_CSCLNK	*next;
 	struct	_CSCLNK	*prev;
@@ -242,6 +232,8 @@ extern "C"
 void *csc_extname_filter_open(char *s);
 int csc_extname_filter_close(void *efft);
 int csc_extname_filter_match(void *efft, char *fname);
+int csc_extname_filter_export(void *efft, char *buf, int blen);
+char *csc_extname_filter_export_alloc(void *efft);
 
 char *csc_strfill(char *s, int padto, int ch);
 size_t csc_strlcpy(char *dst, const char *src, size_t siz);
