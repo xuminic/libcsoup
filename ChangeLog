@@ -1,3 +1,8 @@
+20140515: 0.6.3
+	* smm: reviewed all functions in smm by checking NULL pointer.
+	* smm_mbstowcs.c/smm_wcstombs.c: functions renamed to reflect its
+	allocation nature.
+	* smm_fontpath.c: revised by smm utility.
 
 20140515: 0.6.2
 	* csc_cfg_save(): fixed the bug which open the resource file read only

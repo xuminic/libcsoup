@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	6		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	2		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	3		/* 0-4095 */
 
 
 /****************************************************************************
@@ -542,8 +542,8 @@ int smm_signal_break(int (*handle)(int));
 int smm_sleep(int sec, int usec);
 int smm_time_diff(SMM_TIME *tmbuf);
 int smm_time_get_epoch(SMM_TIME *tmbuf);
-void *smm_mbstowcs(char *mbs);
-char *smm_wcstombs(void *wcs);
+void *smm_mbstowcs_alloc(char *mbs);
+char *smm_wcstombs_alloc(void *wcs);
 
 #ifdef __cplusplus
 } // __cplusplus defined.
