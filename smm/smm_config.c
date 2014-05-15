@@ -69,6 +69,9 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	TCHAR	*wkey;
 	LONG	rcode;
 
+	if (fname == NULL) {
+		return smm_errno_update(SMM_ERR_NULL);
+	}
 	if ((hPathKey = RegCreatePath(sysroot, path)) == NULL) {
 		return smm_errno_update(SMM_ERR_ACCESS);
 	}
@@ -97,6 +100,10 @@ char *smm_config_read(void *cfg, char *mkey, char *skey)
 	char	*buf;
 	int	blen;
 
+	if (skey == NULL) {
+		smm_errno_update(SMM_ERR_NULL);
+		return NULL;
+	}
 	hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RDONLY);
 	if (hMainKey == NULL) {
 		smm_errno_update(SMM_ERR_ACCESS);
@@ -121,6 +128,9 @@ int smm_config_write(void *cfg, char *mkey, char *skey, char *value)
 	HKEY	hMainKey;
 	int	rc;
 
+	if (!skey || !value) {
+		return smm_errno_update(SMM_ERR_NULL);
+	}
 	if ((hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RWC)) == NULL) {
 		return smm_errno_update(SMM_ERR_NULL);
 	}
@@ -137,6 +147,9 @@ int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
 	HKEY	hMainKey;
 	int	rc;
 
+	if (skey == NULL) {
+		return smm_errno_update(SMM_ERR_NULL);
+	}
 	hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RDONLY);
 	if (hMainKey == NULL) {
 		return smm_errno_update(SMM_ERR_ACCESS);
@@ -154,6 +167,9 @@ int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
 	HKEY	hMainKey;
 	int	rc;
 
+	if (skey == NULL) {
+		return smm_errno_update(SMM_ERR_NULL);
+	}
 	if ((hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RWC)) == NULL) {
 		return smm_errno_update(SMM_ERR_NULL);
 	}
@@ -207,26 +223,37 @@ static HKEY RegCreatePath(int sysroot, char *path)
 	LONG	rc;
 	TCHAR	*wkey;
 	char	*pkey;
+	int	extra;
 
+	extra = 4;
+	if (path) {
+		extra += strlen(path);
+	}
 	switch (sysroot) {
 	case SMM_CFGROOT_USER:
 		hSysKey = HKEY_CURRENT_USER;
-		pkey = csc_strcpy_alloc("CONSOLE\\", strlen(path) + 4);
+		pkey = csc_strcpy_alloc("CONSOLE\\", extra);
 		break;
 	case SMM_CFGROOT_SYSTEM:
 		hSysKey = HKEY_LOCAL_MACHINE;
-		pkey = csc_strcpy_alloc("SOFTWARE\\", strlen(path) + 4);
+		pkey = csc_strcpy_alloc("SOFTWARE\\", extra);
 		break;
+	case SMM_CFGROOT_CURRENT:
+		/* don't do anything */
+		smm_errno_update(SMM_ERR_NONE);
+		return NULL;
 	default:	/* SMM_CFGROOT_DESKTOP */
 		hSysKey = HKEY_CURRENT_USER;
-		pkey = csc_strcpy_alloc("SOFTWARE\\", strlen(path) + 4);
+		pkey = csc_strcpy_alloc("SOFTWARE\\", extra);
 		break;
 	}
 	if (pkey == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}
-	strcat(pkey, path);
+	if (path) {
+		strcat(pkey, path);
+	}
 
 	if ((wkey = smm_mbstowcs(pkey)) == NULL) {
 		smm_free(pkey);
@@ -445,7 +472,8 @@ int smm_config_close(void *cfg)
 
 int smm_config_delete(int sysroot, char *path, char *fname)
 {
-	if ((path = smm_config_mkpath(sysroot, path, strlen(fname)))==NULL) {
+	path = smm_config_mkpath(sysroot, path, strlen(fname) + 4);
+	if (path == NULL) {
 		return smm_errno_update(SMM_ERR_LOWMEM);
 	}
 	strcat(path, "/");
@@ -484,7 +512,10 @@ static char *smm_config_mkpath(int sysroot, char *path, int extra)
 {
 	char	*fullpath;
 
-	extra += strlen(path) + 4;
+	extra += 4;
+	if (path) {
+		extra += strlen(path);
+	}
 	switch (sysroot) {
 	case SMM_CFGROOT_USER:
 		fullpath = csc_strcpy_alloc(getenv("HOME"), extra);
@@ -492,10 +523,17 @@ static char *smm_config_mkpath(int sysroot, char *path, int extra)
 	case SMM_CFGROOT_SYSTEM:
 		fullpath = csc_strcpy_alloc("/etc", extra);
 		break;
+	case SMM_CFGROOT_CURRENT:
+		fullpath = csc_strcpy_alloc(".", extra);
+		break;
 	default:	/* SMM_CFGROOT_DESKTOP */
 		fullpath = csc_strcpy_alloc(getenv("HOME"), extra + 16);
 		if (fullpath) {
 			strcat(fullpath, "/.config");
+			if (path) {
+				strcat(fullpath, "/");
+				strcat(fullpath, path);
+			}
 		}
 		break;
 	}
@@ -503,8 +541,6 @@ static char *smm_config_mkpath(int sysroot, char *path, int extra)
 		smm_errno_update(SMM_ERR_LOWMEM);
 		return NULL;
 	}
-	strcat(fullpath, "/");
-	strcat(fullpath, path);
 	return fullpath;
 }
 #endif

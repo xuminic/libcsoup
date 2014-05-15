@@ -240,7 +240,9 @@ int csc_cfg_save(void *cfg)
 	if (root->flags & CFGF_RDONLY) {
 		return SMM_ERR_ACCESS;
 	}
-	if ((fp = csc_cfg_open_file(root->key, root->value, 0)) == NULL) {
+
+	fp = csc_cfg_open_file(root->key, root->value, SMM_CFGMODE_RWC);
+	if (fp == NULL) {
 		return SMM_ERR_ACCESS;
 	}
 
@@ -372,6 +374,9 @@ int csc_cfg_write(void *cfg, char *mkey, char *skey, char *value)
 	KEYCB	*mcb, *scb, *ncb, *root;
 	int	olen, nlen;
 
+	if (value == NULL) {
+		return SMM_ERR_NULL;
+	}
 	if ((root = CFGF_GETOBJ(cfg)) == NULL) {
 		return SMM_ERR_OBJECT;
 	}
@@ -390,13 +395,14 @@ int csc_cfg_write(void *cfg, char *mkey, char *skey, char *value)
 	}
 	if ((scb = csc_cfg_find_key(mcb, skey, CFGF_TYPE_KEY)) == NULL) {
 		/* if the key doesn't exist, it'll create a new key and
-		 * insert to the head. Head is better than tail because
-		 * there is no white space line */
+		 * insert to the tail. To tail shows a more natural way
+		 * of display. But there is no white space line in the head.
+		 */
 		if ((ncb = csc_cfg_kcb_create(skey, value, NULL)) != NULL) {
 			csc_cfg_update(ncb);
 			csc_cfg_update(mcb);
 			csc_cfg_update(cfg);
-			mcb->anchor = csc_cdl_insert_head(mcb->anchor,
+			mcb->anchor = csc_cdl_insert_tail(mcb->anchor,
 					(CSCLNK*) ncb);
 			csc_cfg_recent_setup(cfg, mcb, ncb);
 		}

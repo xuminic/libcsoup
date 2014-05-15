@@ -1,4 +1,11 @@
 
+20140515: 0.6.2
+	* csc_cfg_save(): fixed the bug which open the resource file read only
+
+20140514: 0.6.1
+	* csc_cfg_write: fixed a bug by checking NULL pointer.
+	* smm_config.c: supported SMM_CFGROOT_CURRENT.
+
 20140514: 0.6.0
 	* csc_extname_filter.c: functions in the same group moved in.
 	Added csc_extname_filter_export() and

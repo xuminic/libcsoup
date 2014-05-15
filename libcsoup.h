@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	6		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	2		/* 0-4095 */
 
 
 /****************************************************************************
@@ -482,6 +482,8 @@ typedef	struct timeval	SMM_TIME;
 #define SMM_CFGROOT_USER        1
 /* /etc or HKEY_LOCAL_MACHINE\\SOFTWARE\\ */
 #define SMM_CFGROOT_SYSTEM      2
+/* current directory (posix only) */
+#define SMM_CFGROOT_CURRENT	3
 
 #define SMM_CFGMODE_RDONLY	0	/* read only */
 #define SMM_CFGMODE_RDWR	1	/* read and write */
