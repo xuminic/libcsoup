@@ -218,10 +218,10 @@ int csc_cfg_abort(void *cfg)
 			break;
 		}
 		if (ckey->anchor) {
-			csc_cdl_destroy(&ckey->anchor);
+			csc_cdl_list_destroy(&ckey->anchor);
 		}
 	}
-	csc_cdl_destroy(&root->anchor);
+	csc_cdl_list_destroy(&root->anchor);
 	return SMM_ERR_NONE;
 }
 
@@ -449,7 +449,7 @@ int csc_cfg_write(void *cfg, char *mkey, char *skey, char *value)
 		}
 		ncb->update = scb->update;
 		csc_cdl_insert_after((CSCLNK*) scb, (CSCLNK*) ncb);
-		csc_cdl_free(&mcb->anchor, (CSCLNK*) scb);
+		csc_cdl_list_free(&mcb->anchor, (CSCLNK*) scb);
 		scb = ncb;
 	}
 	csc_cfg_update(scb);
@@ -631,7 +631,7 @@ int csc_cfg_write_block(void *cfg, char *mkey, void *bin, int bsize)
 		return SMM_ERR_ACCESS;
 	} else {
 		/* if the main key does exist, destory its contents */
-		csc_cdl_destroy(&mcb->anchor);
+		csc_cdl_list_destroy(&mcb->anchor);
 		mcb->update = 0;
 	}
 	root->update++;

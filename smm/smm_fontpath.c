@@ -45,7 +45,7 @@ static	char	*def_font_dir[] = {
 
 static int findfont(void *option, char *path, int type, void *info);
 static char *find_sep(char *path);
-static char *find_rsep(char *path);
+//static char *find_rsep(char *path);
 
 char *smm_fontpath(char *ftname, char **userdir)
 {
@@ -194,6 +194,7 @@ static char *find_sep(char *path)
 	return NULL;
 }
 
+/*
 static char *find_rsep(char *path)
 {
 	int	i;
@@ -205,5 +206,5 @@ static char *find_rsep(char *path)
 	}
 	return NULL;
 }
-
+*/
 

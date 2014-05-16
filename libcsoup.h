@@ -221,20 +221,28 @@ int slosz(char *buf);
  * See csc_cdll.c: circular doubly linked list
  * Definitions and functions for process circular doubly linked list.
  ****************************************************************************/
+#define CSC_CDLL_MAGIC		(('D'<<24) | ('L'<<16))
+#define CSC_CDLL_BACKGUARD	0xdeadbeef
+
 typedef	struct	_CSCLNK {
 	struct	_CSCLNK	*next;
 	struct	_CSCLNK	*prev;
 #ifdef	CFG_CDLL_SAFE
-	int	majesty;
+	/** Size of the CSCLNK structure and the payload.
+	 * but it doesn't include the padding magic */
+	unsigned	size;
+	/** The combine of CSC_CDLL_MAGIC in higher 16-bit and a CRC16 in 
+	 * lower 16 bit of the CSCLNK structure while the majesty had been 
+	 * set to the CSC_CDLL_MAGIC. */
+	unsigned	majesty;
 #endif
-	char	payload[1];
 } CSCLNK;
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node);
+int csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node);
 CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
@@ -242,10 +250,13 @@ CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 		int(*compare)(void *, void *), void *refload);
 CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
-CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size);
-CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size);
-int csc_cdl_free(CSCLNK **anchor, CSCLNK *node);
-int csc_cdl_destroy(CSCLNK **anchor);
+int csc_cdl_state(CSCLNK *anchor);
+
+CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size);
+CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size);
+int csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node);
+int csc_cdl_list_destroy(CSCLNK **anchor);
+int csc_cdl_list_state(CSCLNK **anchor);
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif

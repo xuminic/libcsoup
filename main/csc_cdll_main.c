@@ -13,17 +13,17 @@ int csc_cdll_main(void *rtime, int argc, char **argv)
 	/* stop the compiler complaining */
 	(void) rtime; (void) argc; (void) argv;
 	
-	node = csc_cdl_alloc_head(&anchor, 16);
-	strcpy((char*)node->payload, cont[0]);
+	node = csc_cdl_list_alloc_head(&anchor, 16);
+	strcpy((char*)&node[1], cont[0]);
 
-	node = csc_cdl_alloc_head(&anchor, 16);
-	strcpy((char*)node->payload, cont[1]);
+	node = csc_cdl_list_alloc_head(&anchor, 16);
+	strcpy((char*)&node[1], cont[1]);
 
-	node = csc_cdl_alloc_tail(&anchor, 16);                
-	strcpy((char*)node->payload, cont[2]);
+	node = csc_cdl_list_alloc_tail(&anchor, 16);                
+	strcpy((char*)&node[1], cont[2]);
 
-	for (node = anchor; node != NULL; node = csc_cdl_next(anchor, node)) {
-		printf("%s\n", (char*)node->payload);
+	for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
+		printf("%s\n", (char*)&node[1]);
 	}
 	return 0;
 }
