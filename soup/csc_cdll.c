@@ -28,6 +28,14 @@
 #include "libcsoup.h"
 
 
+int csc_cdl_verify(CSCLNK *node)
+{
+}
+
+int csc_cdl_checksum(CSCLNK *node)
+{
+}
+
 /*!\brief Insert a node after the reference node.
 
    The csc_cdl_insert_after() function inserts the specified node between

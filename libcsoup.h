@@ -34,9 +34,9 @@
 #define LIBCSOUP_VER_BUGFIX	4		/* 0-4095 */
 
 
-/****************************************************************************
+/*****************************************************************************
  * Command line process functions
- ****************************************************************************/
+ *****************************************************************************/
 
 #define CSC_CLI_UNCMD	(('U'<<24)|('C'<<16)|('M'<<8)|'D')
 
@@ -95,9 +95,9 @@ int csc_cli_cmd_run(struct clicmd **cmdtbl, void *rtime, int argc, char **);
 
 
 
-/****************************************************************************
+/*****************************************************************************
  * Simple Logger Interface
- ****************************************************************************/
+ *****************************************************************************/
 /* README:
 Debug level is 0-7 using Bit2 to Bit0 in the control word
   0: unmaskable output (for show-off printf like information)
@@ -217,11 +217,80 @@ int slosz(char *buf);
 #endif
 
 
+/*****************************************************************************
+ * See csc_cdll.c: circular doubly linked list
+ * Definitions and functions for process circular doubly linked list.
+ ****************************************************************************/
 typedef	struct	_CSCLNK {
 	struct	_CSCLNK	*next;
 	struct	_CSCLNK	*prev;
+#ifdef	CFG_CDLL_SAFE
+	int	majesty;
+#endif
 	char	payload[1];
 } CSCLNK;
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node);
+CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node);
+CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node);
+CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
+CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node);
+CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
+		int(*compare)(void *, void *), void *refload);
+CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
+CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size);
+CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size);
+int csc_cdl_free(CSCLNK **anchor, CSCLNK *node);
+int csc_cdl_destroy(CSCLNK **anchor);
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
+
+
+/*****************************************************************************
+ * See memdump.c: Memory dump
+ * Definitions and functions for display memory
+ ****************************************************************************/
+#define CSC_MEMDUMP_BIT_8	0
+#define CSC_MEMDUMP_BIT_16	1
+#define CSC_MEMDUMP_BIT_32	2
+#define CSC_MEMDUMP_BIT_64	3
+#define CSC_MEMDUMP_BIT_FLOAT	4
+#define CSC_MEMDUMP_BIT_DOUBLE	5
+#define CSC_MEMDUMP_BIT_MASK	0xf	/* 8/16/32/64 */
+
+#define CSC_MEMDUMP_TYPE_HEXU	0	/* uppercased hexadecimal */
+#define CSC_MEMDUMP_TYPE_HEXL	0x10	/* lowercased hexadecimal */
+#define CSC_MEMDUMP_TYPE_UDEC	0x20	/* unsigned decimal */
+#define CSC_MEMDUMP_TYPE_IDEC	0x30	/* signed decimal */
+#define CSC_MEMDUMP_TYPE_OCT	0x40	/* unsigned octal */
+#define CSC_MEMDUMP_TYPE_EE	0x50	/* float, size depend on BIT_MASK */
+#define CSC_MEMDUMP_TYPE_MASK	0xf0	
+
+#define CSC_MEMDUMP_WID_MASK	0xf00	/* always plus 2 */
+#define CSC_MEMDUMP_WIDTH(n)	(((n)<<8) & CSC_MEMDUMP_WID_MASK)
+
+#define CSC_MEMDUMP_NO_GLYPH	0x1000	/* don't show ASC glyphes */
+#define CSC_MEMDUMP_NO_ADDR	0x2000	/* don't show address */
+#define CSC_MEMDUMP_NO_FILLING	0x4000	/* don't fill leading 0 */
+#define CSC_MEMDUMP_NO_SPACE	0x8000	/* don't fill space between numbers */
+#define CSC_MEMDUMP_ALIGN_LEFT	0x10000	/* align to left */
+#define CSC_MEMDUMP_REVERSE	0x20000	/* reverse display */
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen);
+int csc_memdump(void *mem, int range, int column, int flags);
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
+
 
 
 #ifdef __cplusplus
@@ -260,36 +329,6 @@ int csc_strcmp_list(char *dest, char *src, ...);
 char *csc_path_basename(char *path, char *buffer, int blen);
 char *csc_path_path(char *path, char *buffer, int blen);
 
-/* see memdump.c */
-#define CSC_MEMDUMP_BIT_8	0
-#define CSC_MEMDUMP_BIT_16	1
-#define CSC_MEMDUMP_BIT_32	2
-#define CSC_MEMDUMP_BIT_64	3
-#define CSC_MEMDUMP_BIT_FLOAT	4
-#define CSC_MEMDUMP_BIT_DOUBLE	5
-#define CSC_MEMDUMP_BIT_MASK	0xf	/* 8/16/32/64 */
-
-#define CSC_MEMDUMP_TYPE_HEXU	0	/* uppercased hexadecimal */
-#define CSC_MEMDUMP_TYPE_HEXL	0x10	/* lowercased hexadecimal */
-#define CSC_MEMDUMP_TYPE_UDEC	0x20	/* unsigned decimal */
-#define CSC_MEMDUMP_TYPE_IDEC	0x30	/* signed decimal */
-#define CSC_MEMDUMP_TYPE_OCT	0x40	/* unsigned octal */
-#define CSC_MEMDUMP_TYPE_EE	0x50	/* float, size depend on BIT_MASK */
-#define CSC_MEMDUMP_TYPE_MASK	0xf0	
-
-#define CSC_MEMDUMP_WID_MASK	0xf00	/* always plus 2 */
-#define CSC_MEMDUMP_WIDTH(n)	(((n)<<8) & CSC_MEMDUMP_WID_MASK)
-
-#define CSC_MEMDUMP_NO_GLYPH	0x1000	/* don't show ASC glyphes */
-#define CSC_MEMDUMP_NO_ADDR	0x2000	/* don't show address */
-#define CSC_MEMDUMP_NO_FILLING	0x4000	/* don't fill leading 0 */
-#define CSC_MEMDUMP_NO_SPACE	0x8000	/* don't fill space between numbers */
-#define CSC_MEMDUMP_ALIGN_LEFT	0x10000	/* align to left */
-#define CSC_MEMDUMP_REVERSE	0x20000	/* reverse display */
-
-int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen);
-int csc_memdump(void *mem, int range, int column, int flags);
-
 /* see csc_crc*.c */
 unsigned short csc_crc16_byte(unsigned short crc, char data);
 unsigned short csc_crc16(unsigned short crc, void *buf, size_t len);
@@ -299,20 +338,6 @@ unsigned char csc_crc8_byte(unsigned char crc, char data);
 unsigned char csc_crc8(unsigned char crc, void *buf, size_t len);
 unsigned short csc_crc_ccitt_byte(unsigned short crc, char data);
 unsigned short csc_crc_ccitt(unsigned short crc, void *buf, size_t len);
-
-/* see csc_cdll.c: circular doubly linked list functions */
-void csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node);
-CSCLNK *csc_cdl_insert_head(CSCLNK *anchor, CSCLNK *node);
-CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node);
-CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node);
-CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node);
-CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
-		int(*compare)(void *, void *), void *refload);
-CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
-CSCLNK *csc_cdl_alloc_head(CSCLNK **anchor, int size);
-CSCLNK *csc_cdl_alloc_tail(CSCLNK **anchor, int size);
-int csc_cdl_free(CSCLNK **anchor, CSCLNK *node);
-int csc_cdl_destroy(CSCLNK **anchor);
 
 /* see csc_config.c: simple configure file */
 void *csc_cfg_open(char *path, char *filename, int mode);
@@ -508,7 +533,6 @@ extern	char	*smm_rt_name;
 extern "C"
 {
 #endif
-
 void *smm_alloc(size_t size);
 int smm_free(void *ptr);
 int smm_chdir(char *path);
@@ -546,7 +570,6 @@ int smm_time_diff(SMM_TIME *tmbuf);
 int smm_time_get_epoch(SMM_TIME *tmbuf);
 void *smm_mbstowcs_alloc(char *mbs);
 char *smm_wcstombs_alloc(void *wcs);
-
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
