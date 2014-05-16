@@ -94,7 +94,7 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	return smm_errno_update(SMM_ERR_ACCESS);
 }
 
-char *smm_config_read(void *cfg, char *mkey, char *skey)
+char *smm_config_read_alloc(void *cfg, char *mkey, char *skey)
 {
 	HKEY	hMainKey;
 	char	*buf;
@@ -488,7 +488,7 @@ int smm_config_delete(int sysroot, char *path, char *fname)
 	return smm_errno_update(SMM_ERR_NULL);
 }
 
-char *smm_config_read(void *cfg, char *mkey, char *skey)
+char *smm_config_read_alloc(void *cfg, char *mkey, char *skey)
 {
 	return csc_cfg_copy(cfg, mkey, skey, 4);
 }
@@ -505,7 +505,7 @@ int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
 
 int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
 {
-	return csc_cfg_write_long(cfg, mkey, skey, val);
+	return csc_cfg_write_longlong(cfg, mkey, skey, (long long) val);
 }
 
 static char *smm_config_mkpath(int sysroot, char *path, int extra)
@@ -544,4 +544,21 @@ static char *smm_config_mkpath(int sysroot, char *path, int extra)
 	return fullpath;
 }
 #endif
+
+int smm_config_read_int(void *cfg, char *mkey, char *skey, int *val)
+{
+	long	ival;
+	int	rc;
+
+	rc = smm_config_read_long(cfg, mkey, skey, &ival);
+	if (val && (rc == SMM_ERR_NONE)) {
+		*val = (int) ival;
+	}
+	return rc;
+}
+
+int smm_config_write_int(void *cfg, char *mkey, char *skey, int val)
+{
+	return smm_config_write_long(cfg, mkey, skey, (long) val);
+}
 

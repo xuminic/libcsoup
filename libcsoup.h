@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	6		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	3		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	4		/* 0-4095 */
 
 
 /****************************************************************************
@@ -519,10 +519,12 @@ void *smm_config_open(int sysroot, int mode, char *path, char *fname);
 int smm_config_flush(void *cfg);
 int smm_config_close(void *cfg);
 int smm_config_delete(int sysroot, char *path, char *fname);
-char *smm_config_read(void *cfg, char *mkey, char *skey);
+char *smm_config_read_alloc(void *cfg, char *mkey, char *skey);
 int smm_config_write(void *cfg, char *mkey, char *skey, char *value);
 int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val);
 int smm_config_write_long(void *cfg, char *mkey, char *skey, long val);
+int smm_config_read_int(void *cfg, char *mkey, char *skey, int *val);
+int smm_config_write_int(void *cfg, char *mkey, char *skey, int val);
 char *smm_cwd_alloc(int extra);
 int smm_cwd_pop(void *cwid);
 void *smm_cwd_push(void);
