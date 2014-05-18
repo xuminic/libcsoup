@@ -4,7 +4,7 @@ AR      = ar
 CP      = cp
 RM      = rm -f
 
-CFLAGS	+= -I..
+CFLAGS	+= -DCFG_CDLL_SAFE -I..
 
 SRCS	= main.c fixtoken.c smm.c memdump.c slog.c crc.c fontpath.c config.c \
 	  csc_cdll_main.c csc_cli.c

@@ -227,6 +227,7 @@ int slosz(char *buf);
 typedef	struct	_CSCLNK {
 	struct	_CSCLNK	*next;
 	struct	_CSCLNK	*prev;
+	void	*refp;
 #ifdef	CFG_CDLL_SAFE
 	/** Size of the CSCLNK structure and the payload.
 	 * but it doesn't include the padding magic */
