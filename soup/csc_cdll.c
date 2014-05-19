@@ -46,6 +46,9 @@ static int csc_cdl_verify(CSCLNK *node)
 {
 	CSCLNK	tmp;
 
+	if (node == NULL) {
+		return 0;
+	}
 	tmp = *node;
 	csc_cdl_checksum(&tmp);
 
@@ -66,12 +69,12 @@ static int csc_cdl_verify(CSCLNK *node)
 
    \param[in]  refn The reference node where to insert after.
    \param[in]  node The node for insertion.
-   \return     0
+   \return     0 if succeed, or -1 if failed.
 
    \remark In CFG_CDLL_SAFE mode, it could return -1 if the reference node
    had been damaged.
 */
-int csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)//FIXME
+int csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)
 {
 #ifdef	CFG_CDLL_SAFE
 	if (!csc_cdl_verify(refn)) {
@@ -169,7 +172,7 @@ CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node)
 #ifdef	CFG_CDLL_SAFE	/* double check the validility of the list */
 	CSCLNK	*cur;
 
-	if (anchor && !csc_cdl_verify(anchor)) {
+	if (!csc_cdl_verify(anchor)) {
 		return NULL;
 	}
 	for (cur = anchor; cur; cur = csc_cdl_next(anchor, cur)) {
@@ -255,19 +258,17 @@ CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 {
 	CSCLNK	*node;
 
+#ifdef	CFG_CDLL_SAFE
+	if (!csc_cdl_verify(anchor)) {
+		return NULL;
+	}
+	if (last && !csc_cdl_verify(last)) {
+		return NULL;
+	}
+#endif
 	if (last == NULL) {
 		last = anchor;
-#ifdef	CFG_CDLL_SAFE
-		if (last && !csc_cdl_verify(last)) {
-			return NULL;
-		}
-#endif
 	} else {
-#ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_verify(last)) {
-			return NULL;
-		}
-#endif
 		last = csc_cdl_next(anchor, last);
 	}
 	for (node = last; node; node = csc_cdl_next(anchor, node)) {
@@ -294,7 +295,7 @@ CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx)
 	int	i = 0;
 
 #ifdef	CFG_CDLL_SAFE
-	if (anchor && !csc_cdl_verify(anchor)) {
+	if (!csc_cdl_verify(anchor)) {
 		return NULL;
 	}
 #endif
@@ -313,7 +314,7 @@ CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx)
 
    \param[in]   anchor The anchor pointer which points to the head of the list.
 
-   \return  The number of members.
+   \return  The number of node in the list, or -1 if failed.
    \remark  This function can used to verify the link list.
 */
 int csc_cdl_quantity(CSCLNK *anchor)
@@ -322,8 +323,8 @@ int csc_cdl_quantity(CSCLNK *anchor)
 	int	i = 0;
 
 #ifdef	CFG_CDLL_SAFE
-	if (anchor && !csc_cdl_verify(anchor)) {
-		return NULL;
+	if (!csc_cdl_verify(anchor)) {
+		return -1;
 	}
 #endif
 	for (node = anchor; node; node = csc_cdl_next(anchor, node), i++);
@@ -361,15 +362,12 @@ static int csc_cdl_list_verify(CSCLNK *node)
 {
 	int	*ptr;
 
-	if (!csc_cdl_verify(node)) {
-		return 0;
-	}
 	ptr = (int*) (((char*)node) + node->size);
-	if ((ptr[0] == ptr[1]) && (ptr[1] == (int)CSC_CDLL_BACKGUARD)) {
+	if (*ptr == (int) CSC_CDLL_BACKGUARD) {
 		return 1;
 	}
-	slogz("csc_cdl_list_verify: backguard violated %p (+%p:-%p) %x:%x\n",
-			node, node->next, node->prev, ptr[0], ptr[1]);
+	slogz("csc_cdl_list_verify: backguard violated %p (+%p:-%p) %x\n",
+			node, node->next, node->prev, *ptr);
 	return 0;
 }
 #endif	/* CFG_CDLL_SAFE */
@@ -394,10 +392,10 @@ CSCLNK *csc_cdl_list_alloc(int size)
 
 	size += sizeof(CSCLNK);
 	size = (size + 3) / 4 * 4;
-	if ((node = smm_alloc(size + 8)) != NULL) {
+	if ((node = smm_alloc(size + sizeof(int))) != NULL) {
 		node->size = size;
 		ptr = (int*) (((char*)node) + node->size);
-		ptr[0] = ptr[1] = CSC_CDLL_BACKGUARD;
+		*ptr = CSC_CDLL_BACKGUARD;
 	}
 	return node;
 }
@@ -480,6 +478,9 @@ CSCLNK *csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node)
 	CSCLNK	*next;
 
 #ifdef	CFG_CDLL_SAFE
+	if (!csc_cdl_verify(node)) {
+		return NULL;
+	}
 	if (!csc_cdl_list_verify(node)) {
 		return NULL;
 	}
@@ -497,7 +498,7 @@ CSCLNK *csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node)
    \param[in,out]  anchor The pointer of the anchor pointer which points to 
                    the head of the list.
 
-   \return         always 0.
+   \return         0 if succeed, or -1 if failed.
    \remark         The anchor pointer will be reset to NULL.
    \remark         The list should be built by calling csc_cdl_list_alloc_head()
                    or csc_cdl_list_alloc_tail().
@@ -507,24 +508,42 @@ int csc_cdl_list_destroy(CSCLNK **anchor)
 	CSCLNK	*node;
 
 #ifdef	CFG_CDLL_SAFE
-	if (!csc_cdl_list_verify(*anchor)) {
+	if (!csc_cdl_verify(*anchor)) {
 		return -1;
 	}
 #endif
-	for (node = *anchor; node; node = csc_cdl_list_free(anchor, node));
+	for (node = *anchor; node; node = csc_cdl_list_free(anchor, node)) {
+#ifdef	CFG_CDLL_SAFE
+		if (!csc_cdl_list_verify(node)) {
+			return -1;
+		}
+#endif
+	}
 	*anchor = NULL;
 	return 0;
 }
 
+/*!\brief Check the heath of the list
+
+   \param[in,out]  anchor The pointer of the anchor pointer which points to 
+                   the head of the list.
+
+   \return         the number of nodes in the list, or -1 if failed.
+*/
 int csc_cdl_list_state(CSCLNK **anchor)
 {
 	CSCLNK	*node;
 	int	i = 0;
 
+#ifdef	CFG_CDLL_SAFE
+	if (!csc_cdl_verify(*anchor)) {
+		return -1;
+	}
+#endif
 	for (node = *anchor; node; node = csc_cdl_next(*anchor, node)) {
 #ifdef	CFG_CDLL_SAFE
 		if (!csc_cdl_list_verify(node)) {
-			break;
+			return -1;
 		}
 #endif
 		i++;
