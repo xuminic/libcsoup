@@ -36,6 +36,9 @@ static int csc_cdl_checksum(CSCLNK *node)
 	node->majesty = CSC_CDLL_MAGIC;
 	crc = csc_crc16(0, node, sizeof(CSCLNK));
 	node->majesty |= crc;
+	/*slogz("csc_cdl_checksum: %p:%d (+%p:-%p) R:%p S:%d M:%x\n", 
+			node, sizeof(CSCLNK), node->next, node->prev, 
+			node->refp, node->size, node->majesty);*/
 	return (int) node->majesty;
 }
 
@@ -68,21 +71,26 @@ static int csc_cdl_verify(CSCLNK *node)
    \remark In CFG_CDLL_SAFE mode, it could return -1 if the reference node
    had been damaged.
 */
-int csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)
+int csc_cdl_insert_after(CSCLNK *refn, CSCLNK *node)//FIXME
 {
 #ifdef	CFG_CDLL_SAFE
 	if (!csc_cdl_verify(refn)) {
 		return -1;
 	}
 #endif
-	refn->next->prev = node;
 	node->next = refn->next;
-	refn->next = node;
 	node->prev = refn;
+#ifdef	CFG_CDLL_SAFE
+	csc_cdl_checksum(node);
+#endif
 
+	refn->next->prev = node;
+#ifdef	CFG_CDLL_SAFE
+	csc_cdl_checksum(refn->next);
+#endif
+	refn->next = node;
 #ifdef	CFG_CDLL_SAFE
 	csc_cdl_checksum(refn);
-	csc_cdl_checksum(node);
 #endif
 	return 0;
 }
@@ -158,6 +166,21 @@ CSCLNK *csc_cdl_insert_tail(CSCLNK *anchor, CSCLNK *node)
 */
 CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node)
 {
+#ifdef	CFG_CDLL_SAFE	/* double check the validility of the list */
+	CSCLNK	*cur;
+
+	if (anchor && !csc_cdl_verify(anchor)) {
+		return NULL;
+	}
+	for (cur = anchor; cur; cur = csc_cdl_next(anchor, cur)) {
+		if (cur == node) {
+			break;
+		}
+	}
+	if (cur == NULL) {
+		return NULL;	/* node in the wrong list */
+	}
+#endif
 	node->prev->next = node->next;
 	node->next->prev = node->prev;
 #ifdef	CFG_CDLL_SAFE
@@ -192,9 +215,17 @@ CSCLNK *csc_cdl_remove(CSCLNK *anchor, CSCLNK *node)
 */
 CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node)
 {
+	if (node == NULL) {
+		return anchor;
+	}
 	if (node->next == anchor) {
 		return NULL;
 	}
+#ifdef	CFG_CDLL_SAFE
+	if (!csc_cdl_verify(node->next)) {
+		return NULL;
+	}
+#endif
 	return node->next;
 }
 
@@ -226,6 +257,11 @@ CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 
 	if (last == NULL) {
 		last = anchor;
+#ifdef	CFG_CDLL_SAFE
+		if (last && !csc_cdl_verify(last)) {
+			return NULL;
+		}
+#endif
 	} else {
 #ifdef	CFG_CDLL_SAFE
 		if (!csc_cdl_verify(last)) {
@@ -235,11 +271,6 @@ CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 		last = csc_cdl_next(anchor, last);
 	}
 	for (node = last; node; node = csc_cdl_next(anchor, node)) {
-#ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_verify(node)) {
-			return NULL;
-		}
-#endif
 		if (!compare((void*)&node[1], refload)) {
 			return node;
 		}
@@ -262,12 +293,12 @@ CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx)
 	CSCLNK	*node;
 	int	i = 0;
 
-	for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
 #ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_verify(node)) {
-			return NULL;
-		}
+	if (anchor && !csc_cdl_verify(anchor)) {
+		return NULL;
+	}
 #endif
+	for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
 		if (idx == i) {
 			return node;
 		}
@@ -276,40 +307,56 @@ CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx)
 	return NULL;
 }
 
-int csc_cdl_state(CSCLNK *anchor)
+/*!\brief The number of members in the list.
+   
+   The csc_cdl_quantity() function returns the number of members in the list. 
+
+   \param[in]   anchor The anchor pointer which points to the head of the list.
+
+   \return  The number of members.
+   \remark  This function can used to verify the link list.
+*/
+int csc_cdl_quantity(CSCLNK *anchor)
 {
 	CSCLNK	*node;
 	int	i = 0;
 
-	for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
 #ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_verify(node)) {
-			break;
-		}
-#endif
-		i++;
+	if (anchor && !csc_cdl_verify(anchor)) {
+		return NULL;
 	}
+#endif
+	for (node = anchor; node; node = csc_cdl_next(anchor, node), i++);
 	return i;
 }
 
+/*!\brief The size of a node.
+   
+   The csc_cdl_node_size() function returns the size of a specified node. 
+
+   \param[in]   node The points to the node.
+
+   \return  The size of the node. In CFG_CDLL_SAFE, it would return the size
+   field in the CSCLNK structure. Otherwise or node is NULL, it returns the
+   size of CSCLNK structure.
+
+   \remark  This function can used to verify the build mode of the library.
+*/
+int csc_cdl_node_size(CSCLNK *node)
+{
+#ifdef	CFG_CDLL_SAFE
+	if (node) {
+		return node->size;
+	}
+#endif
+	return sizeof(CSCLNK);
+}
 
 
 /****************************************************************************
  * An application of the basic csc_cdl_* functions
  ***************************************************************************/
 #ifdef	CFG_CDLL_SAFE
-static CSCLNK *csc_cdl_list_alloc(int size)
-{
-	CSCLNK	*node;
-	int	*ptr;
-
-	if ((node = smm_alloc(sizeof(CSCLNK) + size + 8)) != NULL) {
-		node->size = sizeof(CSCLNK) + size;
-		ptr = (int*) (((char*)node) + node->size);
-		ptr[0] = ptr[1] = CSC_CDLL_BACKGUARD;
-	}
-	return node;
-}
 static int csc_cdl_list_verify(CSCLNK *node)
 {
 	int	*ptr;
@@ -325,10 +372,41 @@ static int csc_cdl_list_verify(CSCLNK *node)
 			node, node->next, node->prev, ptr[0], ptr[1]);
 	return 0;
 }
-#else
-static CSCLNK *csc_cdl_list_alloc(int size)
+#endif	/* CFG_CDLL_SAFE */
+
+
+/*!\brief Allocate a CSCLNK node
+   
+   The csc_cdl_list_alloc() function returns a CSCLNK structure with the
+   payload of the specified size. In CFG_CDLL_SAFE it will be padded by 
+   the guarding words.
+
+   \param[in]   size The size of the payload.
+
+   \return  A pointer to the CSCLNK structure of specified size if succeed,
+   or NULL if failed.
+*/
+#ifdef	CFG_CDLL_SAFE
+CSCLNK *csc_cdl_list_alloc(int size)
 {
-	return smm_alloc(sizeof(CSCLNK) + size);
+	CSCLNK	*node;
+	int	*ptr;
+
+	size += sizeof(CSCLNK);
+	size = (size + 3) / 4 * 4;
+	if ((node = smm_alloc(size + 8)) != NULL) {
+		node->size = size;
+		ptr = (int*) (((char*)node) + node->size);
+		ptr[0] = ptr[1] = CSC_CDLL_BACKGUARD;
+	}
+	return node;
+}
+#else
+CSCLNK *csc_cdl_list_alloc(int size)
+{
+	size += sizeof(CSCLNK);
+	size = (size + 3) / 4 * 4;
+	return smm_alloc(size);
 }
 #endif	/* CFG_CDLL_SAFE */
 
@@ -393,14 +471,25 @@ CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size)
                    the head of the list.
    \param[in]      node The node going to be freed.
 
-   \return         always 0.
+   \return         The pointer to the next node in the list, or NULL if there
+                   is no more node left.
    \remark         The anchor pointer could be changed in the call.
 */
-int csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node)
+CSCLNK *csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node)
 {
+	CSCLNK	*next;
+
+#ifdef	CFG_CDLL_SAFE
+	if (!csc_cdl_list_verify(node)) {
+		return NULL;
+	}
+#endif
+	if ((next = node->next) == node) {
+		next = NULL;	/* node is the last member in the queue */
+	}
 	*anchor = csc_cdl_remove(*anchor, node);
 	smm_free(node);
-	return 0;
+	return next;
 }
 
 /*!\brief Destroy a whole list and free all its members.
@@ -415,19 +504,14 @@ int csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node)
 */
 int csc_cdl_list_destroy(CSCLNK **anchor)
 {
-	CSCLNK	*cur, *node;
+	CSCLNK	*node;
 
-	node = *anchor; 
-	while (node != NULL) {
 #ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_list_verify(node)) {
-			return -1;
-		}
-#endif
-		cur = node;
-		node = csc_cdl_next(*anchor, node);
-		smm_free(cur);
+	if (!csc_cdl_list_verify(*anchor)) {
+		return -1;
 	}
+#endif
+	for (node = *anchor; node; node = csc_cdl_list_free(anchor, node));
 	*anchor = NULL;
 	return 0;
 }

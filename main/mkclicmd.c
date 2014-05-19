@@ -15,6 +15,10 @@ int main(int argc, char **argv)
 		printf("Usage: %s extern_list_head_file\n", argv[0]);
 		return 0;
 	}
+	if (csc_cdl_node_size(NULL) != sizeof(CSCLNK)) {
+		printf("Wrong compiling option of this program!\n");
+		return -1;
+	}
 
 	if ((fp = fopen(argv[1], "r+")) == NULL) {
 		perror(argv[1]);
@@ -40,7 +44,7 @@ int main(int argc, char **argv)
 		rc = strlen(payload) - 1;
 		if (payload[rc] == ';') {
 			payload[rc] = 0;
-		}
+		}	
 	}
 
 	fprintf(fp, "\nstruct	clicmd	*cmdlist[] = {\n");
