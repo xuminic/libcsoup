@@ -251,11 +251,12 @@ CSCLNK *csc_cdl_next(CSCLNK *anchor, CSCLNK *node);
 CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 		int(*compare)(void *, void *), void *refload);
 CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
-int csc_cdl_quantity(CSCLNK *anchor);
-int csc_cdl_node_size(CSCLNK *node);
+int csc_cdl_index(CSCLNK *anchor, CSCLNK *node);
+int csc_cdl_setup(CSCLNK *node, void *prev, void *next, void *rp, int size);
 
 CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size);
 CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size);
+int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx);
 CSCLNK *csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node);
 int csc_cdl_list_destroy(CSCLNK **anchor);
 int csc_cdl_list_state(CSCLNK **anchor);

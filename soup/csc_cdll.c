@@ -291,68 +291,89 @@ CSCLNK *csc_cdl_search(CSCLNK *anchor, CSCLNK *last,
 */
 CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx)
 {
-	CSCLNK	*node;
-	int	i = 0;
+	CSCLNK	*n;
+	int	i;
 
 #ifdef	CFG_CDLL_SAFE
 	if (!csc_cdl_verify(anchor)) {
 		return NULL;
 	}
 #endif
-	for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
+	for (i = 0, n = anchor; n; n = csc_cdl_next(anchor, n), i++) {
 		if (idx == i) {
-			return node;
+			return n;
 		}
-		i++;
 	}
 	return NULL;
 }
 
-/*!\brief The number of members in the list.
+/*!\brief The index of a node in the list.
    
-   The csc_cdl_quantity() function returns the number of members in the list. 
+   The csc_cdl_index() function returns the index of a member in the list. 
+   The index starts from 0. If the member can not be found, it returns -1.
+   If the 'node' were set to NULL, it will return the length of the list.
 
-   \param[in]   anchor The anchor pointer which points to the head of the list.
+   \param[in] anchor  The anchor pointer which points to the head of the list.
+   \param[in] node    The node for searching the index. It can be NULL.
 
-   \return  The number of node in the list, or -1 if failed.
-   \remark  This function can used to verify the link list.
+   \return  The index of node in the list, or -1 if failed.
+   \remark  This function can validate the list if built with CFG_CDLL_SAFE.
 */
-int csc_cdl_quantity(CSCLNK *anchor)
+int csc_cdl_index(CSCLNK *anchor, CSCLNK *node)
 {
-	CSCLNK	*node;
+	CSCLNK	*n;
 	int	i = 0;
 
 #ifdef	CFG_CDLL_SAFE
 	if (!csc_cdl_verify(anchor)) {
-		return -1;
+		return 0;
 	}
 #endif
-	for (node = anchor; node; node = csc_cdl_next(anchor, node), i++);
-	return i;
+	for (i = 0, n = anchor; n; n = csc_cdl_next(anchor, n), i++) {
+		if (n == node) {
+			return i;
+		}
+	}
+	if (node == NULL) {
+		return i;
+	}
+	return -1;
 }
 
-/*!\brief The size of a node.
+
+/*!\brief Setup a node.
    
-   The csc_cdl_node_size() function returns the size of a specified node. 
+   The csc_cdl_setup() function fills in the CSCLNK structure. 
 
-   \param[in]   node The points to the node.
+   \param[in] node  The points to the node.
+   \param[in] prev  The pointer to the previous node.
+   \param[in] next  The pointer to the next node.
+   \param[in] rp    The pointer to the reference frame.
+   \param[in] size  The size of the node.
 
-   \return  The size of the node. In CFG_CDLL_SAFE, it would return the size
-   field in the CSCLNK structure. Otherwise or node is NULL, it returns the
-   size of CSCLNK structure.
+   \return  The size of the CSCLNK structure. In CFG_CDLL_SAFE, it would 
+   return the size field in the CSCLNK structure. Otherwise or node is NULL, 
+   it returns the size of CSCLNK structure.
 
    \remark  This function can used to verify the build mode of the library.
 */
-int csc_cdl_node_size(CSCLNK *node)
+int csc_cdl_setup(CSCLNK *node, void *prev, void *next, void *rp, int size)
 {
-#ifdef	CFG_CDLL_SAFE
-	if (node) {
-		return node->size;
+	if (node == NULL) {
+		return sizeof(CSCLNK);
 	}
-#endif
-	return sizeof(CSCLNK);
-}
 
+	node->prev = prev;
+	node->next = next;
+	node->refp = rp;
+#ifdef	CFG_CDLL_SAFE
+	node->size = size;
+	csc_cdl_checksum(node);
+#else
+	size = sizeof(CSCLNK);
+#endif
+	return size;
+}
 
 /****************************************************************************
  * An application of the basic csc_cdl_* functions
@@ -432,6 +453,12 @@ CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size)
 
 	if ((node = csc_cdl_list_alloc(size)) != NULL) {
 		*anchor = csc_cdl_insert_head(*anchor, node);
+#ifdef	CFG_CDLL_SAFE
+		if (*anchor == NULL) {
+			smm_free(node);
+			node = NULL;
+		}
+#endif
 	}
 	return node;
 }
@@ -459,9 +486,65 @@ CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size)
 
 	if ((node = csc_cdl_list_alloc(size)) != NULL) {
 		*anchor = csc_cdl_insert_tail(*anchor, node);
+#ifdef	CFG_CDLL_SAFE
+		if (*anchor == NULL) {
+			smm_free(node);
+			node = NULL;
+		}
+#endif
 	}
 	return node;
 }
+
+/*!\brief Insert a node into the specified position.
+
+   The csc_cdl_list_insert() funciton insert a node into the specified 
+   position in the list by 'idx'. If 'idx' is 0, it is inserted in the head
+   of the list. If 'idx' is less than 0, it will be inserted in the tail of
+   the list. Otherwise it will be inserted after the 'idx'-th node.
+
+   \param[in,out]  anchor The pointer of the anchor pointer which points to
+                          the head of the list.
+   \param[in]      node   The inserting node.
+   \param[in]      idx    The index in the list where the node goes after.
+
+   \return         0 if succeed, or -1 if fail.
+   \remark         The anchor pointer could be changed in the call.
+*/
+int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx)
+{
+	CSCLNK	*n;
+	int	i;
+
+	if ((idx == 0) || (*anchor == NULL)) {
+		*anchor = csc_cdl_insert_head(*anchor, node);
+#ifdef	CFG_CDLL_SAFE
+		return *anchor ? 0 : -1;
+#else
+		return 0;
+#endif
+	}
+	if (idx < 0) {
+		*anchor = csc_cdl_insert_tail(*anchor, node);
+#ifdef	CFG_CDLL_SAFE
+		return *anchor ? 0 : -1;
+#else
+		return 0;
+#endif
+	}
+
+#ifdef	CFG_CDLL_SAFE
+	if (!csc_cdl_verify(*anchor)) {
+		return -1;
+	}
+#endif
+	for (i = 0, n = *anchor; n; n = csc_cdl_next(*anchor, n), i++) {
+		if (i == idx) {
+			return csc_cdl_insert_after(n, node);
+		}
+	}
+	return -1;		
+}	
 
 /*!\brief Remove the specified node from the list and free its memory.
 

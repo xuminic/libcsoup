@@ -18,7 +18,8 @@ static int cdc_cdll_safe_mode_verify(void)
 	root = csc_cdl_insert_head(NULL, &testnode[0]);
 	root->prev = NULL;
 	slogz("Verification: CSCLNK by lib %d and by program %d\n", 
-			csc_cdl_node_size(NULL), sizeof(CSCLNK));
+			csc_cdl_setup(NULL, NULL, NULL, NULL, 0), 
+			sizeof(CSCLNK));
 #ifdef	CFG_CDLL_SAFE
 	if (csc_cdl_insert_after(root, &testnode[1]) == 0) {
 		slogz("Fatal: this program was compiled with -DCFG_CDLL_SAFE but the library was not!\n");
@@ -95,7 +96,7 @@ static int csc_cdll_basic_function(void)
 		slogz("Goto/%d: %s\n", i, tblk->value);
 	}
 
-	slogz("State:  %d\n", csc_cdl_quantity(root));
+	slogz("Number: %d\n", csc_cdl_index(root, NULL));
 	return 0;
 }
 
