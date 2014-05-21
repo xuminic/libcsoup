@@ -306,12 +306,79 @@ int csc_memdump(void *mem, int range, int column, int flags);
 #endif
 
 
+/*****************************************************************************
+ * See csc_config.c: simple interface of a configure file.
+ * Definitions and functions for the simple interface of a configure file.
+ ****************************************************************************/
+
+typedef	struct	_KEYCB	{
+	/* CSCLNK compatible head */
+	/* If the control block is the root key, 
+	 * the 'next' will point to the recent accessed main key.
+	 * the 'prev' will point to the recent accessed normal key. */
+	CSCLNK	*self;
+
+	//int	majesty;	/* "KYCB" */
+	//int	size;
+	/* key and value are matching pairs. 
+	 * If value is NULL, the key points to a main key and anchor points
+	 * to the sub-key chain */
+	char	*key;
+	char	*value;
+	char	*comment;
+	//char	store[4];	/* storing the boundary character */
+
+	int	flags;
+	CSCLNK	*anchor;
+
+	/* if it's a normal key, the update counts the total modification.
+	 * if it's a main key, the update counts the modified keys under 
+	 * the main key. 
+	 * if it's a root key, the update counts every modified keys */
+	int	update;
+
+	char	pool[1];
+} KEYCB;
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+KEYCB *csc_cfg_open(char *path, char *filename, int mode);
+int csc_cfg_abort(KEYCB *cfg);
+int csc_cfg_save(KEYCB *cfg);
+int csc_cfg_saveas(KEYCB *cfg, char *path, char *filename);
+int csc_cfg_flush(KEYCB *cfg);
+int csc_cfg_close(KEYCB *cfg);
+char *csc_cfg_read(KEYCB *cfg, char *mkey, char *skey);
+char *csc_cfg_read_first(KEYCB *cfg, char *mkey, char **key);
+char *csc_cfg_read_next(KEYCB *cfg, char **key);
+char *csc_cfg_copy(KEYCB *cfg, char *mkey, char *skey, int extra);
+int csc_cfg_write(KEYCB *cfg, char *mkey, char *skey, char *value);
+int csc_cfg_read_long(KEYCB *cfg, char *mkey, char *skey, long *val);
+int csc_cfg_write_long(KEYCB *cfg, char *mkey, char *skey, long val);
+int csc_cfg_read_longlong(KEYCB *cfg, char *mkey, char *skey, long long *val);
+int csc_cfg_write_longlong(KEYCB *cfg, char *mkey, char *skey, long long val);
+int csc_cfg_read_bin(KEYCB *cfg, char *mkey, char *skey, char *buf, int blen);
+void *csc_cfg_copy_bin(KEYCB *cfg, char *mkey, char *skey, int *bsize);
+int csc_cfg_write_bin(KEYCB *cfg, char *mkey, char *skey, void *bin, int bsize);
+int csc_cfg_read_block(KEYCB *cfg, char *mkey, char *buf, int blen);
+void *csc_cfg_copy_block(KEYCB *cfg, char *mkey, int *bsize);
+int csc_cfg_write_block(KEYCB *cfg, char *mkey, void *bin, int bsize);
+int csc_cfg_dump_kcb(KEYCB *cfg);
+int csc_cfg_dump(KEYCB *cfg, char *mkey);
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
 
+
+/*****************************************************************************
+ * Miscellaneous Functions.
+ ****************************************************************************/
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 void *csc_extname_filter_open(char *s);
 int csc_extname_filter_close(void *efft);
 int csc_extname_filter_match(void *efft, char *fname);
@@ -328,7 +395,6 @@ char **csc_ziptoken_copy(char *sour, char *delim, int *ids);
 int csc_isdelim(char *delim, int ch);
 char *csc_cuttoken(char *sour, char **token, char *delim);
 char *csc_gettoken(char *sour, char *buffer, char *delim);
-
 
 /* see csc_cmp_file_extname.c */
 int csc_cmp_file_extname(char *fname, char *ext);
@@ -353,31 +419,6 @@ unsigned char csc_crc8(unsigned char crc, void *buf, size_t len);
 unsigned short csc_crc_ccitt_byte(unsigned short crc, char data);
 unsigned short csc_crc_ccitt(unsigned short crc, void *buf, size_t len);
 
-/* see csc_config.c: simple configure file */
-void *csc_cfg_open(char *path, char *filename, int mode);
-int csc_cfg_abort(void *cfg);
-int csc_cfg_save(void *cfg);
-int csc_cfg_saveas(void *cfg, char *path, char *filename);
-int csc_cfg_flush(void *cfg);
-int csc_cfg_close(void *cfg);
-char *csc_cfg_read(void *cfg, char *mkey, char *skey);
-char *csc_cfg_read_first(void *cfg, char *mkey, char **key);
-char *csc_cfg_read_next(void *cfg, char **key);
-char *csc_cfg_copy(void *cfg, char *mkey, char *skey, int extra);
-int csc_cfg_write(void *cfg, char *mkey, char *skey, char *value);
-int csc_cfg_read_long(void *cfg, char *mkey, char *skey, long *val);
-int csc_cfg_write_long(void *cfg, char *mkey, char *skey, long val);
-int csc_cfg_read_longlong(void *cfg, char *mkey, char *skey, long long *val);
-int csc_cfg_write_longlong(void *cfg, char *mkey, char *skey, long long val);
-int csc_cfg_read_bin(void *cfg, char *mkey, char *skey, char *buf, int blen);
-void *csc_cfg_copy_bin(void *cfg, char *mkey, char *skey, int *bsize);
-int csc_cfg_write_bin(void *cfg, char *mkey, char *skey, void *bin, int bsize);
-int csc_cfg_read_block(void *cfg, char *mkey, char *buf, int blen);
-void *csc_cfg_copy_block(void *cfg, char *mkey, int *bsize);
-int csc_cfg_write_block(void *cfg, char *mkey, void *bin, int bsize);
-int csc_cfg_dump_kcb(void *cfg);
-int csc_cfg_dump(void *cfg, char *mkey);
-
 /* see iso639.c */
 char *csc_iso639_lang_to_iso(char *lang);
 char *csc_iso639_lang_to_short(char *lang);
@@ -385,7 +426,6 @@ char *csc_iso639_iso_to_lang(char *iso);
 
 long csc_file_store(char *path, int ovrd, char *src, long len);
 char *csc_file_load(char *path, char *buf, long *len);
-
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
