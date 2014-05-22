@@ -30,6 +30,9 @@
 #define CSC_CDLL_MAGIC          (('D'<<24) | ('L'<<16))
 #define CSC_CDLL_BACKGUARD      0xdeadbeef
 
+#define CSC_CDLL_HEAD           -1
+#define CSC_CDLL_TAIL           -2
+
 
 #ifdef	CFG_CDLL_SAFE
 static int csc_cdl_checksum(CSCLNK *node)
@@ -548,7 +551,18 @@ int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx)
 		}
 	}
 	return -1;		
-}	
+}
+
+int csc_cdl_list_insert_head(CSCLNK **anchor, CSCLNK *node)
+{
+	return csc_cdl_list_insert(anchor, node, CSC_CDLL_HEAD);
+}
+
+int csc_cdl_list_insert_tail(CSCLNK **anchor, CSCLNK *node)
+{
+	return csc_cdl_list_insert(anchor, node, CSC_CDLL_TAIL);
+}
+
 
 /*!\brief Remove the specified node from the list and free its memory.
 

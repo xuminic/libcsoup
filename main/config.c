@@ -34,6 +34,9 @@ window_width=4096\n\
 grid_column=690\n\
 zoom_height=how do i know\n\
 last_directory=/home/xuxx/zvtest\n\
+empty_key=#this is an empty key\n\
+this_is_a_partial_key\n\
+=another partial key\n\
 \n\
 [main]\n\
 timestamp=Mon Apr 28 16:42:30 2014\n\

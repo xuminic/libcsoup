@@ -221,9 +221,6 @@ int slosz(char *buf);
  * See csc_cdll.c: circular doubly linked list
  * Definitions and functions for process circular doubly linked list.
  ****************************************************************************/
-#define CSC_CDLL_HEAD		-1
-#define CSC_CDLL_TAIL		-2
-
 typedef	struct	_CSCLNK {
 	struct	_CSCLNK	*next;
 	struct	_CSCLNK	*prev;
@@ -258,6 +255,8 @@ CSCLNK *csc_cdl_list_alloc(int size);
 CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size);
 CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size);
 int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx);
+int csc_cdl_list_insert_head(CSCLNK **anchor, CSCLNK *node);
+int csc_cdl_list_insert_tail(CSCLNK **anchor, CSCLNK *node);
 CSCLNK *csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node);
 int csc_cdl_list_destroy(CSCLNK **anchor);
 int csc_cdl_list_state(CSCLNK **anchor);
@@ -316,24 +315,18 @@ int csc_memdump(void *mem, int range, int column, int flags);
 #define CSC_CFG_RWC		0x20	/* read, write and create */
 
 typedef	struct	_KEYCB	{
-	/* CSCLNK compatible head */
-	/* If the control block is the root key, 
-	 * the 'next' will point to the recent accessed main key.
-	 * the 'prev' will point to the recent accessed normal key. */
+	/* A fixed pointer to its CSCLNK compatible head */
 	CSCLNK	*self;
+	CSCLNK	*anchor;
 
-	//int	majesty;	/* "KYCB" */
-	//int	size;
 	/* key and value are matching pairs. 
 	 * If value is NULL, the key points to a main key and anchor points
 	 * to the sub-key chain */
 	char	*key;
 	char	*value;
 	char	*comment;
-	//char	store[4];	/* storing the boundary character */
 
 	int	flags;
-	CSCLNK	*anchor;
 
 	/* if it's a normal key, the update counts the total modification.
 	 * if it's a main key, the update counts the modified keys under 
