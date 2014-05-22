@@ -29,7 +29,7 @@
 #define TESTINPUT	"myconfig.test"
 #define TESTOUTPUT	"myconfig.out"
 
-static	char	*testconf = "\
+static	char	testconf[] = "\
 window_width=4096\n\
 grid_column=690\n\
 zoom_height=how do i know\n\
@@ -70,9 +70,10 @@ last_directory=/HOME/XUM1/vMACHINE/sHARED/EZVTEST\n\
 
 static int config_open_rdonly(void)
 {
-	void	*root;
+	KEYCB	*root;
 
-	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 1)) == NULL) {
+	root = csc_cfg_open(TESTPATH, TESTINPUT, CSC_CFG_RDONLY);
+	if (root == NULL) {
 		slogz("can't open\n");
 		return -1;
 	}
@@ -235,6 +236,7 @@ int config_create_new(void)
 	strcat(path, SMM_DEF_DELIM);
 	strcat(path, TESTINPUT);
 
+	smm_mkpath(TESTPATH);
 	csc_file_store(path, 1, testconf, sizeof(testconf));
 	free(path);
 	return 0;

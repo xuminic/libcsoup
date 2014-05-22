@@ -70,23 +70,36 @@
 #define CFGF_TYPE_PART	4	/* partial key */
 #define CFGF_TYPE_COMM	5	/* comment */
 #define CFGF_TYPE_MASK	0xf
-#define CFGF_RDONLY	0x10
+#define CFGF_TYPE_SET(f,n)	(((f) & ~CFGF_TYPE_MASK) | (n))
+#define CFGF_TYPE_GET(f)	((f) & CFGF_TYPE_MASK)
 
-#define CFGF_MAGIC	(('K' << 24) | ('Y' << 16) | ('C' << 8) | 'B')
+#define CFGF_MODE_MASK	0xf0	/* mask of CSC_CFG_RDONLY,CSC_CFG_RDWR,... */
+#define CFGF_MODE_SET(f,n)	(((f) & ~CFGF_MODE_MASK) | (n))
+#define CFGF_MODE_GET(f)	((f) & CFGF_MODE_MASK)
+
 
 #define	CFGF_BLOCK_WID		48
 #define CFGF_BLOCK_MAGIC	"BINARY"
 
 
+/* KEYCB extension for the root structure */
+struct	KEYROOT	{
+	KEYCB	*mkey;	/* latest accessed main key */
+	KEYCB	*skey;	/* latest accessed sub key */
+	int	mode;
+	char	pool[1];
+};
+
 static KEYCB *csc_cfg_kcb_alloc(int psize);
+static KEYCB *csc_cfg_root_alloc(char *path, char *filename, int mode);
 static KEYCB *csc_cfg_kcb_create(int mk, char *skey, char *value, char *comm);
 static int csc_cfg_kcb_fillup(KEYCB *kp);
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type);
-static int csc_cfg_recent_setup(KEYCB *cfg, KEYCB *mkey, KEYCB *kcb);
-static KEYCB *csc_cfg_recent_update(KEYCB *cfg, int type);
-static FILE *smm_config_open(char *path, char *fname, int mode);
-static int smm_config_read(FILE *fp, KEYCB *kp);
-static int smm_config_write(FILE *fp, KEYCB *kp);
+static int csc_cfg_access_setup(KEYCB *cfg, KEYCB *mkey, KEYCB *kcb);
+static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type);
+static FILE *_smm_config_open(char *path, char *fname, int mode);
+static int _smm_config_read(FILE *fp, KEYCB *kp);
+static int _smm_config_write(FILE *fp, KEYCB *kp);
 static int csc_cfg_strcmp(char *sour, char *dest);
 static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 static int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
@@ -95,27 +108,16 @@ static inline KEYCB *CFGF_GETOBJ(CSCLNK *self)
 {
 	KEYCB   *kcb = (KEYCB *) &self[1];
 
-	/*if (kcb && (kcb->majesty != CFGF_MAGIC)) {
-		return NULL;
-	}*/
-	return kcb;
-}
-
-static inline int CFGF_TYPE_SET(KEYCB *kcb, int type)
-{
-	/*if (kcb->majesty != CFGF_MAGIC) {
-		return -1;
-	}*/
-	kcb->flags = (kcb->flags & ~CFGF_TYPE_MASK) | type;
-	return kcb->flags;
-}
-
-static inline int CFGF_TYPE_GET(KEYCB *kcb)
-{
-	/*if (kcb->majesty != CFGF_MAGIC) {
-		return -1;
-	}*/
-	return kcb->flags & CFGF_TYPE_MASK;
+	switch (CFGF_TYPE_GET(kcb->flags)) {
+	case CFGF_TYPE_ROOT:
+	case CFGF_TYPE_MAIN:
+	case CFGF_TYPE_KEY:
+	case CFGF_TYPE_PART:
+	case CFGF_TYPE_COMM:
+		return kcb;
+	}
+	slogz("CFGF_GETOBJ: unknown object\n");
+	return NULL;
 }
 
 KEYCB *csc_cfg_open(char *path, char *filename, int mode)
@@ -126,44 +128,35 @@ KEYCB *csc_cfg_open(char *path, char *filename, int mode)
 
 	/* try to open the configure file. If the file doesn't exist 
 	 * while it's the read/write mode, then create it */
-	if ((fp = smm_config_open(path, filename, mode)) == NULL) {
+	if ((fp = _smm_config_open(path, filename, mode)) == NULL) {
 		return NULL;
 	}
 
 	/* create the root control block */
-	root = csc_cfg_kcb_alloc(strlen(path) + strlen(filename));
-	if (root == NULL) {
+	if ((root = csc_cfg_root_alloc(path, filename, mode)) == NULL) {
 		fclose(fp);
 		return NULL;
 	}
 
-	/* initialize the root control block */
-	root->flags = (mode == SMM_CFGMODE_RDONLY) ? CFGF_RDONLY : 0;
-	root->flags = CFGF_TYPE_SET(root, CFGF_TYPE_ROOT);
-	root->key = root->pool;
-	strcpy(root->key, path);
-	root->value = root->pool + strlen(root->key) + 1;
-	strcpy(root->value, filename);
-
 	ckey = root;
 	while (!feof(fp)) {
-		if ((len = smm_config_read(fp, NULL)) <= 0) {
+		if ((len = _smm_config_read(fp, NULL)) <= 0) {
 			break;
 		}
 		if ((kp = csc_cfg_kcb_alloc(len)) == NULL) {
 			break;
 		}
-		smm_config_read(fp, kp);
+		_smm_config_read(fp, kp);
 
 		csc_cfg_kcb_fillup(kp);
 	
-		if (CFGF_TYPE_GET(kp) == CFGF_TYPE_MAIN) {
-			root->anchor = csc_cdl_insert_tail(root->anchor, 
-					kp->self);
+		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MAIN) {
+			csc_cdl_list_insert(&root->anchor, 
+					kp->self, CSC_CDLL_TAIL);
 			ckey = kp;
 		} else {
-			ckey->anchor = csc_cdl_insert_tail(ckey->anchor,
-					kp->self);
+			csc_cdl_list_insert(&ckey->anchor, 
+					kp->self, CSC_CDLL_TAIL);
 		}
 	}
 	fclose(fp);
@@ -186,7 +179,7 @@ int csc_cfg_abort(KEYCB *cfg)
 			csc_cdl_list_destroy(&ckey->anchor);
 		}
 	}
-	csc_cdl_list_destroy(&root->anchor);
+	csc_cdl_list_destroy(&cfg->anchor);
 	return SMM_ERR_NONE;
 }
 
@@ -199,14 +192,14 @@ int csc_cfg_save(KEYCB *cfg)
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
 	}
-	if ((cfg->flags & CFGF_TYPE_MASK) != CFGF_TYPE_ROOT) {
+	if (CFGF_TYPE_GET(cfg->flags) != CFGF_TYPE_ROOT) {
 		return SMM_ERR_ACCESS;
 	}
-	if (cfg->flags & CFGF_RDONLY) {
+	if (CFGF_MODE_GET(cfg->flags) == CSC_CFG_RDONLY) {
 		return SMM_ERR_ACCESS;
 	}
 
-	fp = smm_config_open(cfg->key, cfg->value, SMM_CFGMODE_RWC);
+	fp = _smm_config_open(cfg->key, cfg->value, CSC_CFG_RWC);
 	if (fp == NULL) {
 		return SMM_ERR_ACCESS;
 	}
@@ -215,8 +208,8 @@ int csc_cfg_save(KEYCB *cfg)
 		if ((mkey = CFGF_GETOBJ(mp)) == NULL) {
 			break;
 		}
-		if (CFGF_TYPE_GET(mkey) != CFGF_TYPE_MAIN) {
-			smm_config_write(fp, mkey);
+		if (CFGF_TYPE_GET(mkey->flags) != CFGF_TYPE_MAIN) {
+			_smm_config_write(fp, mkey);
 		}
 	}
 
@@ -224,18 +217,18 @@ int csc_cfg_save(KEYCB *cfg)
 		if ((mkey = CFGF_GETOBJ(mp)) == NULL) {
 			break;
 		}
-		if (CFGF_TYPE_GET(mkey) != CFGF_TYPE_MAIN) {
+		if (CFGF_TYPE_GET(mkey->flags) != CFGF_TYPE_MAIN) {
 			continue;
 		}
 
-		smm_config_write(fp, mkey);
+		_smm_config_write(fp, mkey);
 		for (sp = mkey->anchor; sp; 
 				sp = csc_cdl_next(mkey->anchor, sp)) {
-			smm_config_write(fp, CFGF_GETOBJ(sp));
+			_smm_config_write(fp, CFGF_GETOBJ(sp));
 		}
 	}
 	fclose(fp);
-	root->update = 0;	/* reset the update counter */
+	cfg->update = 0;	/* reset the update counter */
 	return SMM_ERR_NONE;
 }
 
@@ -295,29 +288,30 @@ char *csc_cfg_read(KEYCB *cfg, char *mkey, char *skey)
 	if ((scb = csc_cfg_find_key(mcb, skey, CFGF_TYPE_KEY)) == NULL) {
 		return NULL;
 	}
-	csc_cfg_recent_setup(cfg, mcb, scb);
+	csc_cfg_access_setup(cfg, mcb, scb);
 	return scb->value;
 }
 
 char *csc_cfg_read_first(KEYCB *cfg, char *mkey, char **key)
 {
-	KEYCB	*scb;
+	struct	KEYROOT	*rext;
 
 	if (csc_cfg_read(cfg, mkey, NULL) == NULL) {
 		return NULL;
 	}
-	scb = cfg->self->prev;
+
+	rext = (struct KEYROOT *)cfg->pool;
 	if (key) {
-		*key = scb->key;
+		*key = rext->skey->key;
 	}
-	return scb->value;
+	return rext->skey->value;
 }
 
 char *csc_cfg_read_next(KEYCB *cfg, char **key)
 {
 	KEYCB	*scb;
 
-	if ((scb = csc_cfg_recent_update(cfg, CFGF_TYPE_KEY)) == NULL) {
+	if ((scb = csc_cfg_access_update(cfg, CFGF_TYPE_KEY)) == NULL) {
 		return NULL;
 	}
 	if (key) {
@@ -352,7 +346,7 @@ int csc_cfg_write(KEYCB *cfg, char *mkey, char *skey, char *value)
 			return SMM_ERR_NULL;
 		}
 		cfg->update++;
-		cfg->anchor = csc_cdl_insert_tail(cfg->anchor, mcb->self);
+		csc_cdl_list_insert(&cfg->anchor, mcb->self, CSC_CDLL_TAIL);
 	}
 	if ((scb = csc_cfg_find_key(mcb, skey, CFGF_TYPE_KEY)) == NULL) {
 		/* if the key doesn't exist, it'll create a new key and
@@ -363,14 +357,14 @@ int csc_cfg_write(KEYCB *cfg, char *mkey, char *skey, char *value)
 			ncb->update++;
 			mcb->update++;
 			cfg->update++;
-			mcb->anchor = csc_cdl_insert_tail(mcb->anchor, 
-					ncb->self);
-			csc_cfg_recent_setup(cfg, mcb, ncb);
+			csc_cdl_list_insert(&mcb->anchor, 
+					ncb->self, CSC_CDLL_TAIL);
+			csc_cfg_access_setup(cfg, mcb, ncb);
 		}
 		return SMM_ERR_NONE;
 	}
 
-	csc_cfg_recent_setup(cfg, mcb, scb);
+	csc_cfg_access_setup(cfg, mcb, scb);
 	olen = strlen(scb->value);
 	nlen = strlen(value);
 	if (!csc_cfg_strcmp(value, scb->value)) {
@@ -505,7 +499,7 @@ int csc_cfg_read_block(KEYCB *cfg, char *mkey, char *buf, int blen)
 	if ((scb = csc_cfg_find_key(mcb, NULL, CFGF_TYPE_PART)) == NULL) {
 		return 0;	/* empty block */
 	}
-	csc_cfg_recent_setup(cfg, mcb, scb);
+	csc_cfg_access_setup(cfg, mcb, scb);
 
 	amnt = 0;
 	do {
@@ -521,7 +515,7 @@ int csc_cfg_read_block(KEYCB *cfg, char *mkey, char *buf, int blen)
 			memcpy(buf + amnt, tmp, len);
 		}
 		amnt += len;
-	} while ((scb = csc_cfg_recent_update(cfg, CFGF_TYPE_PART)) != NULL);
+	} while ((scb = csc_cfg_access_update(cfg, CFGF_TYPE_PART)) != NULL);
 	return amnt;
 }
 
@@ -545,7 +539,7 @@ void *csc_cfg_copy_block(KEYCB *cfg, char *mkey, int *bsize)
 
 int csc_cfg_write_block(KEYCB *cfg, char *mkey, void *bin, int bsize)
 {
-	KEYCB	*mcb, *scb, *root;
+	KEYCB	*mcb, *scb;
 	char	*src, tmp[256];
 	int	len, rest;
 
@@ -559,7 +553,7 @@ int csc_cfg_write_block(KEYCB *cfg, char *mkey, void *bin, int bsize)
 		if (mcb == NULL) {
 			return SMM_ERR_LOWMEM;
 		}
-		cfg->anchor = csc_cdl_insert_tail(cfg->anchor, mcb->self);
+		csc_cdl_list_insert(&cfg->anchor, mcb->self, CSC_CDLL_TAIL);
 	} else  if (strcmp(mcb->value, CFGF_BLOCK_MAGIC)) {
 		/* you can't write blocks into other types of main keys */
 		return SMM_ERR_ACCESS;
@@ -568,7 +562,7 @@ int csc_cfg_write_block(KEYCB *cfg, char *mkey, void *bin, int bsize)
 		csc_cdl_list_destroy(&mcb->anchor);
 		mcb->update = 0;
 	}
-	root->update++;
+	cfg->update++;
 
 	for (src = bin, rest = bsize; rest > 0; rest -= CFGF_BLOCK_WID) {
 		/* convert the binary to hex codes */
@@ -582,31 +576,33 @@ int csc_cfg_write_block(KEYCB *cfg, char *mkey, void *bin, int bsize)
 		}
 		scb->update++;
 		mcb->update++;
-		mcb->anchor = csc_cdl_insert_tail(mcb->anchor, scb->self);
-		csc_cfg_recent_setup(cfg, mcb, scb);
+		csc_cdl_list_insert(&mcb->anchor, scb->self, CSC_CDLL_TAIL);
+		csc_cfg_access_setup(cfg, mcb, scb);
 	}
 	return bsize;
 }
 
 int csc_cfg_dump_kcb(KEYCB *kp)
 {
-
-	switch (CFGF_TYPE_GET(kp)) {
+	switch (CFGF_TYPE_GET(kp->flags)) {
 	case CFGF_TYPE_COMM:
-		slogz("COMM: %s", kp->comment);
+		slogz("COMM_%d: %s\n", kp->update, kp->comment);
 		break;
 	case CFGF_TYPE_MAIN:
 		if (kp->value) {
-			slogz("MAIN: %s | %s", kp->key, kp->value);
+			slogz("MAIN_%d: [%s] = %s %s\n", kp->update, 
+					kp->key, kp->value, kp->comment);
 		} else {
-			slogz("MAIN: %s", kp->key);
+			slogz("MAIN_%d: [%s] %s\n", kp->update, kp->key);
 		}
 		break;
 	case CFGF_TYPE_KEY:
-		slogz("KEYP: %s = %s", kp->key, kp->value);
+		slogz("KEYP_%d: %s = %s %s\n", kp->update, 
+				kp->key, kp->value, kp->comment);
 		break;
 	case CFGF_TYPE_PART:
-		slogz("PART: %s", kp->key);
+		slogz("PART_%d: %s %s %s\n", kp->update,
+				kp->key, kp->value, kp->comment);
 		break;
 	case CFGF_TYPE_ROOT:
 		slogz("ROOT: %s/%s\n", kp->key, kp->value);
@@ -615,8 +611,6 @@ int csc_cfg_dump_kcb(KEYCB *kp)
 		slogz("BOOM!\n");
 		return 0;
 	}
-	slogz("      Size=%d Count=%d FLAGS=%X\n", 
-			kp->size, kp->update, kp->flags);
 	return 0;
 }
 
@@ -627,18 +621,27 @@ int csc_cfg_dump(KEYCB *cfg, char *mkey)
 
 	csc_cfg_dump_kcb(cfg);
 
-	for (p = cfg->anchor; p; p = csc_cdl_next(cfg->anchor, p)) {
-		if ((ckey = CFGF_GETOBJ(p)) == NULL) {
-			break;
+	if (mkey == NULL) {
+		for (p = cfg->anchor; p; p = csc_cdl_next(cfg->anchor, p)) {
+			ckey = CFGF_GETOBJ(p);
+			if (CFGF_TYPE_GET(ckey->flags) != CFGF_TYPE_MAIN) {
+				csc_cfg_dump_kcb(ckey);
+			}
 		}
+	}
+
+	for (p = cfg->anchor; p; p = csc_cdl_next(cfg->anchor, p)) {
+		ckey = CFGF_GETOBJ(p);
 		if (mkey && strcmp(ckey->key, mkey)) {
 			continue;
 		}
+		if (CFGF_TYPE_GET(ckey->flags) != CFGF_TYPE_MAIN) {
+			continue;
+		}
+
 		csc_cfg_dump_kcb(ckey);
-		if (CFGF_TYPE_GET(ckey) == CFGF_TYPE_MAIN) {
-			for (k = ckey->anchor; k != NULL; k = csc_cdl_next(ckey->anchor, k)) {
-				csc_cfg_dump_kcb(k);
-			}
+		for (k = ckey->anchor; k; k = csc_cdl_next(ckey->anchor, k)) {
+			csc_cfg_dump_kcb(CFGF_GETOBJ(k));
 		}
 	}
 	return 0;
@@ -647,18 +650,53 @@ int csc_cfg_dump(KEYCB *cfg, char *mkey)
 
 static KEYCB *csc_cfg_kcb_alloc(int psize)
 {
+	CSCLNK	*node;
 	KEYCB	*kp;
 
-	psize += sizeof(KEYCB) + 4;
+	psize += sizeof(KEYCB) + 8;	/* reserved 8 bytes */
 	psize = (psize + 3) / 4 * 4;	/* round up to 32-bit boundry */
-	if ((kp = smm_alloc(psize)) == NULL) {
+
+	if ((node = csc_cdl_list_alloc(psize)) == NULL) {
 		return NULL;
 	}
-
-	memset(kp, 0, psize);
-	kp->size   = psize;
-	kp->majesty = CFGF_MAGIC;
+	kp = (KEYCB*) &node[1];
+	kp->self = node;
 	return kp;
+}
+
+static KEYCB *csc_cfg_root_alloc(char *path, char *filename, int mode)
+{
+	struct	KEYROOT	*rext;
+	KEYCB	*root;
+	int	len;
+
+	len = sizeof(struct KEYROOT) + 8;	/* reserve 8 bytes */
+	if (path) {
+		len += strlen(path);
+	}
+	if (filename) {
+		len += strlen(filename);
+	}
+
+	if ((root = csc_cfg_kcb_alloc(len)) == NULL) {
+		return NULL;
+	}
+	root->flags = CFGF_MODE_SET(root->flags, mode);
+	root->flags = CFGF_TYPE_SET(root->flags, CFGF_TYPE_ROOT);
+
+	rext = (struct KEYROOT *) root->pool;
+	if (path) {
+		root->key = rext->pool;
+		strcpy(root->key, path);
+	}
+	if (filename) {
+		root->value = rext->pool;
+		if (root->key) {
+			root->value += strlen(root->key) + 1;
+		}
+		strcpy(root->value, filename);
+	}
+	return root;
 }
 
 static KEYCB *csc_cfg_kcb_create(int mk, char *skey, char *value, char *comm)
@@ -693,27 +731,27 @@ static KEYCB *csc_cfg_kcb_create(int mk, char *skey, char *value, char *comm)
 		kp->value = kp->pool + len;
 		len += sprintf(kp->value, "%s", value) + 1;
 	}
-	kp->comm = kp->pool + len;
+	kp->comment = kp->pool + len;
 	if (comm == NULL) {
-		strcpy(kp->comm, "\n");
+		strcpy(kp->comment, "");	//FIXME
 	} else if (*comm == '#') {
-		sprintf(kp->comm, "%s", comm);
+		sprintf(kp->comment, "%s", comm);
 	} else {
-		sprintf(kp->comm, "#%s", comm);
+		sprintf(kp->comment, "#%s", comm);
 	}
 
 	if (skey) {
 		if (mk) {
-			kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_MAIN);
+			kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_MAIN);
 		} else if (value) {
-			kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_KEY);
+			kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_KEY);
 		} else {
-			kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_PART);
+			kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_PART);
 		}
 	} else if (value) {
-		kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_PART);
+		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_PART);
 	} else {
-		kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_COMM);
+		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_COMM);
 	}
 	return kp;
 }
@@ -743,10 +781,16 @@ static int csc_cfg_kcb_fillup(KEYCB *kp)
 	}
 
 	i++;
-	memmove(&kp->pool[i+1], &kp->pool[i], strlen(kp->pool[i])+1);
+	memmove(&kp->pool[i+1], &kp->pool[i], strlen(&kp->pool[i])+1);
 	kp->pool[i] = 0;
 	kp->comment = &kp->pool[i+1];
-	kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_COMM);
+	if ((p = strchr(kp->comment, '\n')) != NULL) {
+		*p = 0;
+	}
+	if ((p = strchr(kp->comment, '\r')) != NULL) {
+		*p = 0;
+	}
+	kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_COMM);
 
 	if (kp->pool[0] == 0) {		/* empty line is kind of comments */
 		return CFGF_TYPE_COMM;
@@ -755,24 +799,24 @@ static int csc_cfg_kcb_fillup(KEYCB *kp)
 	/* Another scan to locate the key and value.
 	 * It could be a partial key or a main key if no '=' appear */
 	kp->key = kp->pool;
-	kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_PART);
+	kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_PART);
 
 	if ((p = strchr(kp->key, '=')) != NULL) {
 		/* otherwise it could be a common key or a main key */
 		*p++ = 0;
 		kp->value = p;
-		kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_KEY);
+		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_KEY);
 	}
 
 	/* Last scan to decide if it is a main key */
 	p = csc_strbody(kp->key, NULL);
 	if ((*p == '[') && strchr(p + 2, ']')) {  /* found the main key */
 		kp->key = p + 1;	/* strip the '[]' pair */
-		p = strchr(p + 2, ']')
+		p = strchr(p + 2, ']');
 		*p = 0;
-		kp->flags = CFGF_TYPE_SET(kp, CFGF_TYPE_MAIN);
+		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_MAIN);
 	}
-	return CFGF_TYPE_GET(kp);
+	return CFGF_TYPE_GET(kp->flags);
 }
 
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type)
@@ -790,7 +834,7 @@ static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type)
 		if ((kcb = CFGF_GETOBJ(mp)) == NULL) {
 			break;
 		}
-		if (CFGF_TYPE_GET(kcb) != type) {
+		if (CFGF_TYPE_GET(kcb->flags) != type) {
 			continue;
 		}
 		if (key == NULL) {
@@ -808,50 +852,56 @@ static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type)
 	return NULL;	/* main key doesn't exist */
 }
 
-static int csc_cfg_recent_setup(KEYCB *cfg, KEYCB *mkey, KEYCB *kcb)
+static int csc_cfg_access_setup(KEYCB *cfg, KEYCB *mkey, KEYCB *kcb)
 {
+	struct	KEYROOT	*rext;
+
 	if (cfg == NULL) {
 		return SMM_ERR_OBJECT;
 	}
-	if (CFGF_TYPE_GET(cfg) != CFGF_TYPE_ROOT) {
+	if (CFGF_TYPE_GET(cfg->flags) != CFGF_TYPE_ROOT) {
 		return SMM_ERR_OBJECT;
 	}
-	cfg->next = mkey;
-	cfg->prev = kcb;
+
+	rext = (struct KEYROOT *)cfg->pool;
+	rext->mkey = mkey;
+	rext->skey = kcb;
 	return SMM_ERR_NONE;
 }
 
-static KEYCB *csc_cfg_recent_update(KEYCB *cfg, int type)
+static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type)
 {
-	KEYCB	*kcb, *mkey;
+	struct	KEYROOT	*rext;
+	KEYCB	*kcb;
 	CSCLNK	*mp;
 
 	if (cfg == NULL) {
 		return NULL;
 	}
-	if (CFGF_TYPE_GET(cfg) != CFGF_TYPE_ROOT) {
+	if (CFGF_TYPE_GET(cfg->flags) != CFGF_TYPE_ROOT) {
 		return NULL;
 	}
-	mkey = cfg->next;
-	mp = cfg->prev;
-	if ((mkey == NULL) || (mp == NULL)) {
+
+	rext = (struct KEYROOT *)cfg->pool;
+	if ((rext->mkey == NULL) || (rext->skey == NULL)) {
 		return NULL;
 	}
-	mp = csc_cdl_next(mkey->anchor, mp);
+
+	mp = csc_cdl_next(rext->mkey->anchor, rext->skey->self);
 	while (mp) {
 		if ((kcb = CFGF_GETOBJ(mp)) == NULL) {
 			break;
 		}
-		if (CFGF_TYPE_GET(kcb) == type) {
-			root->prev = kcb;
+		if (CFGF_TYPE_GET(kcb->flags) == type) {
+			rext->skey = kcb;
 			return kcb;
 		}
-		mp = csc_cdl_next(mkey->anchor, mp);
+		mp = csc_cdl_next(rext->mkey->anchor, mp);
 	}
 	return NULL;
 }
 
-static FILE *smm_config_open(char *path, char *fname, int mode)
+static FILE *_smm_config_open(char *path, char *fname, int mode)
 {
 	FILE	*fp;
 	char	*fullpath;
@@ -863,16 +913,16 @@ static FILE *smm_config_open(char *path, char *fname, int mode)
 	strcat(fullpath, fname);
 
 	switch (mode) {
-	case SMM_CFGMODE_RDONLY:
+	case CSC_CFG_RDONLY:
 		fp = fopen(fullpath, "r");
 		break;
-	case SMM_CFGMODE_RWC:
+	case CSC_CFG_RWC:
 		smm_mkpath(path);
 		if ((fp = fopen(fullpath, "r+")) == NULL) {
 			fp = fopen(fullpath, "w+");
 		}
 		break;
-	default:	/* SMM_CFGMODE_RDWR */
+	default:	/* CSC_CFG_RDWR */
 		fp = fopen(fullpath, "r+");
 		break;
 	}
@@ -880,7 +930,7 @@ static FILE *smm_config_open(char *path, char *fname, int mode)
 	return fp;
 }
 
-static int smm_config_read(FILE *fp, KEYCB *kp)
+static int _smm_config_read(FILE *fp, KEYCB *kp)
 {
 	int	amnt, cpos, ch;
 
@@ -903,7 +953,7 @@ static int smm_config_read(FILE *fp, KEYCB *kp)
 	return amnt;
 }
 
-static int smm_config_write(FILE *fp, KEYCB *kp)
+static int _smm_config_write(FILE *fp, KEYCB *kp)
 {
 	if (kp == NULL) {
 		return 0;
@@ -911,7 +961,7 @@ static int smm_config_write(FILE *fp, KEYCB *kp)
 
 	kp->update = 0;		/* reset the update counter */
 	if (kp->key) {
-		if (CFGF_TYPE_GET(kp) == CFGF_TYPE_MAIN) {
+		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MAIN) {
 			fprintf(fp, "[%s]", kp->key);
 		} else {
 			fputs(kp->key, fp);
@@ -923,8 +973,10 @@ static int smm_config_write(FILE *fp, KEYCB *kp)
 		}
 		fputs(kp->value, fp);
 	}
-	
-	fputs(kp->comment, fp);
+	if (kp->comment) {
+		fputs(kp->comment, fp);
+	}
+	fputs("\n", fp);	//FIXME: DOS format \r\n 
 	return 0;
 }
 

@@ -221,8 +221,8 @@ int slosz(char *buf);
  * See csc_cdll.c: circular doubly linked list
  * Definitions and functions for process circular doubly linked list.
  ****************************************************************************/
-#define CSC_CDLL_MAGIC		(('D'<<24) | ('L'<<16))
-#define CSC_CDLL_BACKGUARD	0xdeadbeef
+#define CSC_CDLL_HEAD		-1
+#define CSC_CDLL_TAIL		-2
 
 typedef	struct	_CSCLNK {
 	struct	_CSCLNK	*next;
@@ -254,6 +254,7 @@ CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
 int csc_cdl_index(CSCLNK *anchor, CSCLNK *node);
 int csc_cdl_setup(CSCLNK *node, void *prev, void *next, void *rp, int size);
 
+CSCLNK *csc_cdl_list_alloc(int size);
 CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size);
 CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size);
 int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx);
@@ -310,6 +311,9 @@ int csc_memdump(void *mem, int range, int column, int flags);
  * See csc_config.c: simple interface of a configure file.
  * Definitions and functions for the simple interface of a configure file.
  ****************************************************************************/
+#define CSC_CFG_RDONLY		0	/* read only */
+#define CSC_CFG_RDWR		0x10	/* read and write */
+#define CSC_CFG_RWC		0x20	/* read, write and create */
 
 typedef	struct	_KEYCB	{
 	/* CSCLNK compatible head */

@@ -27,6 +27,9 @@
 
 #include "libcsoup.h"
 
+#define CSC_CDLL_MAGIC          (('D'<<24) | ('L'<<16))
+#define CSC_CDLL_BACKGUARD      0xdeadbeef
+
 
 #ifdef	CFG_CDLL_SAFE
 static int csc_cdl_checksum(CSCLNK *node)
@@ -507,6 +510,7 @@ CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size)
                           the head of the list.
    \param[in]      node   The inserting node.
    \param[in]      idx    The index in the list where the node goes after.
+   			  If 'idx' < 0, see CSC_CDLL_HEAD and CSC_CDLL_TAIL
 
    \return         0 if succeed, or -1 if fail.
    \remark         The anchor pointer could be changed in the call.
@@ -516,7 +520,7 @@ int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx)
 	CSCLNK	*n;
 	int	i;
 
-	if ((idx == 0) || (*anchor == NULL)) {
+	if ((idx == CSC_CDLL_HEAD) || (*anchor == NULL)) {
 		*anchor = csc_cdl_insert_head(*anchor, node);
 #ifdef	CFG_CDLL_SAFE
 		return *anchor ? 0 : -1;
@@ -524,7 +528,7 @@ int csc_cdl_list_insert(CSCLNK **anchor, CSCLNK *node, int idx)
 		return 0;
 #endif
 	}
-	if (idx < 0) {
+	if (idx < 0) {	/* CSC_CDLL_TAIL */
 		*anchor = csc_cdl_insert_tail(*anchor, node);
 #ifdef	CFG_CDLL_SAFE
 		return *anchor ? 0 : -1;
