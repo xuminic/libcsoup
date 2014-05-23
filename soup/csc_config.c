@@ -63,18 +63,19 @@
 
 #include "libcsoup.h"
 
-#define CFGF_TYPE_UNKWN	0	/* comment */
+#define CFGF_TYPE_UNKWN	0	/* delimiter, not used */
 #define CFGF_TYPE_ROOT	1	/* root control block (only one) */
 #define CFGF_TYPE_MASTR	2	/* master key control block (under root) */
 #define CFGF_TYPE_KEY	3	/* common key */
 #define CFGF_TYPE_PART	4	/* partial key without value */
 #define CFGF_TYPE_VALUE	5	/* only value without the key */
 #define CFGF_TYPE_COMM	6	/* comment */
+#define CFGF_TYPE_NULL	7	/* delimiter, not used */
 #define CFGF_TYPE_MASK	0xf
 #define CFGF_TYPE_SET(f,n)	(((f) & ~CFGF_TYPE_MASK) | (n))
 #define CFGF_TYPE_GET(f)	((f) & CFGF_TYPE_MASK)
 
-#define CFGF_MODE_MASK	0xf0	/* mask of CSC_CFG_RDONLY,CSC_CFG_RDWR,... */
+#define CFGF_MODE_MASK	0xf0	/* mask of CSC_CFG_READ,CSC_CFG_RDWR,... */
 #define CFGF_MODE_SET(f,n)	(((f) & ~CFGF_MODE_MASK) | (n))
 #define CFGF_MODE_GET(f)	((f) & CFGF_MODE_MASK)
 
@@ -98,9 +99,6 @@ static int csc_cfg_kcb_fillup(KEYCB *kp);
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type);
 static int csc_cfg_access_setup(KEYCB *cfg, KEYCB *mkey, KEYCB *kcb);
 static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type);
-static FILE *_smm_config_open(char *path, char *fname, int mode);
-static int _smm_config_read(FILE *fp, KEYCB *kp);
-static int _smm_config_write(FILE *fp, KEYCB *kp);
 static int csc_cfg_strcmp(char *sour, char *dest);
 static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 static int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
@@ -109,12 +107,8 @@ static inline KEYCB *CFGF_GETOBJ(CSCLNK *self)
 {
 	KEYCB   *kcb = (KEYCB *) &self[1];
 
-	switch (CFGF_TYPE_GET(kcb->flags)) {
-	case CFGF_TYPE_ROOT:
-	case CFGF_TYPE_MASTR:
-	case CFGF_TYPE_KEY:
-	case CFGF_TYPE_PART:
-	case CFGF_TYPE_COMM:
+	if ((CFGF_TYPE_GET(kcb->flags) > CFGF_TYPE_UNKWN) && 
+			(CFGF_TYPE_GET(kcb->flags) < CFGF_TYPE_NULL)) {
 		return kcb;
 	}
 	slogz("CFGF_GETOBJ: unknown object\n");
@@ -123,33 +117,42 @@ static inline KEYCB *CFGF_GETOBJ(CSCLNK *self)
 
 KEYCB *csc_cfg_open(char *path, char *filename, int mode)
 {
+	struct	KeyDev	*cfgd;
 	KEYCB	*root, *ckey, *kp;
-	FILE	*fp;
 	int	len;
-
-	/* try to open the configure file. If the file doesn't exist 
-	 * while it's the read/write mode, then create it */
-	if ((fp = _smm_config_open(path, filename, mode)) == NULL) {
-		return NULL;
-	}
 
 	/* create the root control block */
 	if ((root = csc_cfg_root_alloc(path, filename, mode)) == NULL) {
-		fclose(fp);
+		return NULL;
+	}
+
+	/** In the csc_cfg_open() function, the configure file will be
+	 * read and the contents will be collected into the memory. 
+	 * The configure file then will be closed until saving the contents
+	 * back to the file. It's pointless to create a new file in the
+	 * csc_cfg_open() stage */
+	if ((cfgd = smm_config_open(path, filename, CSC_CFG_READ)) == NULL) {
+		if (mode == CSC_CFG_RWC) {
+			return root;
+		}
+		smm_free(root);
 		return NULL;
 	}
 
 	ckey = root;
-	while (!feof(fp)) {
-		if ((len = _smm_config_read(fp, NULL)) <= 0) {
-			break;
-		}
+	while ((len = smm_config_read(cfgd, NULL)) > 0) {
 		if ((kp = csc_cfg_kcb_alloc(len)) == NULL) {
 			break;
 		}
-		_smm_config_read(fp, kp);
+		smm_config_read(cfgd, kp);
 
-		csc_cfg_kcb_fillup(kp);
+		/* In Win32 registry interface, smm_config_read() will read 
+		 * and fill in the KEYCB structure itself. However if the 
+		 * configure were read from a file, it need to be break down 
+		 * and fill in the KEYCB by csc_cfg_kcb_fillup() */
+		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_UNKWN) {
+			csc_cfg_kcb_fillup(kp);
+		}
 	
 		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MASTR) {
 			csc_cdl_list_insert_tail(&root->anchor, kp->self);
@@ -158,7 +161,7 @@ KEYCB *csc_cfg_open(char *path, char *filename, int mode)
 			csc_cdl_list_insert_tail(&ckey->anchor, kp->self);
 		}
 	}
-	fclose(fp);
+	smm_config_close(cfgd);
 	return root;
 }
 
@@ -184,9 +187,9 @@ int csc_cfg_abort(KEYCB *cfg)
 
 int csc_cfg_save(KEYCB *cfg)
 {
+	struct	KeyDev	*cfgd;
 	KEYCB	*mkey;
 	CSCLNK	*mp, *sp;
-	FILE	*fp;
 
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
@@ -194,12 +197,12 @@ int csc_cfg_save(KEYCB *cfg)
 	if (CFGF_TYPE_GET(cfg->flags) != CFGF_TYPE_ROOT) {
 		return SMM_ERR_ACCESS;
 	}
-	if (CFGF_MODE_GET(cfg->flags) == CSC_CFG_RDONLY) {
+	if (CFGF_MODE_GET(cfg->flags) == CSC_CFG_READ) {
 		return SMM_ERR_ACCESS;
 	}
 
-	fp = _smm_config_open(cfg->key, cfg->value, CSC_CFG_RWC);
-	if (fp == NULL) {
+	cfgd = smm_config_open(cfg->key, cfg->value, CFGF_MODE_GET(cfg->flags));
+	if (cfgd == NULL) {
 		return SMM_ERR_ACCESS;
 	}
 
@@ -208,7 +211,7 @@ int csc_cfg_save(KEYCB *cfg)
 			break;
 		}
 		if (CFGF_TYPE_GET(mkey->flags) != CFGF_TYPE_MASTR) {
-			_smm_config_write(fp, mkey);
+			smm_config_write(cfgd, mkey);
 		}
 	}
 
@@ -220,13 +223,13 @@ int csc_cfg_save(KEYCB *cfg)
 			continue;
 		}
 
-		_smm_config_write(fp, mkey);
+		smm_config_write(cfgd, mkey);
 		for (sp = mkey->anchor; sp; 
 				sp = csc_cdl_next(mkey->anchor, sp)) {
-			_smm_config_write(fp, CFGF_GETOBJ(sp));
+			smm_config_write(cfgd, CFGF_GETOBJ(sp));
 		}
 	}
-	fclose(fp);
+	smm_config_close(cfgd);
 	cfg->update = 0;	/* reset the update counter */
 	return SMM_ERR_NONE;
 }
@@ -240,7 +243,7 @@ int csc_cfg_saveas(KEYCB *cfg, char *path, char *filename)
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
 	}
-	if ((newc = csc_cfg_open(path, filename, 0)) == NULL) {
+	if ((newc = csc_cfg_open(path, filename, CSC_CFG_RWC)) == NULL) {
 		return SMM_ERR_OPEN;
 	}
 	tmp = newc->anchor;
@@ -909,85 +912,6 @@ static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type)
 		mp = csc_cdl_next(rext->mkey->anchor, mp);
 	}
 	return NULL;
-}
-
-static FILE *_smm_config_open(char *path, char *fname, int mode)
-{
-	FILE	*fp;
-	char	*fullpath;
-
-	if ((fullpath = csc_strcpy_alloc(path, strlen(fname)+4)) == NULL) {
-		return NULL;
-	}
-	strcat(fullpath, SMM_DEF_DELIM);
-	strcat(fullpath, fname);
-
-	switch (mode) {
-	case CSC_CFG_RDONLY:
-		fp = fopen(fullpath, "r");
-		break;
-	case CSC_CFG_RWC:
-		smm_mkpath(path);
-		if ((fp = fopen(fullpath, "r+")) == NULL) {
-			fp = fopen(fullpath, "w+");
-		}
-		break;
-	default:	/* CSC_CFG_RDWR */
-		fp = fopen(fullpath, "r+");
-		break;
-	}
-	smm_free(fullpath);
-	return fp;
-}
-
-static int _smm_config_read(FILE *fp, KEYCB *kp)
-{
-	int	amnt, cpos, ch;
-
-	amnt = 0;
-	cpos = ftell(fp);
-	while ((ch = fgetc(fp)) != EOF) {
-		if (kp) {
-			kp->pool[amnt] = (char) ch;
-		}
-		amnt++;
-		if (ch == '\n') {
-			break;
-		}
-	}
-	if (kp == NULL) {	/* rewind to the start position */
-		fseek(fp, cpos, SEEK_SET);
-	} else {
-		kp->pool[amnt] = 0;
-	}
-	return amnt;
-}
-
-static int _smm_config_write(FILE *fp, KEYCB *kp)
-{
-	if (kp == NULL) {
-		return 0;
-	}
-
-	kp->update = 0;		/* reset the update counter */
-	if (kp->key) {
-		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MASTR) {
-			fputc('[', fp);
-			fputs(kp->key, fp);
-			fputc(']', fp);
-		} else {
-			fputs(kp->key, fp);
-		}
-	}
-	if (kp->value) {
-		fputc('=', fp);
-		fputs(kp->value, fp);
-	}
-	if (kp->comment) {
-		fputs(kp->comment, fp);
-	}
-	fputs("\n", fp);	//FIXME: DOS format \r\n 
-	return 0;
 }
 
 /* strcmp() without comparing the head and tail white spaces */

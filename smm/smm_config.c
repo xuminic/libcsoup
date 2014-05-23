@@ -25,6 +25,136 @@
 
 #include "libcsoup.h"
 
+
+struct	KeyDev	{
+	FILE	*fp;
+	int	mode;
+	char	path[1];
+};
+
+struct KeyDev *smm_config_open(char *path, char *fname, int mode)
+{
+	struct	KeyDev	*cfgd;
+	int	len;
+
+	len = sizeof(struct KeyDev) + 4;
+	if (path) {
+		len += strlen(path);
+	}
+	if (fname) {
+		len += strlen(fname);
+	}
+	if ((cfgd = smm_alloc(len)) == NULL) {
+		return NULL;
+	}
+	cfgd->mode = mode;
+	cfgd->path[0] = 0;
+	if (path) {
+		strcat(cfgd->path, path);
+		strcat(cfgd->path, SMM_DEF_DELIM);
+	}
+	if (fname) {
+		strcat(cfgd->path, fname);
+	}
+
+	switch (mode) {
+	case CSC_CFG_READ:
+		cfgd->fp = fopen(cfgd->path, "r");
+		break;
+	case CSC_CFG_RWC:
+		if (path) {
+			smm_mkpath(path);
+		}
+		if ((cfgd->fp = fopen(cfgd->path, "r+")) == NULL) {
+			cfgd->fp = fopen(cfgd->path, "w+");
+		}
+		break;
+	default:	/* CSC_CFG_RDWR */
+		cfgd->fp = fopen(cfgd->path, "r+");
+		break;
+	}
+	if (cfgd->fp == NULL) {
+		smm_free(cfgd);
+		cfgd = NULL;
+	}
+	return cfgd;
+}
+
+int smm_config_close(struct KeyDev *cfgd)
+{
+	fclose(cfgd->fp);
+	return smm_free(cfgd);
+}
+
+int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
+{
+	int	amnt, cpos, ch;
+
+	amnt = 0;
+	cpos = ftell(cfgd->fp);
+	while ((ch = fgetc(cfgd->fp)) != EOF) {
+		if (kp) {
+			kp->pool[amnt] = (char) ch;
+		}
+		amnt++;
+		if (ch == '\n') {
+			break;
+		}
+	}
+	if (kp == NULL) {	/* rewind to the start position */
+		fseek(cfgd->fp, cpos, SEEK_SET);
+	} else {
+		kp->pool[amnt] = 0;
+	}
+	return amnt;
+}
+
+int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
+{
+	if (kp == NULL) {
+		return 0;
+	}
+
+	kp->update = 0;		/* reset the update counter */
+	if (kp->key) {
+		//if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MASTR) {
+		if ((kp->flags & 0xf) == 2) {	//FIXME
+			fputc('[', cfgd->fp);
+			fputs(kp->key, cfgd->fp);
+			fputc(']', cfgd->fp);
+		} else {
+			fputs(kp->key, cfgd->fp);
+		}
+	}
+	if (kp->value) {
+		fputc('=', cfgd->fp);
+		fputs(kp->value, cfgd->fp);
+	}
+	if (kp->comment) {
+		fputs(kp->comment, cfgd->fp);
+	}
+	fputs("\n", cfgd->fp);	//FIXME: DOS format \r\n 
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#if 0
 #ifdef	CFG_WIN32_API
 static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey, int mode);
 static HKEY RegCreatePath(int sysroot, char *path);
@@ -561,4 +691,4 @@ int smm_config_write_int(void *cfg, char *mkey, char *skey, int val)
 {
 	return smm_config_write_long(cfg, mkey, skey, (long) val);
 }
-
+#endif	// if 0

@@ -75,7 +75,7 @@ static int config_open_rdonly(void)
 {
 	KEYCB	*root;
 
-	root = csc_cfg_open(TESTPATH, TESTINPUT, CSC_CFG_RDONLY);
+	root = csc_cfg_open(TESTPATH, TESTINPUT, CSC_CFG_READ);
 	if (root == NULL) {
 		slogz("can't open\n");
 		return -1;
@@ -100,13 +100,13 @@ static int config_key_test(void)
 	char	nkey[64], mkey[64];
 	time_t	tmtick;
 	char	*rdlist[][2] = {
-		{ "[hello]", "grid_column" },
-		{ "[hello]", "grid_column=4" },
-		{ "[hello]", "window_width" },
-		{ "[main]", "window_width" },
-		{ "[main]", "simple_profile" },
-		{ "[what]", "zoom_height" },
-		{ "[print]", "last_directory" },
+		{ "hello", "grid_column" },
+		{ "hello", "grid_column=4" },
+		{ "hello", "window_width" },
+		{ "main", "window_width" },
+		{ "main", "simple_profile" },
+		{ "what", "zoom_height" },
+		{ "print", "last_directory" },
 		{ NULL, "window_width" },
 		{ NULL, NULL }
 	};
@@ -127,7 +127,7 @@ static int config_key_test(void)
 		}
 	}
 
-	if ((val = csc_cfg_read_first(root, "[what]", &key)) != NULL) {
+	if ((val = csc_cfg_read_first(root, "what", &key)) != NULL) {
 		slogz("READ [what]: %s = %s\n", key, val);
 		while ((val = csc_cfg_read_next(root, &key)) != NULL) {
 			slogz("READ [what]: %s = %s\n", key, val);
@@ -140,7 +140,7 @@ static int config_key_test(void)
 
 	/* write a new main key */
 	time(&tmtick);
-	sprintf(mkey, "[%u]", (unsigned) tmtick);
+	sprintf(mkey, "%u", (unsigned) tmtick);
 	sprintf(nkey, "timestamp");
 	csc_cfg_write(root, mkey, nkey, ctime(&tmtick));
 	slogz("WRITENEW %s: %s = %s\n", mkey, nkey, 
@@ -178,9 +178,9 @@ static int config_key_test(void)
 		free(val);
 	}
 
-	csc_cfg_write_bin(root, "[what]", "Binary", root, 48);
-	val = csc_cfg_copy_bin(root, "[what]", "Binary", &n);
-	slogz("BINARY %s: %s = (%d) ", "[what]", "Binary", n);
+	csc_cfg_write_bin(root, "what", "Binary", root, 48);
+	val = csc_cfg_copy_bin(root, "what", "Binary", &n);
+	slogz("BINARY %s: %s = (%d) ", "what", "Binary", n);
 	if (val) {
 		for (i = 0; i < n; i++) {
 			slogz("%02x ", (unsigned char)val[i]);

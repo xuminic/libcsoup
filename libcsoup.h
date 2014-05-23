@@ -310,7 +310,7 @@ int csc_memdump(void *mem, int range, int column, int flags);
  * See csc_config.c: simple interface of a configure file.
  * Definitions and functions for the simple interface of a configure file.
  ****************************************************************************/
-#define CSC_CFG_RDONLY		0	/* read only */
+#define CSC_CFG_READ		0	/* read only */
 #define CSC_CFG_RDWR		0x10	/* read and write */
 #define CSC_CFG_RWC		0x20	/* read, write and create */
 
@@ -565,6 +565,10 @@ typedef	struct timeval	SMM_TIME;
 #define SMM_CFGMODE_RDWR	1	/* read and write */
 #define SMM_CFGMODE_RWC		2	/* read, write and create */
 
+/* Forward declaration the structure for reading/writing the configure device.
+ * It will be defined in smm_config.c */
+struct  KeyDev; 
+
 /* isspace() macro has a problem in Cygwin when compiling it with -mno-cygwin.
  * I assume it is caused by minGW because it works fine with cygwin head files.
  * The problem is it treats some Chinese characters as space characters.
@@ -590,7 +594,8 @@ int smm_chdir(char *path);
 int smm_codepage(void);
 int smm_codepage_set(int cpno);
 int smm_codepage_reset(void);
-void *smm_config_open(int sysroot, int mode, char *path, char *fname);
+
+/*void *smm_config_open(int sysroot, int mode, char *path, char *fname);
 int smm_config_flush(void *cfg);
 int smm_config_close(void *cfg);
 int smm_config_delete(int sysroot, char *path, char *fname);
@@ -599,7 +604,12 @@ int smm_config_write(void *cfg, char *mkey, char *skey, char *value);
 int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val);
 int smm_config_write_long(void *cfg, char *mkey, char *skey, long val);
 int smm_config_read_int(void *cfg, char *mkey, char *skey, int *val);
-int smm_config_write_int(void *cfg, char *mkey, char *skey, int val);
+int smm_config_write_int(void *cfg, char *mkey, char *skey, int val);*/
+struct KeyDev *smm_config_open(char *path, char *fname, int mode);
+int smm_config_close(struct KeyDev *cfgd);
+int smm_config_read(struct KeyDev *cfgd, KEYCB *kp);
+int smm_config_write(struct KeyDev *cfgd, KEYCB *kp);
+
 char *smm_cwd_alloc(int extra);
 int smm_cwd_pop(void *cwid);
 void *smm_cwd_push(void);
