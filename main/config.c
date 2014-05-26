@@ -110,7 +110,7 @@ static int config_open_rdonly(void)
 
 static int config_key_test(void)
 {
-	void	*root;
+	KEYCB	*root;
 	int	i, n;
 	long	lv;
 	char	*val, *key, nkey[64], mkey[64];
@@ -211,10 +211,10 @@ static int config_key_test(void)
 
 int config_block_test(char *fname)
 {
+	KEYCB	*root;
 	char	*fbuf, *kbuf;
 	int	i, klen;
 	long	flen = 0;
-	void	*root;
 
 	if ((fbuf = csc_file_load(fname, NULL, &flen)) == NULL) {
 		return -1;

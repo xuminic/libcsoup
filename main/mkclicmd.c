@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 		printf("Usage: %s extern_list_head_file\n", argv[0]);
 		return 0;
 	}
-	if (csc_cdl_node_size(NULL) != sizeof(CSCLNK)) {
+	if (csc_cdl_setup(NULL, NULL, NULL, NULL, 0) != sizeof(CSCLNK)) {
 		printf("Wrong compiling option of this program!\n");
 		return -1;
 	}
