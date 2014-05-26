@@ -67,16 +67,32 @@ canvas_width=0\n\
 duration_mode=12288\n\
 file_format=jpg@85\n\
 transparency=no\n\
-last_directory=/HOME/XUM1/vMACHINE/sHARED/EZVTEST\n\
+last_directory=/HOME/XUM1/vMACHINE/sHARED/EZVTEST\n\n\
 ";
+
+
+static char *mytimestamp(int mode)
+{
+	static	char	tmbuf[128];
+	time_t	tmtick;
+
+	time(&tmtick);
+	if (mode == 0) {
+		sprintf(tmbuf, "%u", (unsigned) tmtick);
+	} else {
+		strcpy(tmbuf, ctime(&tmtick));
+		tmbuf[strlen(tmbuf)-1] = 0;
+	}
+	return tmbuf;
+}
 
 
 static int config_open_rdonly(void)
 {
 	KEYCB	*root;
 
-	root = csc_cfg_open(TESTPATH, TESTINPUT, CSC_CFG_READ);
-	if (root == NULL) {
+	if ((root = csc_cfg_open(SMM_CFGROOT_CURRENT, TESTPATH, TESTINPUT, 
+			CSC_CFG_READ)) == NULL) {
 		slogz("can't open\n");
 		return -1;
 	}
@@ -87,7 +103,7 @@ static int config_open_rdonly(void)
 		return -2;
 	}
 
-	csc_cfg_saveas(root, TESTPATH, TESTOUTPUT);
+	csc_cfg_saveas(root, SMM_CFGROOT_CURRENT, TESTPATH, TESTOUTPUT);
 	csc_cfg_abort(root);
 	return 0;
 }
@@ -96,9 +112,8 @@ static int config_key_test(void)
 {
 	void	*root;
 	int	i, n;
-	char	*val, *key;
-	char	nkey[64], mkey[64];
-	time_t	tmtick;
+	long	lv;
+	char	*val, *key, nkey[64], mkey[64];
 	char	*rdlist[][2] = {
 		{ "hello", "grid_column" },
 		{ "hello", "grid_column=4" },
@@ -111,7 +126,8 @@ static int config_key_test(void)
 		{ NULL, NULL }
 	};
 
-	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 0)) == NULL) {
+	if ((root = csc_cfg_open(SMM_CFGROOT_CURRENT, TESTPATH, TESTINPUT, 
+					CSC_CFG_RWC)) == NULL) {
 		slogz("Weird!\n");
 		return -1;
 	}
@@ -135,19 +151,18 @@ static int config_key_test(void)
 	}
 
 	/* read an integer */
-	csc_cfg_read_long(root, rdlist[2][0], rdlist[2][1], (long*)&i);
-	slogz("READLONG %s: %s = %d\n", rdlist[2][0], rdlist[2][1], i);
+	csc_cfg_read_long(root, rdlist[2][0], rdlist[2][1], &lv);
+	slogz("READLONG %s: %s = %ld\n", rdlist[2][0], rdlist[2][1], lv);
 
 	/* write a new main key */
-	time(&tmtick);
-	sprintf(mkey, "%u", (unsigned) tmtick);
+	strcpy(mkey, mytimestamp(0));
 	sprintf(nkey, "timestamp");
-	csc_cfg_write(root, mkey, nkey, ctime(&tmtick));
+	csc_cfg_write(root, mkey, nkey, mytimestamp(1));
 	slogz("WRITENEW %s: %s = %s\n", mkey, nkey, 
 			csc_cfg_read(root, mkey, nkey));
 
 	/* write to the root key */
-	csc_cfg_write(root, NULL, nkey, ctime(&tmtick));
+	csc_cfg_write(root, NULL, nkey, mytimestamp(1));
 	slogz("WRITEROOT: %s = %s\n", nkey, csc_cfg_read(root, NULL, nkey));
 
 	/* write something longer than orignal */
@@ -189,14 +204,14 @@ static int config_key_test(void)
 	}
 	slogz("\n");
 
-	csc_cfg_close(root);
+	slogz("%x\n", csc_cfg_close(root));
 	return 0;
 }
 
 
 int config_block_test(char *fname)
 {
-	char	*fbuf, *kbuf, key[128];
+	char	*fbuf, *kbuf;
 	int	i, klen;
 	long	flen = 0;
 	void	*root;
@@ -204,23 +219,23 @@ int config_block_test(char *fname)
 	if ((fbuf = csc_file_load(fname, NULL, &flen)) == NULL) {
 		return -1;
 	}
-	if ((root = csc_cfg_open(TESTPATH, TESTINPUT, 0)) == NULL) {
+	if ((root = csc_cfg_open(SMM_CFGROOT_CURRENT, TESTPATH, TESTINPUT, 
+					CSC_CFG_RWC)) == NULL) {
 		free(fbuf);
 		return -3;
 	}
-	sprintf(key, "[%s]", fname);
-	csc_cfg_write_block(root, key, fbuf, (int)flen);
+	csc_cfg_write_block(root, fname, fbuf, (int)flen);
 	
-	kbuf = csc_cfg_copy_block(root, key, &klen);
+	kbuf = csc_cfg_copy_block(root, fname, &klen);
 	if (klen != (int)flen) {
-		slogz("BLOCK %s: %d != %ld\n", key, klen, flen);
+		slogz("BLOCK [%s]: %d != %ld\n", fname, klen, flen);
 	} else if (memcmp(fbuf, kbuf, klen)) {
 		for (i = 0; i < klen; i++) {
 			if (fbuf[i] != kbuf[i]) {
 				break;
 			}
 		}
-		slogz("BLOCK %s: %d at %x %x\n", key, i, fbuf[i], kbuf[i]);
+		slogz("BLOCK [%s]: %d at %x %x\n", fname, i, fbuf[i], kbuf[i]);
 	}
 	csc_cfg_close(root);
 	
@@ -240,7 +255,7 @@ int config_create_new(void)
 	strcat(path, TESTINPUT);
 
 	smm_mkpath(TESTPATH);
-	csc_file_store(path, 1, testconf, sizeof(testconf));
+	csc_file_store(path, 1, testconf, strlen(testconf));
 	free(path);
 	return 0;
 }

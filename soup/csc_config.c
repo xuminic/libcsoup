@@ -89,11 +89,12 @@ struct	KEYROOT	{
 	KEYCB	*mkey;	/* latest accessed master key */
 	KEYCB	*skey;	/* latest accessed sub key */
 	int	mode;
+	int	sysdir;
 	char	pool[1];
 };
 
 static KEYCB *csc_cfg_kcb_alloc(int psize);
-static KEYCB *csc_cfg_root_alloc(char *path, char *filename, int mode);
+static KEYCB *csc_cfg_root_alloc(int sysdir, char *path, char *filename, int);
 static KEYCB *csc_cfg_kcb_create(char *key, char *value, char *comm);
 static int csc_cfg_kcb_fillup(KEYCB *kp);
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type);
@@ -103,7 +104,7 @@ static int csc_cfg_strcmp(char *sour, char *dest);
 static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 static int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
 
-static inline KEYCB *CFGF_GETOBJ(CSCLNK *self)
+static KEYCB *CFGF_GETOBJ(CSCLNK *self)
 {
 	KEYCB   *kcb = (KEYCB *) &self[1];
 
@@ -115,14 +116,15 @@ static inline KEYCB *CFGF_GETOBJ(CSCLNK *self)
 	return NULL;
 }
 
-KEYCB *csc_cfg_open(char *path, char *filename, int mode)
+KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 {
 	struct	KeyDev	*cfgd;
 	KEYCB	*root, *ckey, *kp;
 	int	len;
 
 	/* create the root control block */
-	if ((root = csc_cfg_root_alloc(path, filename, mode)) == NULL) {
+	root = csc_cfg_root_alloc(sysdir, path, filename, mode);
+	if (root == NULL) {
 		return NULL;
 	}
 
@@ -131,7 +133,8 @@ KEYCB *csc_cfg_open(char *path, char *filename, int mode)
 	 * The configure file then will be closed until saving the contents
 	 * back to the file. It's pointless to create a new file in the
 	 * csc_cfg_open() stage */
-	if ((cfgd = smm_config_open(path, filename, CSC_CFG_READ)) == NULL) {
+	cfgd = smm_config_open(sysdir, path, filename, CSC_CFG_READ);
+	if (cfgd == NULL) {
 		if (mode == CSC_CFG_RWC) {
 			return root;
 		}
@@ -188,6 +191,7 @@ int csc_cfg_abort(KEYCB *cfg)
 int csc_cfg_save(KEYCB *cfg)
 {
 	struct	KeyDev	*cfgd;
+	struct	KEYROOT	*rext;
 	KEYCB	*mkey;
 	CSCLNK	*mp, *sp;
 
@@ -201,7 +205,9 @@ int csc_cfg_save(KEYCB *cfg)
 		return SMM_ERR_ACCESS;
 	}
 
-	cfgd = smm_config_open(cfg->key, cfg->value, CFGF_MODE_GET(cfg->flags));
+	rext = (struct KEYROOT *)cfg->pool;
+	cfgd = smm_config_open(rext->sysdir, cfg->key, cfg->value, 
+			CFGF_MODE_GET(cfg->flags));
 	if (cfgd == NULL) {
 		return SMM_ERR_ACCESS;
 	}
@@ -234,7 +240,7 @@ int csc_cfg_save(KEYCB *cfg)
 	return SMM_ERR_NONE;
 }
 
-int csc_cfg_saveas(KEYCB *cfg, char *path, char *filename)
+int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 {
 	KEYCB	*newc;
 	CSCLNK	*tmp;
@@ -243,7 +249,9 @@ int csc_cfg_saveas(KEYCB *cfg, char *path, char *filename)
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
 	}
-	if ((newc = csc_cfg_open(path, filename, CSC_CFG_RWC)) == NULL) {
+
+	newc = csc_cfg_open(sysdir, path, filename, CSC_CFG_RWC);
+	if (newc == NULL) {
 		return SMM_ERR_OPEN;
 	}
 	tmp = newc->anchor;
@@ -271,9 +279,11 @@ int csc_cfg_flush(KEYCB *cfg)
 
 int csc_cfg_close(KEYCB *cfg)
 {
-	csc_cfg_flush(cfg);
+	int	rc;
+
+	rc = csc_cfg_flush(cfg);
 	csc_cfg_abort(cfg);
-	return SMM_ERR_NONE;
+	return rc;
 }
 
 
@@ -672,7 +682,8 @@ static KEYCB *csc_cfg_kcb_alloc(int psize)
 	return kp;
 }
 
-static KEYCB *csc_cfg_root_alloc(char *path, char *filename, int mode)
+static KEYCB *csc_cfg_root_alloc(int sysdir, char *path, 
+		char *filename, int mode)
 {
 	struct	KEYROOT	*rext;
 	KEYCB	*root;
@@ -693,6 +704,7 @@ static KEYCB *csc_cfg_root_alloc(char *path, char *filename, int mode)
 	root->flags = CFGF_TYPE_SET(root->flags, CFGF_TYPE_ROOT);
 
 	rext = (struct KEYROOT *) root->pool;
+	rext->sysdir = sysdir;
 	if (path) {
 		root->key = rext->pool;
 		strcpy(root->key, path);

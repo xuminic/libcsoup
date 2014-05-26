@@ -4,7 +4,10 @@ AR      = ar
 CP      = cp
 RM      = rm -f
 
-CFLAGS	+= -DCFG_CDLL_SAFE -I..
+ifndef	CFLAGS
+CFLAGS	= -Wall -Wextra -DCFG_CDLL_SAFE
+endif
+CFLAGS	+= -I..
 
 SRCS	= main.c fixtoken.c memdump.c slog.c crc.c fontpath.c config.c \
 	  csc_cdll_main.c csc_cli.c

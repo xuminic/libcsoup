@@ -341,10 +341,10 @@ typedef	struct	_KEYCB	{
 extern "C"
 {
 #endif
-KEYCB *csc_cfg_open(char *path, char *filename, int mode);
+KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode);
 int csc_cfg_abort(KEYCB *cfg);
 int csc_cfg_save(KEYCB *cfg);
-int csc_cfg_saveas(KEYCB *cfg, char *path, char *filename);
+int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename);
 int csc_cfg_flush(KEYCB *cfg);
 int csc_cfg_close(KEYCB *cfg);
 char *csc_cfg_read(KEYCB *cfg, char *mkey, char *skey);
@@ -605,7 +605,7 @@ int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val);
 int smm_config_write_long(void *cfg, char *mkey, char *skey, long val);
 int smm_config_read_int(void *cfg, char *mkey, char *skey, int *val);
 int smm_config_write_int(void *cfg, char *mkey, char *skey, int val);*/
-struct KeyDev *smm_config_open(char *path, char *fname, int mode);
+struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode);
 int smm_config_close(struct KeyDev *cfgd);
 int smm_config_read(struct KeyDev *cfgd, KEYCB *kp);
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp);

@@ -32,12 +32,61 @@ struct	KeyDev	{
 	char	path[1];
 };
 
-struct KeyDev *smm_config_open(char *path, char *fname, int mode)
+static int smm_config_syspath(int sysroot, char *buf, int blen)
+{
+	char	*home;
+	int	tlen;
+
+	switch (sysroot) {
+	case SMM_CFGROOT_USER:
+		if ((home = getenv("HOME")) == NULL) {
+			tlen = 0;
+			if (buf && (blen > tlen)) {
+				buf[0] = 0;
+			}
+		} else {
+			tlen = strlen(home);
+			if (buf && (blen > tlen)) {
+				strcpy(buf, home);
+			}
+		}
+		break;
+	case SMM_CFGROOT_SYSTEM:
+		tlen = 4;	/* size of "/etc" */
+		if (buf && (blen > tlen)) {
+			strcpy(buf, "/etc");
+		}
+		break;
+	case SMM_CFGROOT_DESKTOP:
+		if ((home = getenv("HOME")) == NULL) {
+			tlen = 7;	/* size of ".config" */
+			if (buf && (blen > tlen)) {
+				strcpy(buf, ".config");
+			}
+		} else {
+			tlen = strlen(home) + 8;  /* size of "/.config" */
+			if (buf && (blen > tlen)) {
+				strcpy(buf, home);
+				strcat(buf, "/.config");
+			}
+		}
+		break;
+	default:	/* or SMM_CFGROOT_CURRENT in POSIX */
+		tlen = 0;
+		if (buf && (blen > tlen)) {
+			buf[0] = 0;
+		}
+		break;
+	}
+	return tlen;
+}
+
+struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 {
 	struct	KeyDev	*cfgd;
 	int	len;
 
-	len = sizeof(struct KeyDev) + 4;
+	len = sizeof(struct KeyDev) + smm_config_syspath(sysdir, NULL, 0) + 8;
 	if (path) {
 		len += strlen(path);
 	}
@@ -48,7 +97,11 @@ struct KeyDev *smm_config_open(char *path, char *fname, int mode)
 		return NULL;
 	}
 	cfgd->mode = mode;
-	cfgd->path[0] = 0;
+
+	smm_config_syspath(sysdir, cfgd->path, len);
+	if (cfgd->path[0]) {
+		strcat(cfgd->path, SMM_DEF_DELIM);
+	}
 	if (path) {
 		strcat(cfgd->path, path);
 		strcat(cfgd->path, SMM_DEF_DELIM);
