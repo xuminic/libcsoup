@@ -29,101 +29,61 @@
 struct	KeyDev	{
 	FILE	*fp;
 	int	mode;
-	char	path[1];
+	char	*fpath;		/* full path for the file system */
+	char	*kpath;		/* key path for the Win32 registry */
+	char	*fname;
+#ifdef	CFG_WIN32_API
+	HKEY	hSysKey;	/* predefined key like HKEY_CURRENT_USER */
+	HKEY	hRootKey;	/* root key points to the entrance */
+	int	idx_value;	/* index of values */
+	int	idx_skey;	/* index of subkeys */
+#endif
+	char	*cdir;		/* runtime current directory */
+	char	pool[1];
 };
 
-static int smm_config_syspath(int sysroot, char *buf, int blen)
-{
-	char	*home;
-	int	tlen;
 
-	switch (sysroot) {
-	case SMM_CFGROOT_USER:
-		if ((home = getenv("HOME")) == NULL) {
-			tlen = 0;
-			if (buf && (blen > tlen)) {
-				buf[0] = 0;
-			}
-		} else {
-			tlen = strlen(home);
-			if (buf && (blen > tlen)) {
-				strcpy(buf, home);
-			}
-		}
-		break;
-	case SMM_CFGROOT_SYSTEM:
-		tlen = 4;	/* size of "/etc" */
-		if (buf && (blen > tlen)) {
-			strcpy(buf, "/etc");
-		}
-		break;
-	case SMM_CFGROOT_DESKTOP:
-		if ((home = getenv("HOME")) == NULL) {
-			tlen = 7;	/* size of ".config" */
-			if (buf && (blen > tlen)) {
-				strcpy(buf, ".config");
-			}
-		} else {
-			tlen = strlen(home) + 8;  /* size of "/.config" */
-			if (buf && (blen > tlen)) {
-				strcpy(buf, home);
-				strcat(buf, "/.config");
-			}
-		}
-		break;
-	default:	/* or SMM_CFGROOT_CURRENT in POSIX */
-		tlen = 0;
-		if (buf && (blen > tlen)) {
-			buf[0] = 0;
-		}
-		break;
-	}
-	return tlen;
-}
+static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname);
+static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp);
+static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp);
+
+#ifdef	CFG_WIN32_API
+static int smm_config_registry_open(struct KeyDev *cfgd, int mode);
+static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp);
+static int smm_config_registry_write(struct KeyDev *cfgd, KEYCB *kp);
+static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname);
+static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen);
+#endif
 
 struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 {
 	struct	KeyDev	*cfgd;
-	int	len;
 
-	len = sizeof(struct KeyDev) + smm_config_syspath(sysdir, NULL, 0) + 8;
-	if (path) {
-		len += strlen(path);
-	}
-	if (fname) {
-		len += strlen(fname);
-	}
-	if ((cfgd = smm_alloc(len)) == NULL) {
+	if ((cfgd = smm_config_alloc(sysdir, path, fname)) == NULL) {
 		return NULL;
 	}
 	cfgd->mode = mode;
 
-	smm_config_syspath(sysdir, cfgd->path, len);
-	if (cfgd->path[0]) {
-		strcat(cfgd->path, SMM_DEF_DELIM);
+#ifdef	CFG_WIN32_API
+	if (smm_config_registry_open(cfgd, mode) == SMM_ERR_NONE) {
+		return cfgd;
 	}
-	if (path) {
-		strcat(cfgd->path, path);
-		strcat(cfgd->path, SMM_DEF_DELIM);
-	}
-	if (fname) {
-		strcat(cfgd->path, fname);
-	}
+#endif
 
 	switch (mode) {
 	case CSC_CFG_READ:
-		cfgd->fp = fopen(cfgd->path, "r");
+		cfgd->fp = fopen(cfgd->fpath, "r");
 		break;
 	case CSC_CFG_RWC:
 		if (path) {
 			smm_mkpath(path);
 		}
-		if ((cfgd->fp = fopen(cfgd->path, "r+")) == NULL) {
-			cfgd->fp = fopen(cfgd->path, "w+");
+		if ((cfgd->fp = fopen(cfgd->fpath, "r+")) == NULL) {
+			cfgd->fp = fopen(cfgd->fpath, "w+");
 		}
 		break;
 	default:	/* CSC_CFG_RDWR */
-		cfgd->fp = fopen(cfgd->path, "r+");
+		cfgd->fp = fopen(cfgd->fpath, "r+");
 		break;
 	}
 	if (cfgd->fp == NULL) {
@@ -135,11 +95,200 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 
 int smm_config_close(struct KeyDev *cfgd)
 {
-	fclose(cfgd->fp);
+#ifdef	CFG_WIN32_API
+	if (cfgd->hRootKey) {
+		RegFlushKey(cfgd->hRootKe);
+		RegCloseKey(cfgd->hRootKe);
+	}
+#endif
+	if (cfgd->fp) {
+		fclose(cfgd->fp);
+	}
 	return smm_free(cfgd);
 }
 
 int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
+{
+#ifdef	CFG_WIN32_API
+	if (cfgd->hRootKey) {
+		return smm_config_registry_read(cfgd, kp);
+	} else {
+		return smm_config_file_read(cfgd, kp);
+	}
+#else
+	return smm_config_file_read(cfgd, kp);
+#endif
+}
+
+int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
+{
+#ifdef	CFG_WIN32_API
+	if (cfgd->hRootKey) {
+		return smm_config_registry_write(cfgd, kp);
+	} else {
+		return smm_config_file_write(cfgd, kp);
+	}
+#else
+	return smm_config_file_write(cfgd, kp);
+#endif
+}
+
+int smm_config_delete(int sysdir, char *path, char *fname)
+{
+	struct	KeyDev	*cfgd;
+
+	if ((cfgd = smm_config_alloc(sysdir, path, fname)) == NULL) {
+		return smm_errno_update(SMM_ERR_NULL);
+	}
+	
+#ifdef	CFG_WIN32_API
+	if (cfgd->kpath) {
+		rc = smm_config_registry_delete(cfgd);
+	} else {
+		rc = unlink(cfgd->fpath);
+	}
+#else
+	rc = unlink(cfgd->fpath);
+#endif
+	smm_free(cfgd);
+	if (rc == 0) {
+		return smm_errno_update(SMM_ERR_NONE);
+	}
+	if (errno == EACCES) {
+		return smm_errno_update(SMM_ERR_ACCESS);
+	}
+	return smm_errno_update(SMM_ERR_NULL);
+}
+
+
+
+
+
+static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
+{
+	struct	KeyDev	*cfgd;
+	char	*home;
+	int	tlen;
+
+	if (fname == NULL) {
+		smm_errno_update(SMM_ERR_NULL);
+		return NULL;
+	}
+	home = getenv("HOME");
+
+	tlen = sizeof(struct KeyDev) + strlen(fname) * 2 + 16;
+	if (path) {
+		tlen += strlen(path) * 2;
+	}
+	switch (sysdir) {
+	case SMM_CFGROOT_USER:
+		if (home) {
+			tlen += strlen(home) + 1;
+		}
+		tlen += 8;	/* size of "CONSOLE\\" */
+		break;
+	case SMM_CFGROOT_SYSTEM:
+		tlen += 4;	/* size of "/etc" */
+		tlen += 9;	/* size of "SOFTWARE\\" */
+		break;
+	case SMM_CFGROOT_DESKTOP:
+		if (home == NULL) {
+			tlen += 7;	/* size of ".config" */
+		} else {
+			tlen += strlen(home) + 8;  /* size of "/.config" */
+		}
+		tlen += 9;	/* size of "SOFTWARE\\" */
+		break;
+	}
+
+	if ((cfgd = smm_alloc(tlen)) == NULL) {
+		smm_errno_update(SMM_ERR_LOWMEM);
+		return NULL;
+	}
+
+	cfgd->fname = cfgd->pool;
+	strcpy(cfgd->fname, fname);
+	cfgd->fpath = cfgd->fname + strlen(cfgd->fname) + 1;
+	cfgd->fpath[0] = 0;
+	
+	switch (sysdir) {
+	case SMM_CFGROOT_USER:
+		if (home) {
+			strcat(cfgd->fpath, home);
+			strcat(cfgd->fpath, SMM_DEF_DELIM);
+		}
+		if (path) {
+			strcat(cfgd->fpath, path);
+			strcat(cfgd->fpath, SMM_DEF_DELIM);
+		}
+		strcat(cfgd->fpath, fname);
+
+		cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
+		strcpy(cfgd->kpath, "CONSOLE\\");
+		if (path) {
+			strcat(cfgd->kpath, path);
+		}
+#ifdef	CFG_WIN32_API
+		cfgd->hSysKey = HKEY_CURRENT_USER;
+#endif
+		break;
+	case SMM_CFGROOT_SYSTEM:
+		strcat(cfgd->fpath, "/etc");	//FIXME
+		if (path) {
+			strcat(cfgd->fpath, path);
+			strcat(cfgd->fpath, SMM_DEF_DELIM);
+		}
+		strcat(cfgd->fpath, fname);
+
+		cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
+		strcpy(cfgd->kpath, "SOFTWARE\\");
+		if (path) {
+			strcat(cfgd->kpath, path);
+		}
+#ifdef	CFG_WIN32_API
+		cfgd->hSysKey = HKEY_LOCAL_MACHINE;
+#endif
+		break;
+	case SMM_CFGROOT_DESKTOP:
+		if (home) {
+			strcat(cfgd->fpath, home);
+			strcat(cfgd->fpath, SMM_DEF_DELIM);
+		}
+		strcat(cfgd->fpath, ".config");
+		strcat(cfgd->fpath, SMM_DEF_DELIM);
+		if (path) {
+			strcat(cfgd->fpath, path);
+			strcat(cfgd->fpath, SMM_DEF_DELIM);
+		}
+		strcat(cfgd->fpath, fname);
+
+		cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
+		strcpy(cfgd->kpath, "SOFTWARE\\");
+		if (path) {
+			strcat(cfgd->kpath, path);
+		}
+#ifdef	CFG_WIN32_API
+		cfgd->hSysKey = HKEY_CURRENT_USER;
+#endif
+		break;
+	case SMM_CFGROOT_CURRENT:
+	default:
+		if (path) {
+			strcat(cfgd->fpath, path);
+			strcat(cfgd->fpath, SMM_DEF_DELIM);
+		}
+		strcat(cfgd->fpath, fname);
+		break;
+	}
+
+	/* check point */
+	slogz("smm_config_alloc::fpath = %s\n", cfgd->fpath);
+	slogz("smm_config_alloc::kpath = %s\n", cfgd->kpath);
+	slogz("smm_config_alloc::fname = %s\n", cfgd->fname);
+	return cfgd;
+}
+
+static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)
 {
 	int	amnt, cpos, ch;
 
@@ -162,7 +311,7 @@ int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
 	return amnt;
 }
 
-int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
+static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 {
 	if (kp == NULL) {
 		return 0;
@@ -192,13 +341,170 @@ int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 
 
 
+#ifdef	CFG_WIN32_API
 
+static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
+{
+	HKEY	hPathKey;
+	LONG	rc;
+	TCHAR	*wkey;
+	char	*fpath;
 
+	if (cfgd->kpath == NULL) {
+		return SMM_ERR_NULL;
+	}
+	fpath = csc_strcpy_alloc(cfgd->kpath, strlen(cfgd->fname) + 4);
+	if (fpath == NULL) {
+		return SMM_ERR_LOWMEM;
+	}
+	strcat(fpath, SMM_DEF_DELIM);
+	strcat(fpath, cfgd->fname);
 
+	slogz("smm_config_registry_open: %s\n", fpath);
+	if ((wkey = smm_mbstowcs_alloc(fpath)) == NULL) {
+		smm_free(fpath);
+		return SMM_ERR_LOWMEM;
+	}
 
+	switch (mode) {
+	case SMM_CFGMODE_RDONLY:
+		rc = RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_READ, 
+				&cfgd->hRootKey);
+		break;
+	case SMM_CFGMODE_RWC:
+		/* The good thing of RegCreateKeyEx() is that it can create 
+		 * a string of subkeys without creating one by one. 
+		 * For example: A\\B\\C */
+		rc = RegCreateKeyEx(cfgd->hSysKey, wkey, 0, NULL, 0, 
+				KEY_ALL_ACCESS, NULL, &cfgd->hRootKey, NULL);
+		break;
+	default:	/* SMM_CFGMODE_RDWR */
+		rc = RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_ALL_ACCESS, 
+				&cfgd->hRootKey);
+		break;
+	}
 
+	smm_free(wkey);			
+	smm_free(fpath);
 
+	if (cfgd->hRootKey && (rc == ERROR_SUCCESS)) {
+		return SMM_ERR_NONE;
+	}
+	return SMM_ERR_ACCESS;
+}
 
+static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp)
+{
+	TCHAR	szName[MAX_PATH];
+	DWORD	dwSize;
+
+	if ((RegEnumKeyEx(cfgd->hRootKey, cfgd->index, szName, &dwSize, 
+			NULL, NULL, NULL, NULL)) != ERROR_SUCCESS) {
+		return 0;	/* EOF */
+	}
+
+}
+
+static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname)
+{
+	HKEY	hPathKey;
+	TCHAR	*wkey;
+	LONG	rcode;
+
+	if ((wkey = smm_mbstowcs_alloc(cfgd->kpath)) == NULL) {
+		return SMM_ERR_LOWMEM;
+	}
+	if (RegCreateKeyEx(cfgd->hSysKey, wkey, 0, NULL, 0, KEY_ALL_ACCESS, 
+				NULL, &hPathKey, NULL) != ERROR_SUCCESS) {
+		smm_free(wkey);
+		errno = EACCES;
+		return SMM_ERR_ACCESS;
+	}
+	smm_free(wkey);
+
+	/* fabricate the key name */
+	if ((wkey = smm_alloc(MAX_PATH * 2 * sizeof(TCHAR))) == NULL) {
+		RegCloseKey(hPathKey);
+		return SMM_ERR_LOWMEM;
+	}
+	MultiByteToWideChar(smm_codepage(), 0, cfgd->fname, 
+			-1, wkey, MAX_PATH - 1);
+
+	rcode = RegDelnodeRecurse(hPathKey, wkey, MAX_PATH * 2);
+
+	RegCloseKey(hPathKey);
+	smm_free(wkey);
+       
+	if (rcode == TRUE) {
+		return SMM_ERR_NONE;
+	}
+	errno = EACCES;
+	return SMM_ERR_ACCESS;
+}
+
+/* This code was picked form MSDN, a little modified */
+static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
+{
+	LPTSTR	lpEnd;
+	LONG	lResult;
+	DWORD	dwSize;
+	TCHAR	szName[MAX_PATH];
+	HKEY	hKey;
+
+	/* First, see if we can delete the key without having to recurse. */
+	if (RegDeleteKey(hKeyRoot, lpSubKey) == ERROR_SUCCESS) {
+		return TRUE;
+	}
+
+	lResult = RegOpenKeyEx(hKeyRoot, lpSubKey, 0, KEY_READ, &hKey);
+	if (lResult != ERROR_SUCCESS) {
+		if (lResult == ERROR_FILE_NOT_FOUND) {
+			return TRUE;	/* not guilty */
+		} else {
+			return FALSE;	/* access denied */
+		}
+	}
+
+	/* Check for an ending slash and add one if it is missing. */
+	if (lstrlen(lpSubKey) >= buflen) {
+		return FALSE;	/* low buffer memory */
+	}
+	lpEnd = lpSubKey + lstrlen(lpSubKey);
+	if (*(lpEnd - 1) != TEXT('\\')) {
+		*lpEnd++ = TEXT('\\');
+		*lpEnd = TEXT('\0');
+	}
+
+	/* Enumerate the keys */
+	dwSize = MAX_PATH;
+	lResult = RegEnumKeyEx(hKey, 0, szName, &dwSize, NULL, 
+			NULL, NULL, NULL);
+	if (lResult == ERROR_SUCCESS) {
+		do {
+			if (lstrlen(lpSubKey) + lstrlen(szName) >= buflen) {
+				break;	/* path is too long */
+			}
+			lstrcpy(lpEnd, szName);
+			if (!RegDelnodeRecurse(hKeyRoot, lpSubKey, buflen)) {
+				break;
+			}
+			dwSize = MAX_PATH;
+			lResult = RegEnumKeyEx(hKey, 0, szName, &dwSize, 
+					NULL, NULL, NULL, NULL);
+		} while (lResult == ERROR_SUCCESS);
+	}
+	lpEnd--;
+	*lpEnd = TEXT('\0');
+	RegCloseKey (hKey);
+
+	/* Try again to delete the key. */
+	if (RegDeleteKey(hKeyRoot, lpSubKey) == ERROR_SUCCESS) {
+		return TRUE;
+	}
+	return FALSE;
+}
+
+#endif
 
 
 
