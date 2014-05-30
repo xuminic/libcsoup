@@ -108,6 +108,27 @@ static int config_open_rdonly(void)
 	return 0;
 }
 
+
+static int config_open_with_directory(void)
+{
+	KEYCB	*cfg;
+	char	*config = "\
+[main/dev/holiday]\n\
+[main/dev]\n\
+[/hardware/driver///howsit]\n\
+[/usr/andy]\n\
+[/usr/boy]\n";
+
+	if ((cfg = csc_cfg_open(SMM_CFGROOT_MEMPOOL, config, 
+					NULL, 0)) == NULL) {
+		slogz("Weird\n");
+		return -1;
+	}
+	csc_cfg_dump(cfg, NULL);
+	csc_cfg_close(cfg);
+	return 0;
+}
+
 static int config_key_test(void)
 {
 	KEYCB	*root;
@@ -309,6 +330,8 @@ int config_main(void *rtime, int argc, char **argv)
 		}
 	}
 	csc_cli_qopt_close(rtime);
+
+	config_open_with_directory();
 	return 0;
 }
 

@@ -22,6 +22,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
 
 #include "libcsoup.h"
 
@@ -35,10 +37,10 @@ struct	KeyDev	{
 #ifdef	CFG_WIN32_API
 	HKEY	hSysKey;	/* predefined key like HKEY_CURRENT_USER */
 	HKEY	hRootKey;	/* root key points to the entrance */
-	int	idx_value;	/* index of values */
-	int	idx_skey;	/* index of subkeys */
+	int	idx_key[MAX_PATH];	/* index of keys (Win32 values */
+	int	idx_dir[MAX_PATH];	/* index of directories (Win32 subkeys) */
+	int	idx_no;
 #endif
-	char	*cdir;		/* runtime current directory */
 	char	pool[1];
 };
 
@@ -59,11 +61,19 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 {
 	struct	KeyDev	*cfgd;
 
+	/* configure in memory mode */
+	if (sysdir == SMM_CFGROOT_MEMPOOL) {
+		if ((cfgd = smm_alloc(sizeof(struct KeyDev))) != NULL) {
+			cfgd->fpath = path;
+		}
+		return cfgd;
+	}
+
 	if ((cfgd = smm_config_alloc(sysdir, path, fname)) == NULL) {
 		return NULL;
 	}
-	cfgd->mode = mode;
 
+	cfgd->mode = mode;
 #ifdef	CFG_WIN32_API
 	if (smm_config_registry_open(cfgd, mode) == SMM_ERR_NONE) {
 		return cfgd;
@@ -136,6 +146,7 @@ int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 int smm_config_delete(int sysdir, char *path, char *fname)
 {
 	struct	KeyDev	*cfgd;
+	int	rc;
 
 	if ((cfgd = smm_config_alloc(sysdir, path, fname)) == NULL) {
 		return smm_errno_update(SMM_ERR_NULL);
@@ -171,7 +182,6 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 	int	tlen;
 
 	if (fname == NULL) {
-		smm_errno_update(SMM_ERR_NULL);
 		return NULL;
 	}
 	home = getenv("HOME");
@@ -292,6 +302,22 @@ static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)
 {
 	int	amnt, cpos, ch;
 
+	if ((cfgd->fp == NULL) && (cfgd->fname == NULL)) {	
+		/* configure in memory mode */
+		for (ch = 0, cpos = cfgd->mode; cfgd->fpath[cpos]; ch++) {
+			if (kp) {
+				kp->pool[ch] = cfgd->fpath[cpos];
+				kp->pool[ch+1] = 0;
+				cfgd->mode++;
+			}
+			if (cfgd->fpath[cpos++] == '\n') {
+				ch++;
+				break;
+			}
+		}
+		return ch;
+	}
+
 	amnt = 0;
 	cpos = ftell(cfgd->fp);
 	while ((ch = fgetc(cfgd->fp)) != EOF) {
@@ -313,29 +339,34 @@ static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)
 
 static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 {
+	FILE	*fout;
+
 	if (kp == NULL) {
 		return 0;
+	}
+	if ((fout = cfgd->fp) == NULL) {
+		fout = stdout;
 	}
 
 	kp->update = 0;		/* reset the update counter */
 	if (kp->key) {
 		//if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MASTR) {
 		if ((kp->flags & 0xf) == 2) {	//FIXME
-			fputc('[', cfgd->fp);
-			fputs(kp->key, cfgd->fp);
-			fputc(']', cfgd->fp);
+			fputc('[', fout);
+			fputs(kp->key, fout);
+			fputc(']', fout);
 		} else {
-			fputs(kp->key, cfgd->fp);
+			fputs(kp->key, fout);
 		}
 	}
 	if (kp->value) {
-		fputc('=', cfgd->fp);
-		fputs(kp->value, cfgd->fp);
+		fputc('=', fout);
+		fputs(kp->value, fout);
 	}
 	if (kp->comment) {
-		fputs(kp->comment, cfgd->fp);
+		fputs(kp->comment, fout);
 	}
-	fputs("\n", cfgd->fp);	//FIXME: DOS format \r\n 
+	fputs("\n", fout);
 	return 0;
 }
 
@@ -393,16 +424,94 @@ static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
 	return SMM_ERR_ACCESS;
 }
 
-static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp)
+static HKEY smm_config_registry_open_dir(struct KeyDev *cfgd)
 {
+	HKEY	hCurrKey, hTemp;
 	TCHAR	szName[MAX_PATH];
 	DWORD	dwSize;
+	int	i;
 
+	hCurrKey = cfgd->hRootKey;
+	for (i = 0; i < cfgd->idx_no; i++) {
+		if (RegEnumKeyEx(hCurrKey, cfgd->idx_dir[i], szName, NULL, 
+				NULL, NULL, NULL, NULL) != ERROR_SUCCESS) {
+			if (hCurrKey != cfgd->hRootKey) {
+				RegCloseKey(hCurrKey);
+			}
+			return NULL;
+		}
+		if (RegOpenKeyEx(hCurrKey, szName, 0, KEY_READ, 
+				&hTemp) != ERROR_SUCCESS) {
+			if (hCurrKey != cfgd->hRootKey) {
+				RegCloseKey(hCurrKey);
+			}
+			return NULL;
+		}
+		if (hCurrKey != cfgd->hRootKey) {
+			RegCloseKey(hCurrKey);
+		}
+		hCurrKey = hTemp;
+	}
+	return hCurrKey;
+}
+
+static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp)
+{
+	HKEY	hCurrKey;
+	TCHAR	szName[MAX_PATH];
+	DWORD	dwSize, dwDirs, dwKeys;
+
+	if ((hCurrKey = smm_config_registry_open_dir(cfgd)) == NULL) {
+		return -1;
+	}
+
+	/* get number of keys and values */
+	RegQueryInfoKey(hCurrKey, NULL, NULL, NULL, &dwDirs, NULL, NULL, 
+			&dwKeys, NULL, NULL, NULL, NULL);
+
+	if (cfgd->idx_key[cfgd->idx_no] < dwKeys) {
+		rc = registry_read_content(hCurrKey, cfgd->idx_key[cfgd->idx_no], kp);
+		if (kp == NULL) {
+			return rc;
+		}
+		cfgd->idx_key[cfgd->idx_no]++;
+		return rc;
+	}
+
+	if (cfgd->idx_dir[cfgd->idx_no] < dwDirs) {
+		rc = registry_read_directory(hCurrKey, cfgd->idx_dir[cfgd->idx_no], kp);
+		if (kp) {
+			cfgd->idx_dir[cfgd->idx_no]++;
+		}
+		return rc;
+	}
+
+	if (cfgd->idx_no == 0) {
+		return 0;	/* eof */
+	}
+
+	cfgd->idx_no--;
+
+
+}
+
+static int registry_read_content(HKEY hKey, int idx, KEYCB *kp)
+{
+	TCHAR	szName[MAX_PATH];
+	DWORD	dwSize, dwType, dwLeng;
+	
+	RegEnumValue(hKey, idx, szName, &dwSize, NULL, &dwType, NULL, &dwLeng);
+}
+
+static int registry_read_directory(HKEY hKey, int idx, KEYCB *kp)
+{
+	TCHAR	szName[MAX_PATH];
+	DWORD	dwSize, dwType, dwLeng;
+	
 	if ((RegEnumKeyEx(cfgd->hRootKey, cfgd->index, szName, &dwSize, 
 			NULL, NULL, NULL, NULL)) != ERROR_SUCCESS) {
 		return 0;	/* EOF */
 	}
-
 }
 
 static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname)

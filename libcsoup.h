@@ -347,23 +347,23 @@ int csc_cfg_save(KEYCB *cfg);
 int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename);
 int csc_cfg_flush(KEYCB *cfg);
 int csc_cfg_close(KEYCB *cfg);
-char *csc_cfg_read(KEYCB *cfg, char *mkey, char *skey);
-char *csc_cfg_read_first(KEYCB *cfg, char *mkey, char **key);
+char *csc_cfg_read(KEYCB *cfg, char *dkey, char *nkey);
+char *csc_cfg_read_first(KEYCB *cfg, char *dkey, char **key);
 char *csc_cfg_read_next(KEYCB *cfg, char **key);
-char *csc_cfg_copy(KEYCB *cfg, char *mkey, char *skey, int extra);
-int csc_cfg_write(KEYCB *cfg, char *mkey, char *skey, char *value);
-int csc_cfg_read_long(KEYCB *cfg, char *mkey, char *skey, long *val);
-int csc_cfg_write_long(KEYCB *cfg, char *mkey, char *skey, long val);
-int csc_cfg_read_longlong(KEYCB *cfg, char *mkey, char *skey, long long *val);
-int csc_cfg_write_longlong(KEYCB *cfg, char *mkey, char *skey, long long val);
-int csc_cfg_read_bin(KEYCB *cfg, char *mkey, char *skey, char *buf, int blen);
-void *csc_cfg_copy_bin(KEYCB *cfg, char *mkey, char *skey, int *bsize);
-int csc_cfg_write_bin(KEYCB *cfg, char *mkey, char *skey, void *bin, int bsize);
-int csc_cfg_read_block(KEYCB *cfg, char *mkey, char *buf, int blen);
-void *csc_cfg_copy_block(KEYCB *cfg, char *mkey, int *bsize);
-int csc_cfg_write_block(KEYCB *cfg, char *mkey, void *bin, int bsize);
+char *csc_cfg_copy(KEYCB *cfg, char *dkey, char *nkey, int extra);
+int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value);
+int csc_cfg_read_long(KEYCB *cfg, char *dkey, char *nkey, long *val);
+int csc_cfg_write_long(KEYCB *cfg, char *dkey, char *nkey, long val);
+int csc_cfg_read_longlong(KEYCB *cfg, char *dkey, char *nkey, long long *val);
+int csc_cfg_write_longlong(KEYCB *cfg, char *dkey, char *nkey, long long val);
+int csc_cfg_read_bin(KEYCB *cfg, char *dkey, char *nkey, char *buf, int blen);
+void *csc_cfg_copy_bin(KEYCB *cfg, char *dkey, char *nkey, int *bsize);
+int csc_cfg_write_bin(KEYCB *cfg, char *dkey, char *nkey, void *bin, int bsize);
+int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
+void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
+int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
 int csc_cfg_dump_kcb(KEYCB *cfg);
-int csc_cfg_dump(KEYCB *cfg, char *mkey);
+int csc_cfg_dump(KEYCB *cfg, char *dkey);
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
@@ -560,10 +560,9 @@ typedef	struct timeval	SMM_TIME;
 #define SMM_CFGROOT_SYSTEM      2
 /* current directory (posix only) */
 #define SMM_CFGROOT_CURRENT	3
+/* read from memory directly (test mode)(same format to file) */
+#define SMM_CFGROOT_MEMPOOL	9
 
-#define SMM_CFGMODE_RDONLY	0	/* read only */
-#define SMM_CFGMODE_RDWR	1	/* read and write */
-#define SMM_CFGMODE_RWC		2	/* read, write and create */
 
 /* Forward declaration the structure for reading/writing the configure device.
  * It will be defined in smm_config.c */
