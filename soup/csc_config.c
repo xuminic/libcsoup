@@ -97,9 +97,11 @@ static int csc_cfg_access_setup(KEYCB *cfg, KEYCB *dkcb, KEYCB *kcb);
 static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type);
 static int csc_cfg_destroy_links(CSCLNK *anchor);
 static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor);
+static int csc_cfg_attribute(KEYCB *kcb);
 static int csc_cfg_strcmp(char *sour, char *dest);
 static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 static int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
+static char *csc_cfg_format_directory(char *dkey);
 static char *csc_cfg_format_dir_alloc(char *dkey);
 
 static KEYCB *CFGF_GETOBJ(CSCLNK *self)
@@ -121,7 +123,11 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 	int	len;
 
 	/* create the root control block */
-	root = csc_cfg_root_alloc(sysdir, path, filename, mode);
+	if (sysdir == SMM_CFGROOT_MEMPOOL) {
+		root = csc_cfg_root_alloc(sysdir, NULL, NULL, mode);
+	} else {
+		root = csc_cfg_root_alloc(sysdir, path, filename, mode);
+	}
 	if (root == NULL) {
 		return NULL;
 	}
@@ -225,70 +231,6 @@ int csc_cfg_close(KEYCB *cfg)
 	rc = csc_cfg_flush(cfg);
 	csc_cfg_abort(cfg);
 	return rc;
-}
-
-static int csc_cfg_attribute(KEYCB *kcb)
-{
-	CSCLNK	*cp;
-	KEYCB	*ccb;
-	int	accnt[8];
-
-	memset(accnt, 0, sizeof(accnt));
-	for (cp = kcb->anchor; cp; cp = csc_cdl_next(kcb->anchor, cp)) {
-		if ((ccb = CFGF_GETOBJ(cp)) == NULL) {
-			break;
-		}
-		switch (CFGF_TYPE_GET(ccb->flags)) {
-		case CFGF_TYPE_DIR:
-			accnt[1]++;
-			break;
-		case CFGF_TYPE_KEY:
-			accnt[0]++;
-			accnt[2]++;
-			break;
-		case CFGF_TYPE_PART:
-			accnt[0]++;
-			accnt[3]++;
-			break;
-		case CFGF_TYPE_VALUE:
-			accnt[0]++;
-			accnt[4]++;
-			break;
-		case CFGF_TYPE_COMM:
-			accnt[0]++;
-			accnt[5]++;
-			break;
-		default:
-			accnt[6]++;
-			break;
-		}
-	}
-	switch (CFGF_TYPE_GET(kcb->flags)) {
-	case CFGF_TYPE_ROOT:
-	case CFGF_TYPE_DIR:
-		accnt[1]++;
-		break;
-	case CFGF_TYPE_KEY:
-		accnt[0]++;
-		accnt[2]++;
-		break;
-	case CFGF_TYPE_PART:
-		accnt[0]++;
-		accnt[3]++;
-		break;
-	case CFGF_TYPE_VALUE:
-		accnt[0]++;
-		accnt[4]++;
-		break;
-	case CFGF_TYPE_COMM:
-		accnt[0]++;
-		accnt[5]++;
-		break;
-	default:
-		accnt[6]++;
-		break;
-	}
-	return accnt[0];
 }
 
 char *csc_cfg_read(KEYCB *cfg, char *dkey, char *nkey)
@@ -646,34 +588,26 @@ int csc_cfg_dump_kcb(KEYCB *kp)
 	return 0;
 }
 
-int csc_cfg_dump(KEYCB *cfg, char *dkey)
+int csc_cfg_dump(KEYCB *entry)
 {
 	KEYCB	*ckey;
-	CSCLNK	*p, *k;
+	CSCLNK	*p;
 
-	csc_cfg_dump_kcb(cfg);
-
-	if (dkey == NULL) {
-		for (p = cfg->anchor; p; p = csc_cdl_next(cfg->anchor, p)) {
-			ckey = CFGF_GETOBJ(p);
-			if (CFGF_TYPE_GET(ckey->flags) != CFGF_TYPE_DIR) {
-				csc_cfg_dump_kcb(ckey);
-			}
-		}
+	csc_cfg_dump_kcb(entry);
+	if (entry->anchor == NULL) {
+		return 0;
 	}
 
-	for (p = cfg->anchor; p; p = csc_cdl_next(cfg->anchor, p)) {
+	for (p = entry->anchor; p; p = csc_cdl_next(entry->anchor, p)) {
 		ckey = CFGF_GETOBJ(p);
-		if (dkey && strcmp(ckey->key, dkey)) {
-			continue;
+		if (ckey->anchor == NULL) {
+			csc_cfg_dump_kcb(ckey);
 		}
-		if (CFGF_TYPE_GET(ckey->flags) != CFGF_TYPE_DIR) {
-			continue;
-		}
-
-		csc_cfg_dump_kcb(ckey);
-		for (k = ckey->anchor; k; k = csc_cdl_next(ckey->anchor, k)) {
-			csc_cfg_dump_kcb(CFGF_GETOBJ(k));
+	}
+	for (p = entry->anchor; p; p = csc_cdl_next(entry->anchor, p)) {
+		ckey = CFGF_GETOBJ(p);
+		if (ckey->anchor != NULL) {
+			csc_cfg_dump(ckey);
 		}
 	}
 	return 0;
@@ -859,6 +793,7 @@ static int csc_cfg_kcb_fillup(KEYCB *kp)
 		kp->key++;	/* strip the '[]' pair */
 		p = strchr(kp->key + 1, ']');
 		*p = 0;
+		kp->key = csc_cfg_format_directory(kp->key);
 		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_DIR);
 	}
 	return CFGF_TYPE_GET(kp->flags);
@@ -1059,6 +994,70 @@ static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor)
 	return 0;
 }
 
+static int csc_cfg_attribute(KEYCB *kcb)
+{
+	CSCLNK	*cp;
+	KEYCB	*ccb;
+	int	accnt[8];
+
+	memset(accnt, 0, sizeof(accnt));
+	for (cp = kcb->anchor; cp; cp = csc_cdl_next(kcb->anchor, cp)) {
+		if ((ccb = CFGF_GETOBJ(cp)) == NULL) {
+			break;
+		}
+		switch (CFGF_TYPE_GET(ccb->flags)) {
+		case CFGF_TYPE_DIR:
+			accnt[1]++;
+			break;
+		case CFGF_TYPE_KEY:
+			accnt[0]++;
+			accnt[2]++;
+			break;
+		case CFGF_TYPE_PART:
+			accnt[0]++;
+			accnt[3]++;
+			break;
+		case CFGF_TYPE_VALUE:
+			accnt[0]++;
+			accnt[4]++;
+			break;
+		case CFGF_TYPE_COMM:
+			accnt[0]++;
+			accnt[5]++;
+			break;
+		default:
+			accnt[6]++;
+			break;
+		}
+	}
+	switch (CFGF_TYPE_GET(kcb->flags)) {
+	case CFGF_TYPE_ROOT:
+	case CFGF_TYPE_DIR:
+		accnt[1]++;
+		break;
+	case CFGF_TYPE_KEY:
+		accnt[0]++;
+		accnt[2]++;
+		break;
+	case CFGF_TYPE_PART:
+		accnt[0]++;
+		accnt[3]++;
+		break;
+	case CFGF_TYPE_VALUE:
+		accnt[0]++;
+		accnt[4]++;
+		break;
+	case CFGF_TYPE_COMM:
+		accnt[0]++;
+		accnt[5]++;
+		break;
+	default:
+		accnt[6]++;
+		break;
+	}
+	return accnt[0];
+}
+
 /* strcmp() without comparing the head and tail white spaces */
 static int csc_cfg_strcmp(char *sour, char *dest)
 {
@@ -1119,28 +1118,35 @@ static int csc_cfg_hex_to_binary(char *src, char *buf, int blen)
 	return amnt;
 }
 
-static char *csc_cfg_format_dir_alloc(char *dkey)
+static char *csc_cfg_format_directory(char *dkey)
 {
 	char	*dbuf, *drtn;
-	int	level;
 
-	if ((dbuf = drtn = smm_alloc(strlen(dkey)+4)) == NULL) {
-		return NULL;
-	}
-	level = 0;
+	dbuf = drtn = dkey;
+	while (*dkey == '/') dkey++;	/* skip the leading '/' */
 	while (*dkey) {
-		while (*dkey == '/') {
-			dkey++;
-		}
-		if (*dkey && (level > 0)) {
-			*dbuf++ = '/';
-		}
 		while (*dkey && (*dkey != '/')) {
 			*dbuf++ = *dkey++;
 		}
-		level++;
+		while (*dkey == '/') {
+			dkey++;
+		}
+		if (*dkey) {
+			*dbuf++ = '/';
+		}
 	}
 	*dbuf++ = 0;
+	//slogz("csc_cfg_format_directory: %s\n", drtn);
 	return drtn;
+}
+
+static char *csc_cfg_format_dir_alloc(char *dkey)
+{
+	char	*dbuf;
+
+	if ((dbuf = csc_strcpy_alloc(dkey, 0)) != NULL) {
+		csc_cfg_format_directory(dbuf);
+	}
+	return dbuf;
 }
 

@@ -96,7 +96,7 @@ static int config_open_rdonly(void)
 		slogz("can't open\n");
 		return -1;
 	}
-	csc_cfg_dump(root, NULL);
+	csc_cfg_dump(root);
 	if (csc_cfg_save(root) == SMM_ERR_NONE) {
 		slogz("FATAL: should be read only\n");
 		csc_cfg_abort(root);
@@ -124,7 +124,7 @@ static int config_open_with_directory(void)
 		slogz("Weird\n");
 		return -1;
 	}
-	csc_cfg_dump(cfg, NULL);
+	csc_cfg_dump(cfg);
 	csc_cfg_close(cfg);
 	return 0;
 }
@@ -296,7 +296,8 @@ int config_main(void *rtime, int argc, char **argv)
 	int	c;
 
 	if (argc < 2) {
-		csc_cli_print(clist, NULL);
+		//csc_cli_print(clist, NULL);
+		config_open_with_directory();
 		return 0;
 	}
 	if ((rtime = csc_cli_qopt_open(argc, argv)) == NULL) {
@@ -330,8 +331,6 @@ int config_main(void *rtime, int argc, char **argv)
 		}
 	}
 	csc_cli_qopt_close(rtime);
-
-	config_open_with_directory();
 	return 0;
 }
 

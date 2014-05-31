@@ -363,7 +363,7 @@ int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
 void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
 int csc_cfg_dump_kcb(KEYCB *cfg);
-int csc_cfg_dump(KEYCB *cfg, char *dkey);
+int csc_cfg_dump(KEYCB *cfg);
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
