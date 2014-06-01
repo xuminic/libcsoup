@@ -117,6 +117,7 @@ static int config_open_with_directory(void)
 [main/dev]\n\
 [/hardware/driver///howsit]\n\
 [/usr/andy]\n\
+key=value\n\
 [/usr/boy]\n";
 
 	if ((cfg = csc_cfg_open(SMM_CFGROOT_MEMPOOL, config, 
@@ -125,6 +126,7 @@ static int config_open_with_directory(void)
 		return -1;
 	}
 	csc_cfg_dump(cfg);
+	csc_cfg_saveas(cfg, SMM_CFGROOT_MEMPOOL, NULL, NULL);
 	csc_cfg_close(cfg);
 	return 0;
 }
