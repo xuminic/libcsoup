@@ -46,6 +46,7 @@ struct	KeyDev	{
 
 
 static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname);
+static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp);
 static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp);
 static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp);
 
@@ -122,12 +123,13 @@ int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
 		return smm_config_registry_read(cfgd, kp);
-	} else {
-		return smm_config_file_read(cfgd, kp);
 	}
-#else
-	return smm_config_file_read(cfgd, kp);
 #endif
+	if (cfgd->fp) {
+		return smm_config_file_read(cfgd, kp);
+	} else {
+		return smm_config_mem_read(cfgd, kp);
+	}
 }
 
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
@@ -135,12 +137,12 @@ int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
 		return smm_config_registry_write(cfgd, kp);
-	} else {
+	}
+#endif
+	if (cfgd->fp || (cfgd->fname == NULL)) {
 		return smm_config_file_write(cfgd, kp);
 	}
-#else
-	return smm_config_file_write(cfgd, kp);
-#endif
+	return 0;
 }
 
 int smm_config_delete(int sysdir, char *path, char *fname)
@@ -298,24 +300,36 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 	return cfgd;
 }
 
+static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp)
+{
+	int	i, cpos;
+
+	if (cfgd->fpath == NULL) {
+		return -1;
+	}
+	if (cfgd->fname != NULL) {
+		return -2;
+	}
+	for (i = 0, cpos = cfgd->mode; cfgd->fpath[cpos]; i++) {
+		if (kp) {
+			kp->pool[i] = cfgd->fpath[cpos];
+			kp->pool[i+1] = 0;
+			cfgd->mode++;
+		}
+		if (cfgd->fpath[cpos++] == '\n') {
+			i++;
+			break;
+		}
+	}
+	return i;
+}
+
 static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)
 {
 	int	amnt, cpos, ch;
 
-	if ((cfgd->fp == NULL) && (cfgd->fname == NULL)) {	
-		/* configure in memory mode */
-		for (ch = 0, cpos = cfgd->mode; cfgd->fpath[cpos]; ch++) {
-			if (kp) {
-				kp->pool[ch] = cfgd->fpath[cpos];
-				kp->pool[ch+1] = 0;
-				cfgd->mode++;
-			}
-			if (cfgd->fpath[cpos++] == '\n') {
-				ch++;
-				break;
-			}
-		}
-		return ch;
+	if (cfgd->fp == NULL) {	
+		return -1;
 	}
 
 	amnt = 0;
