@@ -10,7 +10,7 @@ endif
 CFLAGS	+= -I..
 
 SRCS	= main.c fixtoken.c memdump.c slog.c crc.c fontpath.c config.c \
-	  csc_cdll.c csc_cli.c
+	  csc_cdll.c csc_cli.c smm.c
 
 TARGET	= csoup
 

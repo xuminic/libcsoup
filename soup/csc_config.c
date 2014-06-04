@@ -94,6 +94,8 @@ static KEYCB *csc_cfg_root_alloc(int sysdir, char *path, char *filename, int);
 static KEYCB *csc_cfg_kcb_create(char *key, char *value, char *comm);
 static int csc_cfg_kcb_fillup(KEYCB *kp);
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type);
+static KEYCB *csc_cfg_find_dir_exec(KEYCB *cfg, char *key);
+static KEYCB *csc_cfg_find_dir(KEYCB *cfg, char *dkey);
 static KEYCB *csc_cfg_mkdir(KEYCB *cfg, char *key, char *value, char *comm);
 static int csc_cfg_insert(KEYCB *cfg, KEYCB *kcb);
 static int csc_cfg_access_setup(KEYCB *cfg, KEYCB *dkcb, KEYCB *kcb);
@@ -239,13 +241,8 @@ int csc_cfg_close(KEYCB *cfg)
 char *csc_cfg_read(KEYCB *cfg, char *dkey, char *nkey)
 {
 	KEYCB	*dcb, *ncb;
-	char	*fkey;
 
-	dcb = cfg;
-	if (dkey && ((fkey = csc_cfg_format_dir_alloc(dkey)) != NULL)) {
-		dcb = csc_cfg_find_key(cfg, fkey, CFGF_TYPE_DIR);
-		smm_free(fkey);
-	}
+	dcb = csc_cfg_find_dir(cfg, dkey);
 	if ((ncb = csc_cfg_find_key(dcb, nkey, CFGF_TYPE_KEY)) == NULL) {
 		return NULL;
 	}
@@ -294,25 +291,15 @@ char *csc_cfg_copy(KEYCB *cfg, char *dkey, char *nkey, int extra)
 int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value)
 {
 	KEYCB	*dcb, *ncb, *kcb;
-	char	*fkey;
 	int	olen, nlen;
 
 	if ((value == NULL) || (nkey == NULL) || (cfg == NULL)) {
 		return SMM_ERR_NULL;
 	}
 
-	dcb = cfg;
-	if (dkey && ((fkey = csc_cfg_format_dir_alloc(dkey)) != NULL)) {
-		dcb = csc_cfg_find_key(cfg, fkey, CFGF_TYPE_DIR);
-		if (dcb == NULL) {
-			dcb = csc_cfg_mkdir(cfg, fkey, NULL, NULL);
-		}
-		smm_free(fkey);
-		if (dcb == NULL) {
-			return SMM_ERR_NULL;
-		}
+	if ((dcb = csc_cfg_mkdir(cfg, dkey, NULL, NULL)) == NULL) {
+		return SMM_ERR_NULL;
 	}
-
 	if ((ncb = csc_cfg_find_key(dcb, nkey, CFGF_TYPE_KEY)) == NULL) {
 		/* if the key doesn't exist, it'll create a new key and
 		 * insert to the tail. To tail shows a more natural way
@@ -450,16 +437,11 @@ int csc_cfg_write_bin(KEYCB *cfg, char *dkey, char *nkey, void *bin, int bsize)
 int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen)
 {
 	KEYCB	*dcb, *ncb;
-	char	*src, *fkey, tmp[256];
+	char	*src, tmp[256];
 	int	len, amnt;
 
-	dcb = cfg;
-	if (dkey && ((fkey = csc_cfg_format_dir_alloc(dkey)) != NULL)) {
-		dcb = csc_cfg_find_key(cfg, fkey, CFGF_TYPE_DIR);
-		smm_free(fkey);
-		if (dcb == NULL) {
-			return -1;	/* block not found */
-		}
+	if ((dcb = csc_cfg_find_dir(cfg, dkey)) == NULL) {
+		return -1; 	/* block not found */
 	}
 	if (strcmp(dcb->value, CFGF_BLOCK_MAGIC)) {
 		return -2;	/* wrong block type */
@@ -508,32 +490,22 @@ void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize)
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize)
 {
 	KEYCB	*dcb, *ncb;
-	char	*src, *fkey, tmp[CFGF_BLOCK_WID * 4];
+	char	*src, tmp[CFGF_BLOCK_WID * 4];
 	int	len, rest;
 
 	if (!bin || !bsize || !cfg) {
 		return SMM_ERR_NULL;
 	}
 
-	dcb = cfg;
-	if (dkey && ((fkey = csc_cfg_format_dir_alloc(dkey)) != NULL)) {
-		dcb = csc_cfg_find_key(cfg, fkey, CFGF_TYPE_DIR);
-		if (dcb == NULL) {
-			/* if the directory key doesn't exist, create a new 
-			 * key and insert to the tree */
-			dcb = csc_cfg_mkdir(cfg, fkey, CFGF_BLOCK_MAGIC, NULL);
-		}
-		smm_free(fkey);
-		if (dcb == NULL) {
-			return SMM_ERR_LOWMEM;
-		} else if (strcmp(dcb->value, CFGF_BLOCK_MAGIC)) {
-			/* you can't write blocks into other types of dir keys */
-			return SMM_ERR_ACCESS;
-		} else {
-			/* if the directory key does exist, destory its contents */
-			csc_cdl_list_destroy(&dcb->anchor);
-			dcb->update = 0;
-		}
+	if ((dcb = csc_cfg_mkdir(cfg, dkey, CFGF_BLOCK_MAGIC, NULL)) == NULL) {
+		return SMM_ERR_LOWMEM;
+	} else if (strcmp(dcb->value, CFGF_BLOCK_MAGIC)) {
+		/* you can't write blocks into other types of dir keys */
+		return SMM_ERR_ACCESS;
+	} else {
+		/* if the directory key does exist, destory its contents */
+		csc_cdl_list_destroy(&dcb->anchor);
+		dcb->update = 0;
 	}
 
 	for (src = bin, rest = bsize; rest > 0; rest -= CFGF_BLOCK_WID) {
@@ -552,6 +524,11 @@ int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize)
 	}
 	cfg->update++;
 	return bsize;
+}
+
+int csc_cfg_isdir(KEYCB *kcb)
+{
+	return (CFGF_TYPE_GET(kcb->flags) == CFGF_TYPE_DIR);
 }
 
 int csc_cfg_dump_kcb(KEYCB *kp)
@@ -804,7 +781,7 @@ static int csc_cfg_kcb_fillup(KEYCB *kp)
 
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type)
 {
-	KEYCB	*kcb, *ktmp;
+	KEYCB	*kcb;
 	CSCLNK	*mp;
 
 	if (cfg == NULL) {
@@ -825,36 +802,87 @@ static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type)
 				return kcb;
 			}
 		}
-		if ((CFGF_TYPE_GET(kcb->flags) == CFGF_TYPE_DIR) && 
-				(kcb->anchor != NULL)) {
-			ktmp = csc_cfg_find_key(kcb, key, type);
-			if (ktmp != NULL) {
-				return ktmp;
-			}
+	}
+	return NULL;
+}
+
+static KEYCB *csc_cfg_find_dir_exec(KEYCB *cfg, char *key)
+{
+	KEYCB	*kcb;
+	CSCLNK	*mp;
+
+	for (mp = cfg->anchor; mp; mp = csc_cdl_next(cfg->anchor, mp)) {
+		if ((kcb = CFGF_GETOBJ(mp)) == NULL) {
+			break;
+		}
+		if (CFGF_TYPE_GET(kcb->flags) != CFGF_TYPE_DIR) {
+			continue;
+		}
+		if (kcb->key && !csc_cfg_strcmp(kcb->key, key)) {
+			return kcb;
+		}
+		if (kcb->anchor == NULL) {
+			continue;
+		}
+		if ((kcb = csc_cfg_find_dir_exec(kcb, key)) != NULL) {
+			return kcb;
 		}
 	}
 	return NULL;	/* directory key doesn't exist */
 }
 
-static KEYCB *csc_cfg_mkdir(KEYCB *cfg, char *key, char *value, char *comm)
+static KEYCB *csc_cfg_find_dir(KEYCB *cfg, char *dkey)
+{
+	KEYCB	*dcb;
+	char	*fkey;
+
+	if (cfg == NULL) {
+		return NULL;
+	}
+	if ((dkey == NULL) || (*dkey == 0)) {
+		return cfg;
+	}
+	if ((fkey = csc_cfg_format_dir_alloc(dkey)) == NULL) {
+		return NULL;
+	}
+	dcb = csc_cfg_find_dir_exec(cfg, fkey);
+	smm_free(fkey);
+	return dcb;
+}
+
+static KEYCB *csc_cfg_mkdir(KEYCB *cfg, char *dkey, char *value, char *comm)
 {
 	KEYCB	*dcb, *dlast;
-	char	*p;
+	char	*p, *fkey;
 
-	p = key;
+	if (cfg == NULL) {
+		return NULL;
+	}
+	if ((dkey == NULL) || (*dkey == 0)) {
+		return cfg;
+	}
+	if ((fkey = csc_cfg_format_dir_alloc(dkey)) == NULL) {
+		return NULL;
+	}
+	if ((dcb = csc_cfg_find_dir_exec(cfg, fkey)) != NULL) {
+		smm_free(fkey);
+		return dcb;
+	}
+
+	p = fkey;
 	dlast = cfg;
 	do {
 		if ((p = strchr(p, '/')) != NULL) {
 			*p = 0;
 		}
-		if ((dcb = csc_cfg_find_key(cfg, key, CFGF_TYPE_DIR)) == NULL) {
+		if ((dcb = csc_cfg_find_dir_exec(cfg, fkey)) == NULL) {
 			if (p == NULL) {	/* last directory */
-				dcb = csc_cfg_kcb_create(key, value, comm);
+				dcb = csc_cfg_kcb_create(fkey, value, comm);
 			} else {
-				dcb = csc_cfg_kcb_create(key, NULL, NULL);
+				dcb = csc_cfg_kcb_create(fkey, NULL, NULL);
 			}
 			if (dcb == NULL) {
-				return NULL;
+				break;
 			}
 			dcb->flags  = CFGF_TYPE_SET(dcb->flags, CFGF_TYPE_DIR);
 			dcb->update = 0;        /* reset the counter */
@@ -866,6 +894,7 @@ static KEYCB *csc_cfg_mkdir(KEYCB *cfg, char *key, char *value, char *comm)
 			*p++ = '/';
 		}
 	} while (p);
+	smm_free(fkey);
 	return dcb;
 }
 

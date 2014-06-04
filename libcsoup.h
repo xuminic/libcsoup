@@ -362,6 +362,7 @@ int csc_cfg_write_bin(KEYCB *cfg, char *dkey, char *nkey, void *bin, int bsize);
 int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
 void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
+int csc_cfg_isdir(KEYCB *kcb);
 int csc_cfg_dump_kcb(KEYCB *cfg);
 int csc_cfg_dump(KEYCB *cfg);
 #ifdef __cplusplus
@@ -594,20 +595,12 @@ int smm_codepage(void);
 int smm_codepage_set(int cpno);
 int smm_codepage_reset(void);
 
-/*void *smm_config_open(int sysroot, int mode, char *path, char *fname);
-int smm_config_flush(void *cfg);
-int smm_config_close(void *cfg);
-int smm_config_delete(int sysroot, char *path, char *fname);
-char *smm_config_read_alloc(void *cfg, char *mkey, char *skey);
-int smm_config_write(void *cfg, char *mkey, char *skey, char *value);
-int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val);
-int smm_config_write_long(void *cfg, char *mkey, char *skey, long val);
-int smm_config_read_int(void *cfg, char *mkey, char *skey, int *val);
-int smm_config_write_int(void *cfg, char *mkey, char *skey, int val);*/
 struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode);
 int smm_config_close(struct KeyDev *cfgd);
 int smm_config_read(struct KeyDev *cfgd, KEYCB *kp);
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp);
+int smm_config_delete(int sysdir, char *path, char *fname);
+void smm_config_dump(struct KeyDev *cfgd);
 
 char *smm_cwd_alloc(int extra);
 int smm_cwd_pop(void *cwid);

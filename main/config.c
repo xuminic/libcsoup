@@ -121,11 +121,20 @@ key=value\n\
 [/usr/boy]\n";
 
 	if ((cfg = csc_cfg_open(SMM_CFGROOT_MEMPOOL, config, 
-					NULL, 0)) == NULL) {
+					NULL, CSC_CFG_READ)) == NULL) {
 		slogz("Weird\n");
 		return -1;
 	}
+	
+	csc_cfg_write(cfg, "main/dev/usb", "camara", "xxooxxoo");
+	csc_cfg_write(cfg, NULL, "myprofile", "n/a");
+	csc_cfg_write(cfg, "", "wtf", "beam");
+	csc_cfg_write(cfg, "/hardware/driver///howsit", "good", "day");
 	csc_cfg_dump(cfg);
+
+	csc_cfg_write_bin(cfg, "/usr/bin", "simple", cfg, sizeof(KEYCB));
+	csc_cfg_write_block(cfg, "/usr/block", config, strlen(config));
+
 	csc_cfg_saveas(cfg, SMM_CFGROOT_MEMPOOL, NULL, NULL);
 	csc_cfg_close(cfg);
 	return 0;
@@ -290,6 +299,7 @@ static	struct	cliopt	clist[] = {
 	{ 'k', "key-test",  0, "Test the key and value pairs" },
 	{ 'b', "block",     1, "Test the block in the configure file" },
 	{ 'c', "create",    0, "Create a new configure file" },
+	{ 'm', "memtest",   0, "Test memory configure" },
 	{ 0, NULL, 0, NULL }
 };
 
@@ -298,8 +308,7 @@ int config_main(void *rtime, int argc, char **argv)
 	int	c;
 
 	if (argc < 2) {
-		//csc_cli_print(clist, NULL);
-		config_open_with_directory();
+		csc_cli_print(clist, NULL);
 		return 0;
 	}
 	if ((rtime = csc_cli_qopt_open(argc, argv)) == NULL) {
@@ -321,6 +330,9 @@ int config_main(void *rtime, int argc, char **argv)
 			break;
 		case 'c':
 			config_create_new();
+			break;
+		case 'm':
+			config_open_with_directory();
 			break;
 		default:
 			if (csc_cli_qopt_optopt(rtime) == ':') {

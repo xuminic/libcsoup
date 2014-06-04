@@ -62,10 +62,15 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 {
 	struct	KeyDev	*cfgd;
 
-	/* configure in memory mode */
+	/* configure in memory mode.
+	 * Note that in memory mode, the 'path' parameter points to the 
+	 * contents of the configure and the 'mode' parameter stores the size
+	 * of the memory of the configure. In memory mode, the access mode
+	 * is always read/write/create. */
 	if (sysdir == SMM_CFGROOT_MEMPOOL) {
 		if ((cfgd = smm_alloc(sizeof(struct KeyDev))) != NULL) {
 			cfgd->fpath = path;
+			cfgd->mode  = mode;
 		}
 		return cfgd;
 	}
@@ -93,9 +98,11 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 			cfgd->fp = fopen(cfgd->fpath, "w+");
 		}
 		break;
-	default:	/* CSC_CFG_RDWR */
+	case CSC_CFG_RDWR:
 		cfgd->fp = fopen(cfgd->fpath, "r+");
 		break;
+	default:	/* stdio */
+		return cfgd;
 	}
 	if (cfgd->fp == NULL) {
 		smm_free(cfgd);
@@ -108,8 +115,8 @@ int smm_config_close(struct KeyDev *cfgd)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		RegFlushKey(cfgd->hRootKe);
-		RegCloseKey(cfgd->hRootKe);
+		RegFlushKey(cfgd->hRootKey);
+		RegCloseKey(cfgd->hRootKey);
 	}
 #endif
 	if (cfgd->fp) {
@@ -125,24 +132,24 @@ int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
 		return smm_config_registry_read(cfgd, kp);
 	}
 #endif
-	if (cfgd->fp) {
-		return smm_config_file_read(cfgd, kp);
-	} else {
+	if (!cfgd->fp) {
 		return smm_config_mem_read(cfgd, kp);
 	}
+	return smm_config_file_read(cfgd, kp);
 }
 
+//FIXME: STOP HERE!!
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		return smm_config_registry_write(cfgd, kp);
+		smm_config_registry_write(cfgd, kp);
 	}
 #endif
-	if (cfgd->fp || (cfgd->fname == NULL)) {
-		return smm_config_file_write(cfgd, kp);
+	if (!cfgd->fp && !cfgd->fname) {
+		return smm_config_mem_write(cfgd, kp);
 	}
-	return 0;
+	return smm_config_file_write(cfgd, kp);
 }
 
 int smm_config_delete(int sysdir, char *path, char *fname)
@@ -150,6 +157,9 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 	struct	KeyDev	*cfgd;
 	int	rc;
 
+	if (sysdir == SMM_CFGROOT_MEMPOOL) {
+		return smm_errno_update(SMM_ERR_NULL);
+	}
 	if ((cfgd = smm_config_alloc(sysdir, path, fname)) == NULL) {
 		return smm_errno_update(SMM_ERR_NULL);
 	}
@@ -173,8 +183,22 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 	return smm_errno_update(SMM_ERR_NULL);
 }
 
-
-
+void smm_config_dump(struct KeyDev *cfgd)
+{
+#ifdef	CFG_WIN32_API
+	slogz("Device:    Reg=%s File=%s Mem=%s\n", 
+			cfgd->hRootKey ? "Yes" : "No",
+			cfgd->fp ? "Yes" : "No",
+			cfgd->fname ? "No" : "Yes");
+#else
+	slogz("Device:    File=%s Mem=%s\n",
+			cfgd->fp ? "Yes" : "No",
+			cfgd->fname ? "No" : "Yes");
+#endif
+	slogz("Full Path: %s\n", cfgd->fpath);
+	slogz("Reg Path:  %s\n", cfgd->kpath);
+	slogz("Configure: %s\n\n", cfgd->fname ? cfgd->fname : "stdout");
+}
 
 
 static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
@@ -245,7 +269,7 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 #endif
 		break;
 	case SMM_CFGROOT_SYSTEM:
-		strcat(cfgd->fpath, "/etc");	//FIXME
+		strcat(cfgd->fpath, "/etc/");	//FIXME
 		if (path) {
 			strcat(cfgd->fpath, path);
 			strcat(cfgd->fpath, SMM_DEF_DELIM);
@@ -292,11 +316,20 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 		strcat(cfgd->fpath, fname);
 		break;
 	}
+	
+	/* convert the '/' to '\\' in the registry path */
+	if (cfgd->kpath) {
+		for (home = cfgd->kpath; *home; home++) {
+			if (*home == '/') {
+				*home = '\\';
+			}
+		}
+	}
 
 	/* check point */
-	slogz("smm_config_alloc::fpath = %s\n", cfgd->fpath);
-	slogz("smm_config_alloc::kpath = %s\n", cfgd->kpath);
-	slogz("smm_config_alloc::fname = %s\n", cfgd->fname);
+	//slogz("smm_config_alloc::fpath = %s\n", cfgd->fpath);
+	//slogz("smm_config_alloc::kpath = %s\n", cfgd->kpath);
+	//slogz("smm_config_alloc::fname = %s\n", cfgd->fname);
 	return cfgd;
 }
 
@@ -324,12 +357,44 @@ static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp)
 	return i;
 }
 
+static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
+{
+	FILE	*fout;
+
+	if (kp == NULL) {
+		return 0;
+	}
+	if ((fout = cfgd->fp) == NULL) {
+		fout = stdout;
+	}
+
+	kp->update = 0;		/* reset the update counter */
+	if (kp->key) {
+		if (csc_cfg_isdir(kp)) {
+			fputc('[', fout);
+			fputs(kp->key, fout);
+			fputc(']', fout);
+		} else {
+			fputs(kp->key, fout);
+		}
+	}
+	if (kp->value) {
+		fputc('=', fout);
+		fputs(kp->value, fout);
+	}
+	if (kp->comment) {
+		fputs(kp->comment, fout);
+	}
+	fputs("\n", fout);
+	return 0;
+}
+
 static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)
 {
 	int	amnt, cpos, ch;
 
-	if (cfgd->fp == NULL) {	
-		return -1;
+	if (cfgd->fp == NULL) {
+		return 0;
 	}
 
 	amnt = 0;
@@ -364,8 +429,7 @@ static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 
 	kp->update = 0;		/* reset the update counter */
 	if (kp->key) {
-		//if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_MASTR) {
-		if ((kp->flags & 0xf) == 2) {	//FIXME
+		if (csc_cfg_isdir(kp)) {
 			fputc('[', fout);
 			fputs(kp->key, fout);
 			fputc(']', fout);

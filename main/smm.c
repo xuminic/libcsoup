@@ -62,29 +62,34 @@ static int do_smm_chdir(char *path)
 
 static int do_smm_config(char *path)
 {
-	void	*root;
-	char	*val;
-	long	vlong;
+	struct	KeyDev	*root;
+	int	i;
+	int	syspath[] = { SMM_CFGROOT_DESKTOP, SMM_CFGROOT_USER, 
+			SMM_CFGROOT_SYSTEM, SMM_CFGROOT_CURRENT, 
+			SMM_CFGROOT_MEMPOOL };
+        
+	char    *config = "\
+[main/dev/holiday]\n\
+[main/dev]\n\
+[/hardware/driver///howsit]\n\
+[/usr/andy]\n\
+key=value\n\
+[/usr/boy]\n";
 
-	root = smm_config_open(0, SMM_CFGMODE_RWC, TEST_PATH, TEST_FILE);
-	if (root == NULL) {
-		slogc(tstdbg, SLINFO, "Failed\n");
-		return -1;
+	for (i = 0; i < sizeof(syspath)/sizeof(int); i++) {
+		root = smm_config_open(syspath[i], TEST_PATH, 
+				TEST_FILE, 0x30);
+		if (root) {
+			smm_config_dump(root);
+			smm_config_close(root);
+		}
 	}
-	smm_config_write(root, NULL, "Hello", "This is a hello key");
-	smm_config_write(root, "[main]", "World", "This is a world key");
-	smm_config_write_long(root, "[main]", "Width", (long)1024);
 
-	val = smm_config_read_alloc(root, "[main]", "World");
-	puts(val);
-	smm_free(val);
-	smm_config_read_long(root, "[main]", "Width", &vlong);
-	printf("%ld\n", vlong);
-	smm_config_close(root);
-
-	if (!strcmp(path, "del")) {
-		smm_config_delete(0, TEST_PATH, TEST_FILE);
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, CSC_CFG_READ);
+	while ((i = smm_config_read(root, NULL)) > 0) {
+		slogz("READ: %d\n", i);
 	}
+
 	return 0;
 }
 
