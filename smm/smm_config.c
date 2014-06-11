@@ -27,7 +27,19 @@
 
 #include "libcsoup.h"
 
-
+/* How to find out the input/output device.
+ * Input:
+ *   *) Win32 Registry: hRootKey != NULL
+ *   *) File system: fp != NULL
+ *   *) Memory cache: fname == NULL && fpath == configure (kpath = counter)
+ *   *) stdin: fname == NULL && fpath == NULL
+ * Input priority: Registry > File > Memory > stdio
+ * Output:
+ *   *) Win32 Registry: hRootKey != NULL
+ *   *) File system: fp != NULL
+ *   *) Memory cache: fname == NULL && fpath == configure && mode > 0
+ *   *) stdout: fname == NULL && (mode == 0 || fpath == NULL)
+ */
 struct	KeyDev	{
 	FILE	*fp;
 	int	mode;
@@ -47,6 +59,7 @@ struct	KeyDev	{
 
 static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname);
 static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp);
+static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp);
 static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp);
 static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp);
 
@@ -58,6 +71,49 @@ static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname);
 static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen);
 #endif
 
+
+/*!\brief Open the input/output device for the configuration manager
+
+   \param[in]  sysdir The identity of system directory. In Win32, the system
+   directory normally points to the registry like HKEY_CURRENT_USER\\SOFTWARE.
+   In Posix, the configure file is normally stored in the file system like
+   $HOME/.config. However it is also possible for Win32 to store the configure
+   file like Posix. Current identities of system directory are:
+
+   SMM_CFGROOT_DESKTOP: $HOME/.config in Posix, or HKEY_CURRENT_USER\\SOFTWARE
+                        in Windows.
+   SMM_CFGROOT_USER: $HOME in Posix, or HKEY_CURRENT_USER\\CONSOLE in Windows.
+   SMM_CFGROOT_SYSTEM: /etc in Posix, or HKEY_LOCAL_MACHINE\\SOFTWARE
+                       in Windows.
+   SMM_CFGROOT_CURRENT: starting from the current directory.
+   SMM_CFGROOT_MEMPOOL: the contents of the configuration is stored in the 
+         memory buffer pointed by 'path'. 'fname' will be ignored.
+	 If 'mode' is 0, the configuration memory buffer is read only and 
+	 the output will be written to the stdout. If 'mode' is greater 
+	 than 0, which means the size of the configuration memory buffer,
+	 the output will be written back to the memory buffer until it's full.
+                      
+   \param[in]  path Specify the path to the configure file in the file system.
+        It can also be the path in Registry of Windows pointing to the parent
+	key before the configure key. In SMM_CFGROOT_MEMPOOL mode, the 'path'
+	points to the memory buffer where the content of configure holded.
+
+   \param[in]  fname Specify the name of the configure in the file system.
+        In Registry of Windows, it's the name of the key to the configures.
+	In SMM_CFGROOT_MEMPOOL mode, it should be NULL.
+
+   \param[in]  mode The access mode to the registry or to the file. It can be
+        CSC_CFG_READ, which means read only, CSC_CFG_RDWR, which means read
+        and write, or CSC_CFG_RWC, which means read/write/create. Note that
+	the smm_config module doesn't support random access so the write 
+	operation will always over write the previous contents.
+	In SMM_CFGROOT_MEMPOOL mode, the 'mode' can be 0, whicn means read 
+	only, or be the size of the memory buffer. If the 'mode' specifies
+	the size of the memory buffer, the access mode is always be read and
+	write.
+
+   \return A pointer to the 'KeyDev' structure if succeed, or NULL if failed.
+*/
 struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 {
 	struct	KeyDev	*cfgd;
@@ -70,6 +126,7 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 	if (sysdir == SMM_CFGROOT_MEMPOOL) {
 		if ((cfgd = smm_alloc(sizeof(struct KeyDev))) != NULL) {
 			cfgd->fpath = path;
+			cfgd->kpath = path;	/* reset the runtime index */
 			cfgd->mode  = mode;
 		}
 		return cfgd;
@@ -101,7 +158,7 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 	case CSC_CFG_RDWR:
 		cfgd->fp = fopen(cfgd->fpath, "r+");
 		break;
-	default:	/* stdio */
+	case 0xdeadbeef:	/* debug mode */
 		return cfgd;
 	}
 	if (cfgd->fp == NULL) {
@@ -132,22 +189,32 @@ int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
 		return smm_config_registry_read(cfgd, kp);
 	}
 #endif
-	if (!cfgd->fp) {
-		return smm_config_mem_read(cfgd, kp);
+	if (cfgd->fp) {
+		return smm_config_file_read(cfgd, kp);
 	}
-	return smm_config_file_read(cfgd, kp);
+	if (cfgd->fname == NULL) {
+		if (cfgd->fpath) {
+			return smm_config_mem_read(cfgd, kp);
+		}
+		/* stdio has not implemented */
+	}
+	return -1;
 }
 
-//FIXME: STOP HERE!!
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		smm_config_registry_write(cfgd, kp);
+		if (cfgd->mode != CSC_CFG_READ) {
+			smm_config_registry_write(cfgd, kp);
+		}
 	}
 #endif
-	if (!cfgd->fp && !cfgd->fname) {
+	if ((cfgd->fname == NULL) && cfgd->fpath && cfgd->mode) {
 		return smm_config_mem_write(cfgd, kp);
+	}
+	if (cfgd->mode == CSC_CFG_READ) {
+		return smm_errno_update(SMM_ERR_ACCESS);
 	}
 	return smm_config_file_write(cfgd, kp);
 }
@@ -185,19 +252,52 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 
 void smm_config_dump(struct KeyDev *cfgd)
 {
+	slogz("Device:    Read from ");
 #ifdef	CFG_WIN32_API
-	slogz("Device:    Reg=%s File=%s Mem=%s\n", 
-			cfgd->hRootKey ? "Yes" : "No",
-			cfgd->fp ? "Yes" : "No",
-			cfgd->fname ? "No" : "Yes");
-#else
-	slogz("Device:    File=%s Mem=%s\n",
-			cfgd->fp ? "Yes" : "No",
-			cfgd->fname ? "No" : "Yes");
+	if (cfgd->hRootKey) {
+		slogz("Registry");
+	} else
 #endif
-	slogz("Full Path: %s\n", cfgd->fpath);
-	slogz("Reg Path:  %s\n", cfgd->kpath);
-	slogz("Configure: %s\n\n", cfgd->fname ? cfgd->fname : "stdout");
+	if (cfgd->fp) {
+		slogz("%s", cfgd->fname);
+	} else if (cfgd->fname == NULL) {
+		if (cfgd->fpath) {
+			slogz("%p", cfgd->fpath);
+		} else {
+			slogz("stdin");
+		}
+	} else {
+		slogz("*%s", cfgd->fname);
+	}
+	slogz(". Write to ");
+#ifdef	CFG_WIN32_API
+	if (cfgd->hRootKey) {
+		slogz("(Registry)");
+	}
+#endif
+	if (cfgd->fp) {
+		slogz("(%s)", cfgd->fname);
+	}
+	if (cfgd->fname == NULL) {
+		if (cfgd->fpath == NULL) {
+			slogz("(*stdout)");
+		} else if (cfgd->mode) {
+			slogz("(%p+%d)", cfgd->fpath, cfgd->mode);
+		} else {
+			slogz("(stdout)");
+		}
+	} else {
+		slogz("(*%s)", cfgd->fname);
+	}
+	slogz("\n");
+
+	if (!cfgd->fname && cfgd->fpath) {
+		slogz("Memory:    %p %p\n", cfgd->fpath, cfgd->kpath);
+	} else {
+		slogz("Full Path: %s\n", cfgd->fpath);
+		slogz("Reg Path:  %s\n", cfgd->kpath);
+	}
+	slogz("\n");
 }
 
 
@@ -335,58 +435,66 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 
 static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp)
 {
-	int	i, cpos;
+	int	i;
 
-	if (cfgd->fpath == NULL) {
-		return -1;
-	}
-	if (cfgd->fname != NULL) {
-		return -2;
-	}
-	for (i = 0, cpos = cfgd->mode; cfgd->fpath[cpos]; i++) {
+	for (i = 0; cfgd->kpath[i]; i++) {
 		if (kp) {
-			kp->pool[i] = cfgd->fpath[cpos];
-			kp->pool[i+1] = 0;
-			cfgd->mode++;
+			kp->pool[i] = cfgd->kpath[i];
 		}
-		if (cfgd->fpath[cpos++] == '\n') {
+		if (cfgd->kpath[i] == '\n') {
 			i++;
 			break;
 		}
 	}
+	if (kp) {
+		kp->pool[i] = 0;
+		cfgd->kpath += i;
+	}
 	return i;
 }
 
-static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
+static int mem_update(char **dest, char *s, int *room)
 {
-	FILE	*fout;
+	int	n;
+
+	n = strlen(s);
+	if (*room > n) {
+		strcpy(*dest, s);
+	} else if ((n = *room - 1) > 0) {
+		strncpy(*dest, s, n);
+	}
+	*dest += n;
+	*room -= n;
+	**dest = 0;
+	return n;
+}
+
+static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp)
+{
+	int	wtd = 0;
 
 	if (kp == NULL) {
 		return 0;
 	}
-	if ((fout = cfgd->fp) == NULL) {
-		fout = stdout;
-	}
-
-	kp->update = 0;		/* reset the update counter */
 	if (kp->key) {
 		if (csc_cfg_isdir(kp)) {
-			fputc('[', fout);
-			fputs(kp->key, fout);
-			fputc(']', fout);
+			wtd += mem_update(&cfgd->kpath, "[", &cfgd->mode);
+			wtd += mem_update(&cfgd->kpath, kp->key, &cfgd->mode);
+			wtd += mem_update(&cfgd->kpath, "]", &cfgd->mode);
 		} else {
-			fputs(kp->key, fout);
+			wtd += mem_update(&cfgd->kpath, kp->key, &cfgd->mode);
 		}
 	}
 	if (kp->value) {
-		fputc('=', fout);
-		fputs(kp->value, fout);
+		wtd += mem_update(&cfgd->kpath, "=", &cfgd->mode);
+		wtd += mem_update(&cfgd->kpath, kp->value, &cfgd->mode);
 	}
 	if (kp->comment) {
-		fputs(kp->comment, fout);
+		wtd += mem_update(&cfgd->kpath, kp->comment, &cfgd->mode);
 	}
-	fputs("\n", fout);
-	return 0;
+	wtd += mem_update(&cfgd->kpath, "\n", &cfgd->mode);
+	kp->update = 0;		/* reset the update counter */
+	return wtd;
 }
 
 static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)

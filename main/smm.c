@@ -65,29 +65,44 @@ static int do_smm_config(char *path)
 	struct	KeyDev	*root;
 	int	i;
 	int	syspath[] = { SMM_CFGROOT_DESKTOP, SMM_CFGROOT_USER, 
-			SMM_CFGROOT_SYSTEM, SMM_CFGROOT_CURRENT, 
-			SMM_CFGROOT_MEMPOOL };
-        
-	char    *config = "\
+			SMM_CFGROOT_SYSTEM, SMM_CFGROOT_CURRENT };
+	char    config[256] = "\
 [main/dev/holiday]\n\
 [main/dev]\n\
 [/hardware/driver///howsit]\n\
 [/usr/andy]\n\
 key=value\n\
 [/usr/boy]\n";
+	KEYCB	kbuf[16];
 
 	for (i = 0; i < sizeof(syspath)/sizeof(int); i++) {
 		root = smm_config_open(syspath[i], TEST_PATH, 
-				TEST_FILE, 0x30);
+				TEST_FILE, 0xdeadbeef);
 		if (root) {
 			smm_config_dump(root);
 			smm_config_close(root);
 		}
 	}
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
+	if (root) {
+		smm_config_dump(root);
+		smm_config_close(root);
+	}
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, sizeof(config));
+	if (root) {
+		smm_config_dump(root);
+		smm_config_close(root);
+	}
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, NULL, NULL, CSC_CFG_RWC);
+	if (root) {
+		smm_config_dump(root);
+		smm_config_close(root);
+	}
 
-	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, CSC_CFG_READ);
-	while ((i = smm_config_read(root, NULL)) > 0) {
-		slogz("READ: %d\n", i);
+
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
+	while ((i = smm_config_read(root, kbuf)) > 0) {
+		slogz("READ: %d %s", i, kbuf->pool);
 	}
 
 	return 0;

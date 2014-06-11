@@ -207,7 +207,11 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 		return SMM_ERR_ACCESS;
 	}
 
-	cfgd = smm_config_open(sysdir, path, filename, CSC_CFG_RWC);
+	if (sysdir == SMM_CFGROOT_MEMPOOL) {
+		cfgd = smm_config_open(sysdir, path, filename, strlen(path)+1);
+	} else {
+		cfgd = smm_config_open(sysdir, path, filename, CSC_CFG_RWC);
+	}
 	if (cfgd == NULL) {
 		return SMM_ERR_ACCESS;
 	}
