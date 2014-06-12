@@ -92,7 +92,7 @@ struct	KEYROOT	{
 static KEYCB *csc_cfg_kcb_alloc(int psize);
 static KEYCB *csc_cfg_root_alloc(int sysdir, char *path, char *filename, int);
 static KEYCB *csc_cfg_kcb_create(char *key, char *value, char *comm);
-static int csc_cfg_kcb_fillup(KEYCB *kp);
+int csc_cfg_kcb_fillup(KEYCB *kp);
 static KEYCB *csc_cfg_find_key(KEYCB *cfg, char *key, int type);
 static KEYCB *csc_cfg_find_dir_exec(KEYCB *cfg, char *key);
 static KEYCB *csc_cfg_find_dir(KEYCB *cfg, char *dkey);
@@ -207,10 +207,12 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 		return SMM_ERR_ACCESS;
 	}
 
-	if (sysdir == SMM_CFGROOT_MEMPOOL) {
-		cfgd = smm_config_open(sysdir, path, filename, strlen(path)+1);
-	} else {
+	if (sysdir != SMM_CFGROOT_MEMPOOL) {
 		cfgd = smm_config_open(sysdir, path, filename, CSC_CFG_RWC);
+	} else if (path) {
+		cfgd = smm_config_open(sysdir, path, filename,strlen(path)+1);
+	} else {
+		cfgd = smm_config_open(sysdir, path, filename, 0);
 	}
 	if (cfgd == NULL) {
 		return SMM_ERR_ACCESS;
@@ -717,7 +719,7 @@ static KEYCB *csc_cfg_kcb_create(char *key, char *val, char *comm)
 /* tricky part is, after this call, the key will point to the start address 
  * of it contents. however the value and comment will point to  a '\0', 
  * which content has been saved in store[] */
-static int csc_cfg_kcb_fillup(KEYCB *kp)
+int csc_cfg_kcb_fillup(KEYCB *kp)
 {
 	char	*p, *body;
 	int	i;

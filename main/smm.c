@@ -59,23 +59,26 @@ static int do_smm_chdir(char *path)
 #define TEST_PATH	"My/Com/pany"
 #endif
 #define TEST_FILE	"MyProduct"
+extern int csc_cfg_kcb_fillup(KEYCB *kp);
 
 static int do_smm_config(char *path)
 {
-	struct	KeyDev	*root;
+	struct	KeyDev	*root, *save, *sfd;
 	int	i;
+	char	sbuf[256];
 	int	syspath[] = { SMM_CFGROOT_DESKTOP, SMM_CFGROOT_USER, 
 			SMM_CFGROOT_SYSTEM, SMM_CFGROOT_CURRENT };
-	char    config[256] = "\
+	char    *config = "\
 [main/dev/holiday]\n\
 [main/dev]\n\
 [/hardware/driver///howsit]\n\
 [/usr/andy]\n\
-key=value\n\
+key   =   v alue  #  hello\n\
 [/usr/boy]\n";
 	KEYCB	kbuf[16];
 
-	for (i = 0; i < sizeof(syspath)/sizeof(int); i++) {
+	(void) path;
+	for (i = 0; i < (int)(sizeof(syspath)/sizeof(int)); i++) {
 		root = smm_config_open(syspath[i], TEST_PATH, 
 				TEST_FILE, 0xdeadbeef);
 		if (root) {
@@ -99,12 +102,36 @@ key=value\n\
 		smm_config_close(root);
 	}
 
-
+	memset(kbuf, 0, sizeof(kbuf));
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
 	while ((i = smm_config_read(root, kbuf)) > 0) {
 		slogz("READ: %d %s", i, kbuf->pool);
+		if (kbuf->key == NULL) {
+			csc_cfg_kcb_fillup(kbuf);
+		}
+		//slogz("%s/%s/%s\n", kbuf->key, kbuf->value, kbuf->comment);
+		smm_config_write(root, kbuf);
+		memset(kbuf, 0, sizeof(kbuf));
 	}
+	smm_config_close(root);
+	slogz("\n");
 
+	memset(kbuf, 0, sizeof(kbuf));
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
+	save = smm_config_open(SMM_CFGROOT_MEMPOOL, sbuf, NULL, sizeof(sbuf));
+	sfd = smm_config_open(SMM_CFGROOT_CURRENT, NULL, TEST_FILE, CSC_CFG_RWC);
+	while ((i = smm_config_read(root, kbuf)) > 0) {
+		if (kbuf->key == NULL) {
+			csc_cfg_kcb_fillup(kbuf);
+		}
+		smm_config_write(save, kbuf);
+		smm_config_write(sfd, kbuf);
+		memset(kbuf, 0, sizeof(kbuf));
+	}
+	smm_config_close(sfd);
+	smm_config_close(save);
+	smm_config_close(root);
+	slogz("%s", sbuf);
 	return 0;
 }
 
@@ -235,7 +262,7 @@ static int do_path_trek(char *path, int flags)
 static	struct	cliopt	clist[] = {
 	{   0, NULL,      0, "OPTIONS:" },
 	{ 'c', NULL,      1, "change current working directory" },
-	{ 'f', NULL,	  1, "configure file process" },
+	{ 'f', NULL,	  0, "configure file process" },
 	{ 'm', NULL,	  1, "make directory" },
 	{ 'p', NULL,      1, "push/pop current working directory" },
 	{ 'r', NULL,      1, "process directory recurrsively" },
@@ -294,7 +321,7 @@ int smm_main(void *rtime, int argc, char **argv)
 			do_smm_chdir(optarg);
 			break;
 		case 'f':
-			do_smm_config(optarg);
+			do_smm_config(NULL);
 			break;
 		case 'm':
 			do_smm_mkpath(optarg);

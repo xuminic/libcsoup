@@ -210,8 +210,12 @@ int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 		}
 	}
 #endif
-	if ((cfgd->fname == NULL) && cfgd->fpath && cfgd->mode) {
-		return smm_config_mem_write(cfgd, kp);
+	if (cfgd->fname == NULL) {
+		if (cfgd->fpath && cfgd->mode) {
+			return smm_config_mem_write(cfgd, kp);
+		} else {
+			return smm_config_file_write(cfgd, kp);
+		}
 	}
 	if (cfgd->mode == CSC_CFG_READ) {
 		return smm_errno_update(SMM_ERR_ACCESS);
