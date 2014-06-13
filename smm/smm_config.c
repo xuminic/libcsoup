@@ -49,6 +49,8 @@ struct	KeyDev	{
 #ifdef	CFG_WIN32_API
 	HKEY	hSysKey;	/* predefined key like HKEY_CURRENT_USER */
 	HKEY	hRootKey;	/* root key points to the entrance */
+	TCHAR	cpath[MAX_PATH];
+	int	cval;
 	int	idx_key[MAX_PATH];	/* index of keys (Win32 values */
 	int	idx_dir[MAX_PATH];	/* index of directories (Win32 subkeys) */
 	int	idx_no;
@@ -135,14 +137,20 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 	if ((cfgd = smm_config_alloc(sysdir, path, fname)) == NULL) {
 		return NULL;
 	}
-
 	cfgd->mode = mode;
+	
+	/* debug mode 0xdeadbeef.
+	 * In this mode, the function will return by assuming the output
+	 * device is available but empty without verify the descriptor */
+	if (mode == 0xdeadbeef) {
+		return cfgd;
+	}
+
 #ifdef	CFG_WIN32_API
 	if (smm_config_registry_open(cfgd, mode) == SMM_ERR_NONE) {
 		return cfgd;
 	}
 #endif
-
 	switch (mode) {
 	case CSC_CFG_READ:
 		cfgd->fp = fopen(cfgd->fpath, "r");
@@ -158,8 +166,6 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 	case CSC_CFG_RDWR:
 		cfgd->fp = fopen(cfgd->fpath, "r+");
 		break;
-	case 0xdeadbeef:	/* debug mode */
-		return cfgd;
 	}
 	if (cfgd->fp == NULL) {
 		smm_free(cfgd);
@@ -569,44 +575,44 @@ static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
 	HKEY	hPathKey;
 	LONG	rc;
 	TCHAR	*wkey;
-	char	*fpath;
+	char	*mkey;	/* key of main entry */
 
 	if (cfgd->kpath == NULL) {
 		return SMM_ERR_NULL;
 	}
-	fpath = csc_strcpy_alloc(cfgd->kpath, strlen(cfgd->fname) + 4);
-	if (fpath == NULL) {
+	mkey = csc_strcpy_alloc(cfgd->kpath, strlen(cfgd->fname) + 4);
+	if (mkey == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
-	strcat(fpath, SMM_DEF_DELIM);
-	strcat(fpath, cfgd->fname);
+	strcat(mkey, SMM_DEF_DELIM);
+	strcat(mkey, cfgd->fname);
 
-	slogz("smm_config_registry_open: %s\n", fpath);
-	if ((wkey = smm_mbstowcs_alloc(fpath)) == NULL) {
-		smm_free(fpath);
+	slogz("smm_config_registry_open: %s\n", mkey);
+	if ((wkey = smm_mbstowcs_alloc(mkey)) == NULL) {
+		smm_free(mkey);
 		return SMM_ERR_LOWMEM;
 	}
 
 	switch (mode) {
-	case SMM_CFGMODE_RDONLY:
+	case CSC_CFG_READ:
 		rc = RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_READ, 
 				&cfgd->hRootKey);
 		break;
-	case SMM_CFGMODE_RWC:
+	case CSC_CFG_RWC:
 		/* The good thing of RegCreateKeyEx() is that it can create 
 		 * a string of subkeys without creating one by one. 
 		 * For example: A\\B\\C */
 		rc = RegCreateKeyEx(cfgd->hSysKey, wkey, 0, NULL, 0, 
 				KEY_ALL_ACCESS, NULL, &cfgd->hRootKey, NULL);
 		break;
-	default:	/* SMM_CFGMODE_RDWR */
+	case CSC_CFG_RDWR:
 		rc = RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_ALL_ACCESS, 
 				&cfgd->hRootKey);
 		break;
 	}
 
 	smm_free(wkey);			
-	smm_free(fpath);
+	smm_free(mkey);
 
 	if (cfgd->hRootKey && (rc == ERROR_SUCCESS)) {
 		return SMM_ERR_NONE;
@@ -645,44 +651,43 @@ static HKEY smm_config_registry_open_dir(struct KeyDev *cfgd)
 	return hCurrKey;
 }
 
-static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp)
+//static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp)
+
+static int smm_config_registry_read(struct KeyDev *cfgd, TCHAR *cpath)
 {
 	HKEY	hCurrKey;
 	TCHAR	szName[MAX_PATH];
-	DWORD	dwSize, dwDirs, dwKeys;
+	DWORD	i, dwSize, dwContent, dwKeys;
 
-	if ((hCurrKey = smm_config_registry_open_dir(cfgd)) == NULL) {
-		return -1;
+	StringCchCopy(szName, MAX_PATH, cpath);		/* lstrcpy */
+	if (*cpath == TEXT('\0')) {
+		hCurrKey = cfgd->hRootKey;
+	} else {
+		if (RegOpenKeyEx(cfgd->hRootKey, szName, 0, KEY_READ, &hCurrKey) != ERROR_SUCCESS) {
+			return -1;
+		}
 	}
 
 	/* get number of keys and values */
-	RegQueryInfoKey(hCurrKey, NULL, NULL, NULL, &dwDirs, NULL, NULL, 
-			&dwKeys, NULL, NULL, NULL, NULL);
+	RegQueryInfoKey(hCurrKey, NULL, NULL, NULL, &dwKeys, NULL, NULL, 
+			&dwContent, NULL, NULL, NULL, NULL);
 
-	if (cfgd->idx_key[cfgd->idx_no] < dwKeys) {
-		rc = registry_read_content(hCurrKey, cfgd->idx_key[cfgd->idx_no], kp);
-		if (kp == NULL) {
-			return rc;
-		}
-		cfgd->idx_key[cfgd->idx_no]++;
-		return rc;
+	for (i = 0; i < dwContent; i++) {
+		RegEnumValue(hCurrKey, i, szName, &dwSize, NULL, &dwType, NULL, &dwLeng);
 	}
 
-	if (cfgd->idx_dir[cfgd->idx_no] < dwDirs) {
-		rc = registry_read_directory(hCurrKey, cfgd->idx_dir[cfgd->idx_no], kp);
-		if (kp) {
-			cfgd->idx_dir[cfgd->idx_no]++;
-		}
-		return rc;
+	for (i = 0; i < dwKeys; i++) {
+		RegEnumKeyEx(cfgd->hRootKey, cfgd->index, szName, &dwSize, 
+				NULL, NULL, NULL, NULL);
+		StringCchCat(szName, MAX_PATH, TEXT("\\"));
+		StringCchCat(szName, MAX_PATH, ...);
+		smm_config_registry_read(cfgd, szName);
 	}
 
-	if (cfgd->idx_no == 0) {
-		return 0;	/* eof */
+	if (hCurrKey != cfgd->hRootKey) {
+		RegCloseKey(hCurrKey);
 	}
-
-	cfgd->idx_no--;
-
-
+	return 0;
 }
 
 static int registry_read_content(HKEY hKey, int idx, KEYCB *kp)
