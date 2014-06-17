@@ -67,10 +67,10 @@ static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp);
 
 #ifdef	CFG_WIN32_API
 static int smm_config_registry_open(struct KeyDev *cfgd, int mode);
-static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp);
+//static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp);
+static int smm_config_registry_read(struct KeyDev *cfgd, TCHAR *path);
 static int smm_config_registry_write(struct KeyDev *cfgd, KEYCB *kp);
 static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname);
-static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen);
 #endif
 
 
@@ -192,7 +192,8 @@ int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		return smm_config_registry_read(cfgd, kp);
+		//return smm_config_registry_read(cfgd, kp);
+		return smm_config_registry_read(cfgd, TEXT(""));
 	}
 #endif
 	if (cfgd->fp) {
@@ -570,6 +571,24 @@ static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 
 #ifdef	CFG_WIN32_API
 
+struct	RegBuf	{
+	DWORD	n_keys;		/* number of of keys (directory) */
+	DWORD	n_vals;		/* number of values (key/value pairs) */
+	TCHAR	*name;		/* to the buffer for name of values/keys */
+	DWORD	nm_len;		/* length of the name buffer in unicode */
+	TCHAR	*type;		/* to the buffer for value type */
+	DWORD	ty_len;		/* length of the type buffer in unicode */
+	DWORD	ty_id;
+	void	*content;	/* to the buffer for contents of values */
+	DWORD	co_len;		/* length of the content buffer in bytes */
+	char	pool[1];
+};
+
+static struct RegBuf *registry_buffer_alloc(HKEY hKey);
+static int registry_buffer_read_value(HKEY hKey, int idx, struct RegBuf *rbuf);
+static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen);
+
+
 static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
 {
 	HKEY	hPathKey;
@@ -655,39 +674,141 @@ static HKEY smm_config_registry_open_dir(struct KeyDev *cfgd)
 
 static int smm_config_registry_read(struct KeyDev *cfgd, TCHAR *cpath)
 {
+	struct	RegBuf	*rbuf;
 	HKEY	hCurrKey;
-	TCHAR	szName[MAX_PATH];
-	DWORD	i, dwSize, dwContent, dwKeys;
+	TCHAR	szName[MAX_PATH], nxPath[MAX_PATH];
+	DWORD	i, dwSize;
 
-	StringCchCopy(szName, MAX_PATH, cpath);		/* lstrcpy */
 	if (*cpath == TEXT('\0')) {
 		hCurrKey = cfgd->hRootKey;
-	} else {
-		if (RegOpenKeyEx(cfgd->hRootKey, szName, 0, KEY_READ, &hCurrKey) != ERROR_SUCCESS) {
-			return -1;
+	} else if (RegOpenKeyEx(cfgd->hRootKey, cpath, 0, KEY_READ, &hCurrKey) != ERROR_SUCCESS) {
+		return -1;
+	}
+	_tprintf(TEXT("Entering %s\n"), cpath);
+
+	/* get number of keys and values */
+	if ((rbuf = registry_buffer_alloc(hCurrKey)) == NULL) {
+		return -2;
+	}
+	for (i = 0; i < rbuf->n_vals; i++) {
+		if (registry_buffer_read_value(hCurrKey, i, rbuf) < 0) {
+			break;
+		}
+		if (rbuf->ty_id == REG_SZ) {
+			_tprintf(TEXT("%s = %s  #%s\n"), rbuf->name, rbuf->content, rbuf->type);
+		} else {
+			_tprintf(TEXT("%s = %p  #%s\n"), rbuf->name, rbuf->content, rbuf->type);
 		}
 	}
 
-	/* get number of keys and values */
-	RegQueryInfoKey(hCurrKey, NULL, NULL, NULL, &dwKeys, NULL, NULL, 
-			&dwContent, NULL, NULL, NULL, NULL);
-
-	for (i = 0; i < dwContent; i++) {
-		RegEnumValue(hCurrKey, i, szName, &dwSize, NULL, &dwType, NULL, &dwLeng);
-	}
+	dwKeys = rbuf->n_keys;
+	smm_free(rbuf);
 
 	for (i = 0; i < dwKeys; i++) {
-		RegEnumKeyEx(cfgd->hRootKey, cfgd->index, szName, &dwSize, 
+		dwSize = MAX_PATH * sizeof(TCHAR);
+		RegEnumKeyEx(hCurrKey, i, szName, &dwSize, 
 				NULL, NULL, NULL, NULL);
-		StringCchCat(szName, MAX_PATH, TEXT("\\"));
-		StringCchCat(szName, MAX_PATH, ...);
-		smm_config_registry_read(cfgd, szName);
+		StringCchCopy(nxPath, MAX_PATH, cpath);         /* lstrcpy */
+		StringCchCat(nxPath, MAX_PATH, TEXT("\\"));
+		StringCchCat(nxPath, MAX_PATH, szName);
+		smm_config_registry_read(cfgd, nxPath);
 	}
 
 	if (hCurrKey != cfgd->hRootKey) {
 		RegCloseKey(hCurrKey);
 	}
 	return 0;
+}
+
+static int smm_config_registry_write(struct KeyDev *cfgd, KEYCB *kp)
+{
+	return 0;
+}
+
+static struct RegBuf *registry_buffer_alloc(HKEY hKey)
+{
+	struct	RegBuf	*rbuf;
+	DWORD	dwKeys, dwKeyLen, dwVals, dwValNmlen, dwValLen, len;
+
+	RegQueryInfoKey(hKey, NULL, NULL, NULL, 
+			&dwKeys, &dwKeyLen, NULL,
+			&dwVals, &dwValNmlen, &dwValLen, NULL, NULL);
+
+	/* find the longest between name of key and name of value */
+	len = dwKeyLen > dwValNmlen ? dwKeyLen : dwValNmlen;
+	/* note that name of key and name of value are unicode of Win32 */
+	len *= sizeof(TCHAR);
+	/* added the longest content of value in byte */
+	len += dwValLen;
+	/* top up with the structure size and reserve area for type */
+	len += sizeof(struct RegBuf) + 64 * sizeof(TCHAR);
+
+	if ((rbuf = smm_alloc((int)len)) == NULL) {
+		return NULL;
+	}
+
+	rbuf->n_keys = dwKeys;
+	rbuf->n_vals = dwVals;
+	rbuf->name   = rbuf->pool;
+	rbuf->nm_len = (dwKeyLen > dwValNmlen ? dwKeyLen : dwValNmlen) + 1;
+	rbuf->type   = &rbuf->name[rbuf->nm_len];
+	rbuf->ty_len = 60;
+	rbuf->content = (void*) &rbuf->type[rbuf->ty_len];
+	rbuf->co_len = dwValLen + 1;
+	return rbuf;
+}
+
+static int registry_buffer_read_value(HKEY hKey, int idx, struct RegBuf *rbuf)
+{
+	DWORD	dwSize, dwLeng, dwType;
+
+	dwSize = rbuf->nm_len;
+	dwLeng = rbuf->co_len;
+	if (RegEnumValue(hKey, idx, rbuf->name, &dwSize, NULL, &dwType, 
+				&rbuf->content, &dwLeng) != ERROR_SUCCESS) {
+		return -1;
+	}
+
+	rbuf->ty_id = dwType;
+	switch (dwType) {
+	case REG_BINARY:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_BINARY"));
+		break;
+	case REG_DWORD:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_DWORD"));
+		break;
+	case REG_DWORD_LITTLE_ENDIAN:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_DWORD_LITTLE_ENDIAN"));
+		break;
+	case REG_DWORD_BIG_ENDIAN:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_DWORD_BIG_ENDIAN"));
+		break;
+	case REG_EXPAND_SZ:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_EXPAND_SZ"));
+		break;
+	case REG_LINK:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_LINK"));
+		break;
+	case REG_MULTI_SZ:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_MULTI_SZ"));
+		break;
+	case REG_NONE:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_NONE"));
+		break;
+	case REG_QWORD:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_QWORD"));
+		break;
+	case REG_QWORD_LITTLE_ENDIAN:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_QWORD_LITTLE_ENDIAN"));
+		break;
+	case REG_SZ:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_SZ"));
+		break;
+	default:
+		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_UNKNOWN"));
+		break;
+	}
+	return 0;	//FIXME
 }
 
 static int registry_read_content(HKEY hKey, int idx, KEYCB *kp)
