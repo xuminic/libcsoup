@@ -49,28 +49,35 @@ struct	KeyDev	{
 #ifdef	CFG_WIN32_API
 	HKEY	hSysKey;	/* predefined key like HKEY_CURRENT_USER */
 	HKEY	hRootKey;	/* root key points to the entrance */
-	TCHAR	cpath[MAX_PATH];
-	int	cval;
-	int	idx_key[MAX_PATH];	/* index of keys (Win32 values */
-	int	idx_dir[MAX_PATH];	/* index of directories (Win32 subkeys) */
-	int	idx_no;
+
+	int	idx;
+	struct	{
+		HKEY	hKey;
+		DWORD	n_keys;
+		DWORD	n_vals;
+		DWORD	l_key;
+		DWORD	l_vname;
+		DWORD	l_value;
+		int	i_val;
+		int	i_key;
+	} reg[MAX_PATH];
 #endif
 	char	pool[1];
 };
 
 
 static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname);
-static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp);
+static KEYCB *smm_config_mem_read(struct KeyDev *cfgd);
 static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp);
-static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp);
+static KEYCB *smm_config_file_read(struct KeyDev *cfgd);
 static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp);
 
 #ifdef	CFG_WIN32_API
 static int smm_config_registry_open(struct KeyDev *cfgd, int mode);
-//static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp);
-static int smm_config_registry_read(struct KeyDev *cfgd, TCHAR *path);
+static KEYCB *smm_config_registry_read(struct KeyDev *cfgd);
 static int smm_config_registry_write(struct KeyDev *cfgd, KEYCB *kp);
 static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname);
+extern int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 #endif
 
 
@@ -142,7 +149,7 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 	/* debug mode 0xdeadbeef.
 	 * In this mode, the function will return by assuming the output
 	 * device is available but empty without verify the descriptor */
-	if (mode == 0xdeadbeef) {
+	if (mode == (int) 0xdeadbeef) {
 		return cfgd;
 	}
 
@@ -188,24 +195,23 @@ int smm_config_close(struct KeyDev *cfgd)
 	return smm_free(cfgd);
 }
 
-int smm_config_read(struct KeyDev *cfgd, KEYCB *kp)
+KEYCB *smm_config_read_alloc(struct KeyDev *cfgd)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		//return smm_config_registry_read(cfgd, kp);
-		return smm_config_registry_read(cfgd, TEXT(""));
+		return smm_config_registry_read(cfgd);
 	}
 #endif
 	if (cfgd->fp) {
-		return smm_config_file_read(cfgd, kp);
+		return smm_config_file_read(cfgd);
 	}
 	if (cfgd->fname == NULL) {
 		if (cfgd->fpath) {
-			return smm_config_mem_read(cfgd, kp);
+			return smm_config_mem_read(cfgd);
 		}
 		/* stdio has not implemented */
 	}
-	return -1;
+	return NULL;
 }
 
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
@@ -244,7 +250,7 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 	
 #ifdef	CFG_WIN32_API
 	if (cfgd->kpath) {
-		rc = smm_config_registry_delete(cfgd);
+		rc = smm_config_registry_delete(cfgd, fname);
 	} else {
 		rc = unlink(cfgd->fpath);
 	}
@@ -444,24 +450,25 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 	return cfgd;
 }
 
-static int smm_config_mem_read(struct KeyDev *cfgd, KEYCB *kp)
+static KEYCB *smm_config_mem_read(struct KeyDev *cfgd)
 {
-	int	i;
+	KEYCB	*kp;
+	int	n;
 
-	for (i = 0; cfgd->kpath[i]; i++) {
-		if (kp) {
-			kp->pool[i] = cfgd->kpath[i];
-		}
-		if (cfgd->kpath[i] == '\n') {
-			i++;
+	for (n = 0; cfgd->kpath[n]; n++) {
+		if (cfgd->kpath[n] == '\n') {
+			n++;
 			break;
 		}
 	}
-	if (kp) {
-		kp->pool[i] = 0;
-		cfgd->kpath += i;
+
+	if ((n == 0) || ((kp = csc_cfg_kcb_alloc(n+1)) == NULL)) {
+		return NULL;
 	}
-	return i;
+	memcpy(kp->pool, cfgd->kpath, n);
+	kp->pool[n] = 0;
+	cfgd->kpath += n;
+	return kp;
 }
 
 static int mem_update(char **dest, char *s, int *room)
@@ -508,31 +515,39 @@ static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp)
 	return wtd;
 }
 
-static int smm_config_file_read(struct KeyDev *cfgd, KEYCB *kp)
+static KEYCB *smm_config_file_read(struct KeyDev *cfgd)
 {
+	KEYCB	*kp;
 	int	amnt, cpos, ch;
 
 	if (cfgd->fp == NULL) {
-		return 0;
+		return NULL;
 	}
 
 	amnt = 0;
 	cpos = ftell(cfgd->fp);
 	while ((ch = fgetc(cfgd->fp)) != EOF) {
-		if (kp) {
-			kp->pool[amnt] = (char) ch;
-		}
 		amnt++;
 		if (ch == '\n') {
 			break;
 		}
 	}
-	if (kp == NULL) {	/* rewind to the start position */
-		fseek(cfgd->fp, cpos, SEEK_SET);
-	} else {
-		kp->pool[amnt] = 0;
+
+	if ((amnt == 0) || ((kp = csc_cfg_kcb_alloc(amnt+1)) == NULL)) {
+		return NULL;
 	}
-	return amnt;
+
+	/* rewind to the start position */
+	fseek(cfgd->fp, cpos, SEEK_SET);
+	amnt = 0;
+	while ((ch = fgetc(cfgd->fp)) != EOF) {
+		kp->pool[amnt++] = (char) ch;
+		if (ch == '\n') {
+			break;
+		}
+	}
+	kp->pool[amnt] = 0;
+	return kp;
 }
 
 static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
@@ -584,15 +599,18 @@ struct	RegBuf	{
 	char	pool[1];
 };
 
-static struct RegBuf *registry_buffer_alloc(HKEY hKey);
-static int registry_buffer_read_value(HKEY hKey, int idx, struct RegBuf *rbuf);
+#define RREF(d)		((d)->reg[(d)->idx])
+
+static int smm_config_registry_eof(struct KeyDev *cfgd);
+static DWORD smm_config_registry_load_info(struct KeyDev *cfgd, HKEY hKey);
+static DWORD smm_config_registry_open_subkey(struct KeyDev *cfgd);
+static KEYCB *smm_config_registry_key_alloc(struct KeyDev *cfgd, int idx);
+static KEYCB *smm_config_registry_path_alloc(struct KeyDev *cfgd);
 static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen);
 
 
 static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
 {
-	HKEY	hPathKey;
-	LONG	rc;
 	TCHAR	*wkey;
 	char	*mkey;	/* key of main entry */
 
@@ -614,18 +632,18 @@ static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
 
 	switch (mode) {
 	case CSC_CFG_READ:
-		rc = RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_READ, 
+		RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_READ, 
 				&cfgd->hRootKey);
 		break;
 	case CSC_CFG_RWC:
 		/* The good thing of RegCreateKeyEx() is that it can create 
 		 * a string of subkeys without creating one by one. 
 		 * For example: A\\B\\C */
-		rc = RegCreateKeyEx(cfgd->hSysKey, wkey, 0, NULL, 0, 
+		RegCreateKeyEx(cfgd->hSysKey, wkey, 0, NULL, 0, 
 				KEY_ALL_ACCESS, NULL, &cfgd->hRootKey, NULL);
 		break;
 	case CSC_CFG_RDWR:
-		rc = RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_ALL_ACCESS, 
+		RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_ALL_ACCESS, 
 				&cfgd->hRootKey);
 		break;
 	}
@@ -633,201 +651,53 @@ static int smm_config_registry_open(struct KeyDev *cfgd, int mode)
 	smm_free(wkey);			
 	smm_free(mkey);
 
-	if (cfgd->hRootKey && (rc == ERROR_SUCCESS)) {
-		return SMM_ERR_NONE;
+	if (cfgd->hRootKey == NULL) {
+		return SMM_ERR_ACCESS;
 	}
-	return SMM_ERR_ACCESS;
+	/* load the reg[0] with the root key */
+	smm_config_registry_load_info(cfgd, cfgd->hRootKey);
+	return SMM_ERR_NONE;
 }
 
-static HKEY smm_config_registry_open_dir(struct KeyDev *cfgd)
+
+/* Note that the reg[0] must be loaded with root key prior to this call. */
+static KEYCB *smm_config_registry_read(struct KeyDev *cfgd)
 {
-	HKEY	hCurrKey, hTemp;
-	TCHAR	szName[MAX_PATH];
-	DWORD	dwSize;
-	int	i;
+	while (!smm_config_registry_eof(cfgd)) {
+		slogz("smm_config_registry_read: %d I(%d/%u) V(%d/%u)\n", 
+				cfgd->idx, RREF(cfgd).i_key, RREF(cfgd).n_keys,
+				RREF(cfgd).i_val, RREF(cfgd).n_vals);
+		if (RREF(cfgd).i_val < (int)RREF(cfgd).n_vals) {
+			return smm_config_registry_key_alloc(cfgd, 
+					RREF(cfgd).i_val++);
+		}
 
-	hCurrKey = cfgd->hRootKey;
-	for (i = 0; i < cfgd->idx_no; i++) {
-		if (RegEnumKeyEx(hCurrKey, cfgd->idx_dir[i], szName, NULL, 
-				NULL, NULL, NULL, NULL) != ERROR_SUCCESS) {
-			if (hCurrKey != cfgd->hRootKey) {
-				RegCloseKey(hCurrKey);
+		if (RREF(cfgd).i_key == (int)RREF(cfgd).n_keys) {
+			if (cfgd->idx) {
+				RegCloseKey(RREF(cfgd).hKey);
+				RREF(cfgd).hKey = NULL;
+				RREF(cfgd).n_keys = RREF(cfgd).n_vals = 0;
+				RREF(cfgd).i_key = RREF(cfgd).i_val = 0;
+				cfgd->idx--;
 			}
-			return NULL;
+			continue;
 		}
-		if (RegOpenKeyEx(hCurrKey, szName, 0, KEY_READ, 
-				&hTemp) != ERROR_SUCCESS) {
-			if (hCurrKey != cfgd->hRootKey) {
-				RegCloseKey(hCurrKey);
+
+		/* move to the subkey; cfgd->idx mostly increased here */
+		if (smm_config_registry_open_subkey(cfgd) == ERROR_SUCCESS) {
+			/* the first time entering the current path */
+			if (RREF(cfgd).n_vals) {
+				return smm_config_registry_path_alloc(cfgd);
 			}
-			return NULL;
 		}
-		if (hCurrKey != cfgd->hRootKey) {
-			RegCloseKey(hCurrKey);
-		}
-		hCurrKey = hTemp;
 	}
-	return hCurrKey;
+	return NULL;
 }
 
-//static int smm_config_registry_read(struct KeyDev *cfgd, KEYCB *kp)
-
-static int smm_config_registry_read(struct KeyDev *cfgd, TCHAR *cpath)
-{
-	struct	RegBuf	*rbuf;
-	HKEY	hCurrKey;
-	TCHAR	szName[MAX_PATH], nxPath[MAX_PATH];
-	DWORD	i, dwSize;
-
-	if (*cpath == TEXT('\0')) {
-		hCurrKey = cfgd->hRootKey;
-	} else if (RegOpenKeyEx(cfgd->hRootKey, cpath, 0, KEY_READ, &hCurrKey) != ERROR_SUCCESS) {
-		return -1;
-	}
-	_tprintf(TEXT("Entering %s\n"), cpath);
-
-	/* get number of keys and values */
-	if ((rbuf = registry_buffer_alloc(hCurrKey)) == NULL) {
-		return -2;
-	}
-	for (i = 0; i < rbuf->n_vals; i++) {
-		if (registry_buffer_read_value(hCurrKey, i, rbuf) < 0) {
-			break;
-		}
-		if (rbuf->ty_id == REG_SZ) {
-			_tprintf(TEXT("%s = %s  #%s\n"), rbuf->name, rbuf->content, rbuf->type);
-		} else {
-			_tprintf(TEXT("%s = %p  #%s\n"), rbuf->name, rbuf->content, rbuf->type);
-		}
-	}
-
-	dwKeys = rbuf->n_keys;
-	smm_free(rbuf);
-
-	for (i = 0; i < dwKeys; i++) {
-		dwSize = MAX_PATH * sizeof(TCHAR);
-		RegEnumKeyEx(hCurrKey, i, szName, &dwSize, 
-				NULL, NULL, NULL, NULL);
-		StringCchCopy(nxPath, MAX_PATH, cpath);         /* lstrcpy */
-		StringCchCat(nxPath, MAX_PATH, TEXT("\\"));
-		StringCchCat(nxPath, MAX_PATH, szName);
-		smm_config_registry_read(cfgd, nxPath);
-	}
-
-	if (hCurrKey != cfgd->hRootKey) {
-		RegCloseKey(hCurrKey);
-	}
-	return 0;
-}
 
 static int smm_config_registry_write(struct KeyDev *cfgd, KEYCB *kp)
 {
 	return 0;
-}
-
-static struct RegBuf *registry_buffer_alloc(HKEY hKey)
-{
-	struct	RegBuf	*rbuf;
-	DWORD	dwKeys, dwKeyLen, dwVals, dwValNmlen, dwValLen, len;
-
-	RegQueryInfoKey(hKey, NULL, NULL, NULL, 
-			&dwKeys, &dwKeyLen, NULL,
-			&dwVals, &dwValNmlen, &dwValLen, NULL, NULL);
-
-	/* find the longest between name of key and name of value */
-	len = dwKeyLen > dwValNmlen ? dwKeyLen : dwValNmlen;
-	/* note that name of key and name of value are unicode of Win32 */
-	len *= sizeof(TCHAR);
-	/* added the longest content of value in byte */
-	len += dwValLen;
-	/* top up with the structure size and reserve area for type */
-	len += sizeof(struct RegBuf) + 64 * sizeof(TCHAR);
-
-	if ((rbuf = smm_alloc((int)len)) == NULL) {
-		return NULL;
-	}
-
-	rbuf->n_keys = dwKeys;
-	rbuf->n_vals = dwVals;
-	rbuf->name   = rbuf->pool;
-	rbuf->nm_len = (dwKeyLen > dwValNmlen ? dwKeyLen : dwValNmlen) + 1;
-	rbuf->type   = &rbuf->name[rbuf->nm_len];
-	rbuf->ty_len = 60;
-	rbuf->content = (void*) &rbuf->type[rbuf->ty_len];
-	rbuf->co_len = dwValLen + 1;
-	return rbuf;
-}
-
-static int registry_buffer_read_value(HKEY hKey, int idx, struct RegBuf *rbuf)
-{
-	DWORD	dwSize, dwLeng, dwType;
-
-	dwSize = rbuf->nm_len;
-	dwLeng = rbuf->co_len;
-	if (RegEnumValue(hKey, idx, rbuf->name, &dwSize, NULL, &dwType, 
-				&rbuf->content, &dwLeng) != ERROR_SUCCESS) {
-		return -1;
-	}
-
-	rbuf->ty_id = dwType;
-	switch (dwType) {
-	case REG_BINARY:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_BINARY"));
-		break;
-	case REG_DWORD:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_DWORD"));
-		break;
-	case REG_DWORD_LITTLE_ENDIAN:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_DWORD_LITTLE_ENDIAN"));
-		break;
-	case REG_DWORD_BIG_ENDIAN:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_DWORD_BIG_ENDIAN"));
-		break;
-	case REG_EXPAND_SZ:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_EXPAND_SZ"));
-		break;
-	case REG_LINK:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_LINK"));
-		break;
-	case REG_MULTI_SZ:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_MULTI_SZ"));
-		break;
-	case REG_NONE:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_NONE"));
-		break;
-	case REG_QWORD:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_QWORD"));
-		break;
-	case REG_QWORD_LITTLE_ENDIAN:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_QWORD_LITTLE_ENDIAN"));
-		break;
-	case REG_SZ:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_SZ"));
-		break;
-	default:
-		StringCchCopy(rbuf->type, rbuf->ty_len, TEXT("REG_UNKNOWN"));
-		break;
-	}
-	return 0;	//FIXME
-}
-
-static int registry_read_content(HKEY hKey, int idx, KEYCB *kp)
-{
-	TCHAR	szName[MAX_PATH];
-	DWORD	dwSize, dwType, dwLeng;
-	
-	RegEnumValue(hKey, idx, szName, &dwSize, NULL, &dwType, NULL, &dwLeng);
-}
-
-static int registry_read_directory(HKEY hKey, int idx, KEYCB *kp)
-{
-	TCHAR	szName[MAX_PATH];
-	DWORD	dwSize, dwType, dwLeng;
-	
-	if ((RegEnumKeyEx(cfgd->hRootKey, cfgd->index, szName, &dwSize, 
-			NULL, NULL, NULL, NULL)) != ERROR_SUCCESS) {
-		return 0;	/* EOF */
-	}
 }
 
 static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname)
@@ -852,8 +722,7 @@ static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname)
 		RegCloseKey(hPathKey);
 		return SMM_ERR_LOWMEM;
 	}
-	MultiByteToWideChar(smm_codepage(), 0, cfgd->fname, 
-			-1, wkey, MAX_PATH - 1);
+	MultiByteToWideChar(smm_codepage(), 0, fname, -1, wkey, MAX_PATH - 1);
 
 	rcode = RegDelnodeRecurse(hPathKey, wkey, MAX_PATH * 2);
 
@@ -867,6 +736,208 @@ static int smm_config_registry_delete(struct KeyDev *cfgd, char *fname)
 	return SMM_ERR_ACCESS;
 }
 
+
+static int smm_config_registry_eof(struct KeyDev *cfgd)
+{
+	return (cfgd->idx == 0) && 
+		(RREF(cfgd).i_key == (int) RREF(cfgd).n_keys) &&
+		(RREF(cfgd).i_val == (int) RREF(cfgd).n_vals);
+}
+
+static DWORD smm_config_registry_load_info(struct KeyDev *cfgd, HKEY hKey)
+{
+	RREF(cfgd).hKey  = hKey;
+	RREF(cfgd).i_val = 0;
+	RREF(cfgd).i_key = 0;
+
+	return RegQueryInfoKey(hKey, NULL, NULL, NULL, 
+			&RREF(cfgd).n_keys, &RREF(cfgd).l_key, NULL,
+			&RREF(cfgd).n_vals, &RREF(cfgd).l_vname, 
+			&RREF(cfgd).l_value, NULL, NULL);
+}
+
+static DWORD smm_config_registry_open_subkey(struct KeyDev *cfgd)
+{
+	HKEY	hSubKey;
+	TCHAR	szName[MAX_PATH];
+	DWORD	dwSize, dwErro;
+
+	dwSize = MAX_PATH * sizeof(TCHAR);
+	dwErro = RegEnumKeyEx(RREF(cfgd).hKey, RREF(cfgd).i_key++, 
+			szName, &dwSize, NULL, NULL, NULL, NULL);
+	if (dwErro != ERROR_SUCCESS) {
+		return dwErro;
+	}
+
+	dwErro = RegOpenKeyEx(RREF(cfgd).hKey, szName, 0, KEY_READ, &hSubKey);
+	if (dwErro != ERROR_SUCCESS) {
+		return dwErro;
+	}
+
+	cfgd->idx++;
+	dwErro = smm_config_registry_load_info(cfgd, hSubKey);
+	if (dwErro != ERROR_SUCCESS) {
+		cfgd->idx--;
+		RegCloseKey(hSubKey);
+	}
+	return dwErro;
+}
+
+static KEYCB *smm_config_registry_key_alloc(struct KeyDev *cfgd, int idx)
+{
+	TCHAR	*ms, *tbuf;
+	DWORD	dwSize, dwLeng, dwType, len;
+	char 	*nkey, *content;
+	int	mlen;
+	KEYCB	*kp;
+
+	/* allocate a buffer for reading the registry */
+	len = RREF(cfgd).l_vname * sizeof(TCHAR) + RREF(cfgd).l_value + 16;
+	if ((tbuf = smm_alloc((int)len)) == NULL) {
+		return NULL;
+	}
+	content = (void*) &tbuf[RREF(cfgd).l_vname + 1];
+
+	dwSize = RREF(cfgd).l_vname * sizeof(TCHAR);
+	dwLeng = RREF(cfgd).l_value;
+	if (RegEnumValue(RREF(cfgd).hKey, idx, tbuf, &dwSize, NULL, &dwType,
+				(BYTE*)content, &dwLeng) != ERROR_SUCCESS) {
+		smm_free(tbuf);
+		return NULL;
+	}
+
+	/* estimate the total length of the entry according to RFC3629,
+	 * the longest UTF-8 character should be 4 bytes */
+	len = (dwSize + dwLeng) * 4 + 64;
+	if ((kp = csc_cfg_kcb_alloc((int)len)) == NULL) {
+		smm_free(tbuf);
+		return NULL;
+	}
+
+	nkey = kp->pool;
+	WideCharToMultiByte(smm_codepage(), 0, tbuf, -1, 
+			nkey, len, NULL, NULL);
+	strcat(nkey, " = ");
+	len -= strlen(nkey);
+	nkey += strlen(nkey);
+
+	switch (dwType) {
+	case REG_BINARY:
+		csc_cfg_binary_to_hex(content, (int)dwLeng, nkey, (int)len);
+		strcat(nkey, "\t\t#REG_BINARY");
+		break;
+	case REG_DWORD:		/* == REG_DWORD_LITTLE_ENDIAN */
+		dwSize = *((DWORD *) content);
+		sprintf(nkey, "%lu", dwSize);
+		strcat(nkey, "\t\t#REG_DWORD");
+		break;
+	case REG_DWORD_BIG_ENDIAN:
+		dwSize = (content[0] << 24) | (content[1] << 16) |
+			(content[2] << 8) | content[3];
+		sprintf(nkey, "%lu", dwSize);
+		strcat(nkey, "\t\t#REG_DWORD_BIG_ENDIAN");
+		break;
+	case REG_EXPAND_SZ:
+		WideCharToMultiByte(smm_codepage(), 0, (TCHAR*)content, -1,
+				nkey, len, NULL, NULL);
+		strcat(nkey, "\t\t#REG_EXPAND_SZ");
+		break;
+	case REG_LINK:
+		WideCharToMultiByte(smm_codepage(), 0, (TCHAR*)content, -1,
+				nkey, len, NULL, NULL);
+		strcat(nkey, "\t\t#REG_LINK");
+		break;
+	case REG_MULTI_SZ:
+		ms = (TCHAR*) content;
+		mlen = (int)(dwLeng / sizeof(TCHAR));
+		while (mlen > 0) {
+			WideCharToMultiByte(smm_codepage(), 0, ms, -1,
+					nkey, len, NULL, NULL);
+			mlen -= lstrlen(ms) + 1;
+			ms += lstrlen(ms) + 1;
+			strcat(nkey, "\\0");
+			len -= strlen(nkey);
+			nkey += strlen(nkey);
+		}
+		strcat(nkey, "\t\t#REG_MULTI_SZ");
+		break;
+	case REG_NONE:
+		csc_cfg_binary_to_hex(content, (int)dwLeng, nkey, (int)len);
+		strcat(nkey, "\t\t#REG_NONE");
+		break;
+	case REG_QWORD:		/* == REG_QWORD_LITTLE_ENDIAN */
+		SMM_SPRINT(nkey, "%llu", *((unsigned long long *)content));
+		strcat(nkey, "\t\t#REG_QWORD");
+		break;
+	case REG_SZ:
+		WideCharToMultiByte(smm_codepage(), 0, (TCHAR*)content, -1,
+				nkey, len, NULL, NULL);
+		strcat(nkey, "\t\t#REG_SZ");
+		break;
+	default:
+		csc_cfg_binary_to_hex(content, (int)dwLeng, nkey, (int)len);
+		strcat(nkey, "\t\t#REG_UNKNOWN");
+		break;
+	}
+	smm_free(tbuf);
+	puts(kp->pool);
+	return kp;
+}
+
+static KEYCB *smm_config_registry_path_alloc(struct KeyDev *cfgd)
+{
+	TCHAR	*path, szName[MAX_PATH];
+	DWORD	dwSize;
+	KEYCB	*kp;
+	int	i;
+
+	dwSize = 48;
+	for (i = 0; i < cfgd->idx; i++) {
+		dwSize += cfgd->reg[i].l_key + 1;
+	}
+
+	if ((path = smm_alloc(dwSize * sizeof(TCHAR))) == NULL) {
+		return NULL;
+	}
+
+	/* estimated the total length of the entry according to RFC3629,
+	 * the longest UTF-8 character should be 4 bytes */
+	if ((kp = csc_cfg_kcb_alloc((int)(dwSize * 4))) == NULL) {
+		smm_free(path);
+		return NULL;
+	}
+	kp->update = (int)(dwSize * 4);		/* borrow it for a while */
+
+	lstrcpy(path, TEXT("["));
+	for (i = 0; i < cfgd->idx; i++) {
+		dwSize = MAX_PATH * sizeof(TCHAR);
+		if (RegEnumKeyEx(cfgd->reg[i].hKey, cfgd->reg[i].i_key - 1, 
+				szName, &dwSize, NULL, NULL, NULL, NULL) 
+				== ERROR_SUCCESS) {
+			if (i != 0) {
+				lstrcat(path, TEXT("/"));
+			}
+			lstrcat(path, szName);
+		}
+	}
+	lstrcat(path, TEXT("]"));
+	//wprintf(TEXT("%s\n"), path);
+
+	/* convert the UTF-16 string to UTF-8 and stored */
+	WideCharToMultiByte(smm_codepage(), 0, path, -1,
+			kp->pool, kp->update, NULL, NULL);
+	kp->update = 0;
+
+	sprintf(kp->pool + strlen(kp->pool), "\t\t## DIR=%lu KEY=%lu",
+			RREF(cfgd).n_keys, RREF(cfgd).n_vals);
+	
+	puts(kp->pool);
+	smm_free(path);
+	return kp;
+}
+
+
+
 /* This code was picked form MSDN, a little modified */
 static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 {
@@ -901,7 +972,10 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 	}
 
 	/* Enumerate the keys */
-	dwSize = MAX_PATH;
+	/* Original code bugges here. According to MSDN, the size should be
+	 * "specified by the lpName parameter, in characters". Therefore
+	 * it should be multiplied by the size of TCHAR */
+	dwSize = MAX_PATH * sizeof(TCHAR);
 	lResult = RegEnumKeyEx(hKey, 0, szName, &dwSize, NULL, 
 			NULL, NULL, NULL);
 	if (lResult == ERROR_SUCCESS) {
@@ -913,7 +987,7 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 			if (!RegDelnodeRecurse(hKeyRoot, lpSubKey, buflen)) {
 				break;
 			}
-			dwSize = MAX_PATH;
+			dwSize = MAX_PATH * sizeof(TCHAR);
 			lResult = RegEnumKeyEx(hKey, 0, szName, &dwSize, 
 					NULL, NULL, NULL, NULL);
 		} while (lResult == ERROR_SUCCESS);
@@ -930,549 +1004,91 @@ static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
 }
 
 #endif
-
-
-
-
 
 
 
 
 #if 0
-#ifdef	CFG_WIN32_API
-static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey, int mode);
-static HKEY RegCreatePath(int sysroot, char *path);
-static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen);
-static int RegReadLong(HKEY hMainKey, char *skey, long *val);
-static int RegWriteString(HKEY hMainKey, char *skey, char *value);
-static int RegWriteLong(HKEY hMainKey, char *skey, long val);
-static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int klen);
-
-void *smm_config_open(int sysroot, int mode, char *path, char *fname)
+/*
+	if (cfgd->hRootKey) {
+		return smm_config_registry_read(cfgd->hRootKey);
+	}
+*/
+static int smm_config_registry_read(HKEY hKey)
 {
-	HKEY	hRootKey, hPathKey;
-
-	if ((hPathKey = RegCreatePath(sysroot, path)) == NULL) {
-		return NULL;
-	}
-	hRootKey = RegOpenMainKey(hPathKey, fname, mode);
-	RegCloseKey(hPathKey);
-	return hRootKey;
-}
-
-int smm_config_flush(void *cfg)
-{
-	if (RegFlushKey((HKEY) cfg) == ERROR_SUCCESS) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_NULL);
-}
-
-int smm_config_close(void *cfg)
-{
-	RegFlushKey((HKEY) cfg);
-	if (RegCloseKey((HKEY) cfg) == ERROR_SUCCESS) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_NULL);
-}
-
-int smm_config_delete(int sysroot, char *path, char *fname)
-{
-	HKEY	hPathKey;
-	TCHAR	*wkey;
-	LONG	rcode;
-
-	if (fname == NULL) {
-		return smm_errno_update(SMM_ERR_NULL);
-	}
-	if ((hPathKey = RegCreatePath(sysroot, path)) == NULL) {
-		return smm_errno_update(SMM_ERR_ACCESS);
-	}
-
-	/* fabricate the key name */
-	if ((wkey = smm_alloc(MAX_PATH * 2 * sizeof(TCHAR))) == NULL) {
-		RegCloseKey(hPathKey);
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	MultiByteToWideChar(smm_codepage(), 0, fname, -1, wkey, MAX_PATH - 1);
-
-	rcode = RegDelnodeRecurse(hPathKey, wkey, MAX_PATH * 2);
-
-	RegCloseKey(hPathKey);
-	smm_free(wkey);
-       
-	if (rcode == TRUE) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_ACCESS);
-}
-
-char *smm_config_read_alloc(void *cfg, char *mkey, char *skey)
-{
-	HKEY	hMainKey;
-	char	*buf;
-	int	blen;
-
-	if (skey == NULL) {
-		smm_errno_update(SMM_ERR_NULL);
-		return NULL;
-	}
-	hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RDONLY);
-	if (hMainKey == NULL) {
-		smm_errno_update(SMM_ERR_ACCESS);
-		return NULL;
-	}
-
-	buf = NULL;
-	if ((blen = RegReadString(hMainKey, skey, NULL, 0)) > 0) {
-		blen += 2;
-		buf = smm_alloc(blen);
-		RegReadString(hMainKey, skey, buf, blen);
-	}
-
-	if (hMainKey != cfg) {
-		RegCloseKey(hMainKey);
-	}
-	return buf;
-}
-
-int smm_config_write(void *cfg, char *mkey, char *skey, char *value)
-{
-	HKEY	hMainKey;
-	int	rc;
-
-	if (!skey || !value) {
-		return smm_errno_update(SMM_ERR_NULL);
-	}
-	if ((hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RWC)) == NULL) {
-		return smm_errno_update(SMM_ERR_NULL);
-	}
-	rc = RegWriteString(hMainKey, skey, value);
-
-	if (hMainKey != cfg) {
-		RegCloseKey(hMainKey);
-	}
-	return rc;
-}
-
-int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
-{
-	HKEY	hMainKey;
-	int	rc;
-
-	if (skey == NULL) {
-		return smm_errno_update(SMM_ERR_NULL);
-	}
-	hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RDONLY);
-	if (hMainKey == NULL) {
-		return smm_errno_update(SMM_ERR_ACCESS);
-	}
-	rc = RegReadLong(hMainKey, skey, val);
-
-	if (hMainKey != cfg) {
-		RegCloseKey(hMainKey);
-	}
-	return rc;
-}
-
-int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
-{
-	HKEY	hMainKey;
-	int	rc;
-
-	if (skey == NULL) {
-		return smm_errno_update(SMM_ERR_NULL);
-	}
-	if ((hMainKey = RegOpenMainKey(cfg, mkey, SMM_CFGMODE_RWC)) == NULL) {
-		return smm_errno_update(SMM_ERR_NULL);
-	}
-	rc = RegWriteLong(hMainKey, skey, val);
-
-	if (hMainKey != cfg) {
-		RegCloseKey(hMainKey);
-	}
-	return rc;
-}
-
-static HKEY RegOpenMainKey(HKEY hRootKey, char *mkey, int mode)
-{
-	HKEY	hMainKey;
-	TCHAR	*wkey;
-	LONG	rc;
-
-	if (mkey == NULL) {
-		return hRootKey;
-	}
-	if ((wkey = smm_mbstowcs_alloc(mkey)) == NULL) {
-		smm_errno_update(SMM_ERR_LOWMEM);
-		return NULL;
-	}
-
-	switch (mode) {
-	case SMM_CFGMODE_RDONLY:
-		rc = RegOpenKeyEx(hRootKey, wkey, 0, KEY_READ, &hMainKey);
-		break;
-	case SMM_CFGMODE_RWC:
-		rc = RegCreateKeyEx(hRootKey, wkey, 0, NULL, 0, 
-				KEY_ALL_ACCESS, NULL, &hMainKey, NULL);
-		break;
-	default:	/* SMM_CFGMODE_RDWR */
-		rc = RegOpenKeyEx(hRootKey, wkey, 0, KEY_ALL_ACCESS, &hMainKey);
-		break;
-	}
-
-	smm_free(wkey);			
-	if (rc == ERROR_SUCCESS) {
-		smm_errno_update(SMM_ERR_NONE);
-		return hMainKey;
-	}
-	smm_errno_update(SMM_ERR_ACCESS);
-	return NULL;
-}
-
-static HKEY RegCreatePath(int sysroot, char *path)
-{
-	HKEY	hPathKey, hSysKey;
-	LONG	rc;
-	TCHAR	*wkey;
-	char	*pkey;
-	int	extra;
-
-	extra = 4;
-	if (path) {
-		extra += strlen(path);
-	}
-	switch (sysroot) {
-	case SMM_CFGROOT_USER:
-		hSysKey = HKEY_CURRENT_USER;
-		pkey = csc_strcpy_alloc("CONSOLE\\", extra);
-		break;
-	case SMM_CFGROOT_SYSTEM:
-		hSysKey = HKEY_LOCAL_MACHINE;
-		pkey = csc_strcpy_alloc("SOFTWARE\\", extra);
-		break;
-	case SMM_CFGROOT_CURRENT:
-		/* don't do anything */
-		smm_errno_update(SMM_ERR_NONE);
-		return NULL;
-	default:	/* SMM_CFGROOT_DESKTOP */
-		hSysKey = HKEY_CURRENT_USER;
-		pkey = csc_strcpy_alloc("SOFTWARE\\", extra);
-		break;
-	}
-	if (pkey == NULL) {
-		smm_errno_update(SMM_ERR_LOWMEM);
-		return NULL;
-	}
-	if (path) {
-		strcat(pkey, path);
-	}
-
-	if ((wkey = smm_mbstowcs_alloc(pkey)) == NULL) {
-		smm_free(pkey);
-		smm_errno_update(SMM_ERR_LOWMEM);
-		return NULL;
-	}
-
-	/* The good thing of RegCreateKeyEx() is that it can create a string
-	 * of subkeys without creating one by one. For example: A\\B\\C */
-	rc = RegCreateKeyEx(hSysKey, wkey, 0, NULL, 0,
-			KEY_ALL_ACCESS, NULL, &hPathKey, NULL);
-
-	smm_free(wkey);
-	smm_free(pkey);
-
-	if (rc == ERROR_SUCCESS) { 
-		return hPathKey;
-	}
-	return NULL;
-}
-
-static int RegReadString(HKEY hMainKey, char *skey, char *buf, int blen)
-{
-	TCHAR	*wkey, *wval;
-	DWORD	slen;
-	int	vlen;
-
-	if ((wkey = smm_mbstowcs_alloc(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, NULL, &slen)
-			!= ERROR_SUCCESS) {
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_ACCESS);
-	}
-	slen += 2;
-	if ((wval = smm_alloc(slen)) == NULL) {
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) wval, &slen)
-			!= ERROR_SUCCESS) {
-		smm_free(wval);
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_ACCESS);
-	}
-
-	/* see smm_wcstombs.c for details */
-	vlen = WideCharToMultiByte(smm_codepage(), 
-			0, wval, -1, NULL, 0, NULL, NULL);
-	if (vlen <= 0) {
-		smm_free(wval);
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_LENGTH);
-	}
-	if (buf && (blen > vlen)) {
-		WideCharToMultiByte(smm_codepage(), 
-				0, wval, -1, buf, blen, NULL, NULL);
-	}
-	smm_free(wval);
-	smm_free(wkey);
-	return vlen;
-}
-
-static int RegReadLong(HKEY hMainKey, char *skey, long *val)
-{
-	DWORD	vlen;
-	TCHAR	*wkey;
-
-	if ((wkey = smm_mbstowcs_alloc(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	vlen = sizeof(long);
-	if (RegQueryValueEx(hMainKey, wkey, NULL, NULL, (BYTE*) val, &vlen)
-			== ERROR_SUCCESS) {
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	smm_free(wkey);
-	return smm_errno_update(SMM_ERR_ACCESS);
-}
-
-static int RegWriteString(HKEY hMainKey, char *skey, char *value)
-{
-	TCHAR	*wkey, *wval;
-	LONG	rc;
-
-	if ((wkey = smm_mbstowcs_alloc(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	if ((wval = smm_mbstowcs_alloc(value)) == NULL) {
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-
-	rc = RegSetValueEx(hMainKey, wkey, 0, REG_SZ, (const BYTE *) wval, 
-			(lstrlen(wval)+1) * sizeof(TCHAR));
-
-	smm_free(wval);
-	smm_free(wkey);
-
-	if (rc == ERROR_SUCCESS) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	return smm_errno_update(SMM_ERR_ACCESS);
-}
-
-static int RegWriteLong(HKEY hMainKey, char *skey, long val)
-{
-	TCHAR	*wkey;
-
-	if ((wkey = smm_mbstowcs_alloc(skey)) == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-
-	if (RegSetValueEx(hMainKey, wkey, 0, REG_DWORD, (BYTE *) &val, 
-				sizeof(long)) == ERROR_SUCCESS) {
-		smm_free(wkey);
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	smm_free(wkey);
-	return smm_errno_update(SMM_ERR_ACCESS);
-}
-
-
-/* This code was picked form MSDN, a little modified */
-static BOOL RegDelnodeRecurse(HKEY hKeyRoot, LPTSTR lpSubKey, int buflen)
-{
-	LPTSTR	lpEnd;
-	LONG	lResult;
-	DWORD	dwSize;
+	struct	RegBuf	*rbuf;
+	HKEY	hNextKey;
 	TCHAR	szName[MAX_PATH];
-	HKEY	hKey;
+	DWORD	i, dwSize, dwKeys;
 
-	/* First, see if we can delete the key without having to recurse. */
-	if (RegDeleteKey(hKeyRoot, lpSubKey) == ERROR_SUCCESS) {
-		return TRUE;
+	/* get number of keys and values */
+	if ((rbuf = registry_buffer_alloc(hKey)) == NULL) {
+		return -2;
 	}
-
-	lResult = RegOpenKeyEx(hKeyRoot, lpSubKey, 0, KEY_READ, &hKey);
-	if (lResult != ERROR_SUCCESS) {
-		if (lResult == ERROR_FILE_NOT_FOUND) {
-			return TRUE;	/* not guilty */
+	for (i = 0; i < rbuf->n_vals; i++) {
+		if (registry_buffer_read_value(hKey, i, rbuf) < 0) {
+			break;
+		}
+		if (rbuf->ty_id == REG_SZ) {
+			wprintf(TEXT("%s = %s  #%s\n"), 
+					rbuf->name, rbuf->content, rbuf->type);
 		} else {
-			return FALSE;	/* access denied */
+			wprintf(TEXT("%s = %p  #%s\n"), 
+					rbuf->name, rbuf->content, rbuf->type);
 		}
 	}
 
-	/* Check for an ending slash and add one if it is missing. */
-	if (lstrlen(lpSubKey) >= buflen) {
-		return FALSE;	/* low buffer memory */
-	}
-	lpEnd = lpSubKey + lstrlen(lpSubKey);
-	if (*(lpEnd - 1) != TEXT('\\')) {
-		*lpEnd++ = TEXT('\\');
-		*lpEnd = TEXT('\0');
-	}
+	dwKeys = rbuf->n_keys;
+	smm_free(rbuf);
 
-	/* Enumerate the keys */
-	dwSize = MAX_PATH;
-	lResult = RegEnumKeyEx(hKey, 0, szName, &dwSize, NULL, 
-			NULL, NULL, NULL);
-	if (lResult == ERROR_SUCCESS) {
-		do {
-			if (lstrlen(lpSubKey) + lstrlen(szName) >= buflen) {
-				break;	/* path is too long */
-			}
-			lstrcpy(lpEnd, szName);
-			if (!RegDelnodeRecurse(hKeyRoot, lpSubKey, buflen)) {
-				break;
-			}
-			dwSize = MAX_PATH;
-			lResult = RegEnumKeyEx(hKey, 0, szName, &dwSize, 
-					NULL, NULL, NULL, NULL);
-		} while (lResult == ERROR_SUCCESS);
-	}
-	lpEnd--;
-	*lpEnd = TEXT('\0');
-	RegCloseKey (hKey);
-
-	/* Try again to delete the key. */
-	if (RegDeleteKey(hKeyRoot, lpSubKey) == ERROR_SUCCESS) {
-		return TRUE;
-	}
-	return FALSE;
-}
-#endif
-
-#ifdef	CFG_UNIX_API
-#include <unistd.h>
-#include <errno.h>
-
-static char *smm_config_mkpath(int sysroot, char *path, int extra);
-
-void *smm_config_open(int sysroot, int mode, char *path, char *fname)
-{
-	void	*root;
-
-	if ((path = smm_config_mkpath(sysroot, path, 0)) == NULL) {
-		return NULL;
-	}
-	root = csc_cfg_open(path, fname, mode);
-	smm_free(path);
-	return root;
-}
-
-int smm_config_flush(void *cfg)
-{
-	return csc_cfg_flush(cfg);
-}
-
-int smm_config_close(void *cfg)
-{
-	return csc_cfg_close(cfg);
-}
-
-int smm_config_delete(int sysroot, char *path, char *fname)
-{
-	path = smm_config_mkpath(sysroot, path, strlen(fname) + 4);
-	if (path == NULL) {
-		return smm_errno_update(SMM_ERR_LOWMEM);
-	}
-	strcat(path, "/");
-	strcat(path, fname);
-	
-	if (unlink(path) == 0) {
-		return smm_errno_update(SMM_ERR_NONE);
-	}
-	if (errno == EACCES) {
-		return smm_errno_update(SMM_ERR_ACCESS);
-	}
-	return smm_errno_update(SMM_ERR_NULL);
-}
-
-char *smm_config_read_alloc(void *cfg, char *mkey, char *skey)
-{
-	return csc_cfg_copy(cfg, mkey, skey, 4);
-}
-
-int smm_config_write(void *cfg, char *mkey, char *skey, char *value)
-{
-	return csc_cfg_write(cfg, mkey, skey, value);
-}
-
-int smm_config_read_long(void *cfg, char *mkey, char *skey, long *val)
-{
-	return csc_cfg_read_long(cfg, mkey, skey, val);
-}
-
-int smm_config_write_long(void *cfg, char *mkey, char *skey, long val)
-{
-	return csc_cfg_write_longlong(cfg, mkey, skey, (long long) val);
-}
-
-static char *smm_config_mkpath(int sysroot, char *path, int extra)
-{
-	char	*fullpath;
-
-	extra += 4;
-	if (path) {
-		extra += strlen(path);
-	}
-	switch (sysroot) {
-	case SMM_CFGROOT_USER:
-		fullpath = csc_strcpy_alloc(getenv("HOME"), extra);
-		break;
-	case SMM_CFGROOT_SYSTEM:
-		fullpath = csc_strcpy_alloc("/etc", extra);
-		break;
-	case SMM_CFGROOT_CURRENT:
-		fullpath = csc_strcpy_alloc(".", extra);
-		break;
-	default:	/* SMM_CFGROOT_DESKTOP */
-		fullpath = csc_strcpy_alloc(getenv("HOME"), extra + 16);
-		if (fullpath) {
-			strcat(fullpath, "/.config");
-			if (path) {
-				strcat(fullpath, "/");
-				strcat(fullpath, path);
-			}
+	for (i = 0; i < dwKeys; i++) {
+		dwSize = MAX_PATH;	//FIXME confused by MSDN
+		if (RegEnumKeyEx(hKey, i, szName, &dwSize, NULL, NULL, 
+					NULL, NULL) != ERROR_SUCCESS) {
+			continue;
 		}
-		break;
+		if (RegOpenKeyEx(hKey, szName, 0, KEY_READ, &hNextKey) 
+				== ERROR_SUCCESS) {
+			wprintf(TEXT("Entering %s\n"), szName);
+			smm_config_registry_read(hNextKey);
+			RegCloseKey(hNextKey);
+		}
 	}
-	if (fullpath == NULL) {
-		smm_errno_update(SMM_ERR_LOWMEM);
+	return 0;
+}
+static struct RegBuf *registry_buffer_alloc(HKEY hKey)
+{
+	struct	RegBuf	*rbuf;
+	DWORD	dwKeys, dwKeyLen, dwVals, dwValNmlen, dwValLen, len;
+
+	RegQueryInfoKey(hKey, NULL, NULL, NULL, 
+			&dwKeys, &dwKeyLen, NULL,
+			&dwVals, &dwValNmlen, &dwValLen, NULL, NULL);
+
+	/* find the longest between name of key and name of value */
+	len = dwKeyLen > dwValNmlen ? dwKeyLen : dwValNmlen;
+	/* note that name of key and name of value are unicode of Win32 */
+	len *= sizeof(TCHAR);
+	/* added the longest content of value in byte */
+	len += dwValLen;
+	/* top up with the structure size and reserve area for type */
+	len += sizeof(struct RegBuf) + 64 * sizeof(TCHAR);
+
+	if ((rbuf = smm_alloc((int)len)) == NULL) {
 		return NULL;
 	}
-	return fullpath;
+
+	rbuf->n_keys = dwKeys;
+	rbuf->n_vals = dwVals;
+	rbuf->name   = (TCHAR*) rbuf->pool;
+	rbuf->nm_len = (dwKeyLen > dwValNmlen ? dwKeyLen : dwValNmlen) + 1;
+	rbuf->type   = &rbuf->name[rbuf->nm_len];
+	rbuf->ty_len = 60;
+	rbuf->content = (void*) &rbuf->type[rbuf->ty_len];
+	rbuf->co_len = dwValLen + 1;
+	wprintf(TEXT("registry_buffer_alloc: (%u/%u)(%u/%u)\n"),
+				 dwKeys, dwKeyLen, dwVals, dwValNmlen);
+	return rbuf;
 }
 #endif
 
-int smm_config_read_int(void *cfg, char *mkey, char *skey, int *val)
-{
-	long	ival;
-	int	rc;
-
-	rc = smm_config_read_long(cfg, mkey, skey, &ival);
-	if (val && (rc == SMM_ERR_NONE)) {
-		*val = (int) ival;
-	}
-	return rc;
-}
-
-int smm_config_write_int(void *cfg, char *mkey, char *skey, int val)
-{
-	return smm_config_write_long(cfg, mkey, skey, (long) val);
-}
-#endif	// if 0

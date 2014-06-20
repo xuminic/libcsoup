@@ -97,7 +97,7 @@ char *smm_fontpath(char *ftname, char **userdir)
 #ifdef	CFG_WIN32_API
 	/* search Windows system font */
 	if (GetWindowsDirectory(wpbuf, MAX_PATH)) {
-		if ((home = smm_wcstombs_allow(wpbuf)) == NULL) {
+		if ((home = smm_wcstombs_alloc(wpbuf)) == NULL) {
 			return NULL;
 		}
 		if (realloc(home, strlen(home) + 16) == NULL) {

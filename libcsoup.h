@@ -363,6 +363,7 @@ int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
 void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
 int csc_cfg_isdir(KEYCB *kcb);
+KEYCB *csc_cfg_kcb_alloc(int psize);
 int csc_cfg_dump_kcb(KEYCB *cfg);
 int csc_cfg_dump(KEYCB *cfg);
 #ifdef __cplusplus
@@ -597,7 +598,7 @@ int smm_codepage_reset(void);
 
 struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode);
 int smm_config_close(struct KeyDev *cfgd);
-int smm_config_read(struct KeyDev *cfgd, KEYCB *kp);
+KEYCB *smm_config_read_alloc(struct KeyDev *cfgd);
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp);
 int smm_config_delete(int sysdir, char *path, char *fname);
 void smm_config_dump(struct KeyDev *cfgd);

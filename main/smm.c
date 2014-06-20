@@ -75,7 +75,7 @@ static int do_smm_config(char *path)
 [/usr/andy]\n\
 key   =   v alue  #  hello\n\
 [/usr/boy]\n";
-	KEYCB	kbuf[16];
+	KEYCB	*kbuf;
 
 	(void) path;
 	for (i = 0; i < (int)(sizeof(syspath)/sizeof(int)); i++) {
@@ -102,36 +102,43 @@ key   =   v alue  #  hello\n\
 		smm_config_close(root);
 	}
 
-	memset(kbuf, 0, sizeof(kbuf));
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
-	while ((i = smm_config_read(root, kbuf)) > 0) {
-		slogz("READ: %d %s", i, kbuf->pool);
+	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
+		slogz("READ: %s", kbuf->pool);
 		if (kbuf->key == NULL) {
 			csc_cfg_kcb_fillup(kbuf);
 		}
 		//slogz("%s/%s/%s\n", kbuf->key, kbuf->value, kbuf->comment);
 		smm_config_write(root, kbuf);
-		memset(kbuf, 0, sizeof(kbuf));
+		smm_free(kbuf);
 	}
 	smm_config_close(root);
 	slogz("\n");
 
-	memset(kbuf, 0, sizeof(kbuf));
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
 	save = smm_config_open(SMM_CFGROOT_MEMPOOL, sbuf, NULL, sizeof(sbuf));
 	sfd = smm_config_open(SMM_CFGROOT_CURRENT, NULL, TEST_FILE, CSC_CFG_RWC);
-	while ((i = smm_config_read(root, kbuf)) > 0) {
+	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
 		if (kbuf->key == NULL) {
 			csc_cfg_kcb_fillup(kbuf);
 		}
 		smm_config_write(save, kbuf);
 		smm_config_write(sfd, kbuf);
-		memset(kbuf, 0, sizeof(kbuf));
+		smm_free(kbuf);
 	}
 	smm_config_close(sfd);
 	smm_config_close(save);
 	smm_config_close(root);
-	slogz("%s", sbuf);
+	slogz("%s\n", sbuf);
+
+	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
+	root = smm_config_open(SMM_CFGROOT_DESKTOP, NULL, 
+			"7-Zip", CSC_CFG_READ);
+	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
+		smm_free(kbuf);
+	}
+
+	smm_config_close(root);
 	return 0;
 }
 

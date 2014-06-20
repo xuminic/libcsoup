@@ -89,7 +89,6 @@ struct	KEYROOT	{
 	char	pool[1];
 };
 
-static KEYCB *csc_cfg_kcb_alloc(int psize);
 static KEYCB *csc_cfg_root_alloc(int sysdir, char *path, char *filename, int);
 static KEYCB *csc_cfg_kcb_create(char *key, char *value, char *comm);
 int csc_cfg_kcb_fillup(KEYCB *kp);
@@ -104,10 +103,12 @@ static int csc_cfg_destroy_links(CSCLNK *anchor);
 static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor);
 static int csc_cfg_attribute(KEYCB *kcb);
 static int csc_cfg_strcmp(char *sour, char *dest);
-static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
-static int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
 static char *csc_cfg_format_directory(char *dkey);
 static char *csc_cfg_format_dir_alloc(char *dkey);
+
+int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
+int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
+
 
 static KEYCB *CFGF_GETOBJ(CSCLNK *self)
 {
@@ -125,7 +126,6 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 {
 	struct	KeyDev	*cfgd;
 	KEYCB	*root, *kp;
-	int	len;
 
 	/* create the root control block */
 	if (sysdir == SMM_CFGROOT_MEMPOOL) {
@@ -151,12 +151,7 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 		return NULL;
 	}
 
-	while ((len = smm_config_read(cfgd, NULL)) > 0) {
-		if ((kp = csc_cfg_kcb_alloc(len)) == NULL) {
-			break;
-		}
-		smm_config_read(cfgd, kp);
-
+	while ((kp = smm_config_read_alloc(cfgd)) != NULL) {
 		/* In Win32 registry interface, smm_config_read() will read 
 		 * and fill in the KEYCB structure itself. However if the 
 		 * configure were read from a file, it need to be break down 
@@ -537,6 +532,22 @@ int csc_cfg_isdir(KEYCB *kcb)
 	return (CFGF_TYPE_GET(kcb->flags) == CFGF_TYPE_DIR);
 }
 
+KEYCB *csc_cfg_kcb_alloc(int psize)
+{
+	CSCLNK	*node;
+	KEYCB	*kp;
+
+	psize += sizeof(KEYCB) + 8;	/* reserved 8 bytes */
+	psize = (psize + 3) / 4 * 4;	/* round up to 32-bit boundry */
+
+	if ((node = csc_cdl_list_alloc(psize)) == NULL) {
+		return NULL;
+	}
+	kp = (KEYCB*) &node[1];
+	kp->self = node;
+	return kp;
+}
+
 int csc_cfg_dump_kcb(KEYCB *kp)
 {
 	switch (CFGF_TYPE_GET(kp->flags)) {
@@ -603,22 +614,6 @@ int csc_cfg_dump(KEYCB *entry)
 /****************************************************************************
  * Internal Functions
  ****************************************************************************/
-static KEYCB *csc_cfg_kcb_alloc(int psize)
-{
-	CSCLNK	*node;
-	KEYCB	*kp;
-
-	psize += sizeof(KEYCB) + 8;	/* reserved 8 bytes */
-	psize = (psize + 3) / 4 * 4;	/* round up to 32-bit boundry */
-
-	if ((node = csc_cdl_list_alloc(psize)) == NULL) {
-		return NULL;
-	}
-	kp = (KEYCB*) &node[1];
-	kp->self = node;
-	return kp;
-}
-
 static KEYCB *csc_cfg_root_alloc(int sysdir, char *path, 
 		char *filename, int mode)
 {
@@ -1112,7 +1107,7 @@ static int csc_cfg_strcmp(char *sour, char *dest)
 	return slen - dlen;
 }
 
-static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen)
+int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen)
 {
 	char	temp[4];
 	int	i;
@@ -1131,7 +1126,7 @@ static int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen)
 	return slen * 2;	/* return the length of the hex string */
 }
 
-static int csc_cfg_hex_to_binary(char *src, char *buf, int blen)
+int csc_cfg_hex_to_binary(char *src, char *buf, int blen)
 {
 	char	temp[4];
 	int	amnt = 0;
