@@ -134,10 +134,14 @@ key   =   v alue  #  hello\n\
 	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
 	root = smm_config_open(SMM_CFGROOT_DESKTOP, NULL, 
 			"7-Zip", CSC_CFG_READ);
+	save = smm_config_open(SMM_CFGROOT_DESKTOP, NULL,
+			"8-Zip", CSC_CFG_RWC);
 	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
+		csc_cfg_dump_kcb(kbuf);
+		smm_config_write(save, kbuf);
 		smm_free(kbuf);
 	}
-
+	smm_config_close(save);
 	smm_config_close(root);
 	return 0;
 }

@@ -41,6 +41,7 @@ int main(int argc, char **argv)
 		slogc(tstdbg, SLINFO, "%s: command not found.\n", *argv);
 	}
 	slog_close(tstdbg);
+
 	return -1;
 }
 

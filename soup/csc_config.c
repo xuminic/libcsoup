@@ -57,25 +57,6 @@
 
 #include "libcsoup.h"
 
-#define CFGF_TYPE_UNKWN	0	/* delimiter, not used */
-#define CFGF_TYPE_ROOT	1	/* root control block (only one) */
-#define CFGF_TYPE_DIR	2	/* directory key control block (under root) */
-#define CFGF_TYPE_KEY	3	/* common key */
-#define CFGF_TYPE_PART	4	/* partial key without value */
-#define CFGF_TYPE_VALUE	5	/* only value without the key */
-#define CFGF_TYPE_COMM	6	/* comment */
-#define CFGF_TYPE_NULL	7	/* delimiter, not used */
-#define CFGF_TYPE_MASK	0xf
-#define CFGF_TYPE_SET(f,n)	(((f) & ~CFGF_TYPE_MASK) | (n))
-#define CFGF_TYPE_GET(f)	((f) & CFGF_TYPE_MASK)
-
-#define CFGF_MODE_MASK	0xf0	/* mask of CSC_CFG_READ,CSC_CFG_RDWR,... */
-#define CFGF_MODE_SET(f,n)	(((f) & ~CFGF_MODE_MASK) | (n))
-#define CFGF_MODE_GET(f)	((f) & CFGF_MODE_MASK)
-
-/* define the maximum depth of a directory key */
-#define CFGF_MAX_DEPTH		36
-
 #define	CFGF_BLOCK_WID		48
 #define CFGF_BLOCK_MAGIC	"BINARY"
 
@@ -101,7 +82,7 @@ static int csc_cfg_access_setup(KEYCB *cfg, KEYCB *dkcb, KEYCB *kcb);
 static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type);
 static int csc_cfg_destroy_links(CSCLNK *anchor);
 static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor);
-static int csc_cfg_attribute(KEYCB *kcb);
+static int csc_cfg_attribute(KEYCB *kcb, int *attr);
 static int csc_cfg_strcmp(char *sour, char *dest);
 static char *csc_cfg_format_directory(char *dkey);
 static char *csc_cfg_format_dir_alloc(char *dkey);
@@ -527,11 +508,6 @@ int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize)
 	return bsize;
 }
 
-int csc_cfg_isdir(KEYCB *kcb)
-{
-	return (CFGF_TYPE_GET(kcb->flags) == CFGF_TYPE_DIR);
-}
-
 KEYCB *csc_cfg_kcb_alloc(int psize)
 {
 	CSCLNK	*node;
@@ -548,6 +524,7 @@ KEYCB *csc_cfg_kcb_alloc(int psize)
 	return kp;
 }
 
+#define CFGF_SHOW_CONTENT	(CSC_MEMDUMP_NO_GLYPH | CSC_MEMDUMP_NO_ADDR)
 int csc_cfg_dump_kcb(KEYCB *kp)
 {
 	switch (CFGF_TYPE_GET(kp->flags)) {
@@ -564,8 +541,22 @@ int csc_cfg_dump_kcb(KEYCB *kp)
 		}
 		break;
 	case CFGF_TYPE_KEY:
-		slogz("KEYP_%d: %s = %s %s\n", kp->update, 
-				kp->key, kp->value, kp->comment);
+		if (kp->comment == NULL) {
+			slogz("KEYP_%d: %s = %s %s\n", kp->update, 
+					kp->key, kp->value, kp->comment);
+		} else if (!csc_strcmp_list(kp->comment, "##REG_BINARY",
+					"##REG_NONE", "##REG_UNKNOWN", NULL)) {
+			char	buf[80];
+			buf[0] = 0;
+			csc_memdump_line(kp->value, 
+				kp->vsize < 8 ? kp->vsize : 8,
+				CFGF_SHOW_CONTENT, buf, 80);
+			slogz("KEYP_%d: %s = (%d)%s %s\n", kp->update,
+					kp->key, kp->vsize, buf, kp->comment);
+		} else {
+			slogz("KEYP_%d: %s = %s %s\n", kp->update,
+					kp->key, kp->value, kp->comment);
+		}
 		break;
 	case CFGF_TYPE_PART:
 		slogz("PART_%d: %s %s %s\n", kp->update,
@@ -1018,7 +1009,7 @@ static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor)
 
 		/* find how many keys in the current directory 
 		 * and eliminate the empty directories */
-		if (csc_cfg_attribute(dkcb)) {
+		if (csc_cfg_attribute(dkcb, NULL)) {
 			smm_config_write(cfgd, dkcb);
 		}
 
@@ -1027,68 +1018,45 @@ static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor)
 	return 0;
 }
 
-static int csc_cfg_attribute(KEYCB *kcb)
+/* attr can be NULL, otherwise it should be at least CFGF_TYPE_MASK+1 long */
+static int csc_cfg_attribute(KEYCB *kcb, int *attr)
 {
 	CSCLNK	*cp;
 	KEYCB	*ccb;
-	int	accnt[8];
+	int	keyno, accnt[CFGF_TYPE_MASK+1];
 
-	memset(accnt, 0, sizeof(accnt));
+	keyno = 0;
+	if (attr == NULL) {
+		attr = accnt;
+	}
+	memset(attr, 0, (CFGF_TYPE_MASK+1)*sizeof(int));
+	
 	for (cp = kcb->anchor; cp; cp = csc_cdl_next(kcb->anchor, cp)) {
 		if ((ccb = CFGF_GETOBJ(cp)) == NULL) {
 			break;
 		}
+		attr[CFGF_TYPE_GET(ccb->flags)]++;
 		switch (CFGF_TYPE_GET(ccb->flags)) {
-		case CFGF_TYPE_DIR:
-			accnt[1]++;
-			break;
 		case CFGF_TYPE_KEY:
-			accnt[0]++;
-			accnt[2]++;
-			break;
+		case CFGF_TYPE_BIN:
 		case CFGF_TYPE_PART:
-			accnt[0]++;
-			accnt[3]++;
-			break;
 		case CFGF_TYPE_VALUE:
-			accnt[0]++;
-			accnt[4]++;
-			break;
 		case CFGF_TYPE_COMM:
-			accnt[0]++;
-			accnt[5]++;
-			break;
-		default:
-			accnt[6]++;
+			keyno++;
 			break;
 		}
 	}
+	attr[CFGF_TYPE_GET(kcb->flags)]++;;
 	switch (CFGF_TYPE_GET(kcb->flags)) {
-	case CFGF_TYPE_ROOT:
-	case CFGF_TYPE_DIR:
-		accnt[1]++;
-		break;
 	case CFGF_TYPE_KEY:
-		accnt[0]++;
-		accnt[2]++;
-		break;
+	case CFGF_TYPE_BIN:
 	case CFGF_TYPE_PART:
-		accnt[0]++;
-		accnt[3]++;
-		break;
 	case CFGF_TYPE_VALUE:
-		accnt[0]++;
-		accnt[4]++;
-		break;
 	case CFGF_TYPE_COMM:
-		accnt[0]++;
-		accnt[5]++;
-		break;
-	default:
-		accnt[6]++;
+		keyno++;
 		break;
 	}
-	return accnt[0];
+	return keyno;
 }
 
 /* strcmp() without comparing the head and tail white spaces */

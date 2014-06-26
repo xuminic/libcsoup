@@ -310,20 +310,46 @@ int csc_memdump(void *mem, int range, int column, int flags);
  * See csc_config.c: simple interface of a configure file.
  * Definitions and functions for the simple interface of a configure file.
  ****************************************************************************/
-#define CSC_CFG_READ		0	/* read only */
-#define CSC_CFG_RDWR		0x10	/* read and write */
-#define CSC_CFG_RWC		0x20	/* read, write and create */
+
+#define CFGF_TYPE_UNKWN	0	/* delimiter, not used */
+#define CFGF_TYPE_ROOT	1	/* root control block (only one) */
+#define CFGF_TYPE_DIR	2	/* directory key control block (under root) */
+#define CFGF_TYPE_KEY	3	/* common key */
+#define CFGF_TYPE_PART	4	/* partial key without value */
+#define CFGF_TYPE_VALUE	5	/* only value without the key */
+#define CFGF_TYPE_COMM	6	/* comment */
+#define CFGF_TYPE_BIN	7	/* common key with binary value (win32) */
+#define CFGF_TYPE_NULL	8	/* delimiter, not used */
+#define CFGF_TYPE_MASK	0xf
+#define CFGF_TYPE_SET(f,n)	(((f) & ~CFGF_TYPE_MASK) | (n))
+#define CFGF_TYPE_GET(f)	((f) & CFGF_TYPE_MASK)
+
+#define CSC_CFG_READ	0	/* read only */
+#define CSC_CFG_RDWR	0x10	/* read and write */
+#define CSC_CFG_RWC	0x20	/* read, write and create */
+#define CFGF_MODE_MASK  0xf0    /* mask of CSC_CFG_READ,CSC_CFG_RDWR,... */
+#define CFGF_MODE_SET(f,n)      (((f) & ~CFGF_MODE_MASK) | (n))
+#define CFGF_MODE_GET(f)        ((f) & CFGF_MODE_MASK)
+
+
+/* define the maximum depth of a directory key */
+#define CFGF_MAX_DEPTH	36
+
 
 typedef	struct	_KEYCB	{
 	/* A fixed pointer to its CSCLNK compatible head */
 	CSCLNK	*self;
+	/* points to the sub-directories chain */
 	CSCLNK	*anchor;
 
-	/* key and value are matching pairs. 
-	 * If value is NULL, the key points to a main key and anchor points
-	 * to the sub-key chain */
+	/* Note that the directories must have the '[]' pair.
+	 * They will be appended when reading from the registry. */
 	char	*key;
+	/* The value can be empty, which means a partial key, or points
+	 * to binary data, where the vsize is needed */
 	char	*value;
+	int	vsize;
+	/* Note that comments start with '##' are reserved for registry */
 	char	*comment;
 
 	int	flags;
@@ -362,7 +388,6 @@ int csc_cfg_write_bin(KEYCB *cfg, char *dkey, char *nkey, void *bin, int bsize);
 int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
 void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
-int csc_cfg_isdir(KEYCB *kcb);
 KEYCB *csc_cfg_kcb_alloc(int psize);
 int csc_cfg_dump_kcb(KEYCB *cfg);
 int csc_cfg_dump(KEYCB *cfg);
