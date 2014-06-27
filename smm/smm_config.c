@@ -51,6 +51,8 @@ struct	KeyDev	{
 	HKEY	hRootKey;	/* root key points to the entrance */
 	HKEY	hSaveKey;	/* used to save contents */
 
+	KEYCB	*kbin;		/* for saving binary/block */
+
 	int	idx;
 	struct	{
 		HKEY	hKey;
@@ -720,20 +722,38 @@ static int smm_config_registry_write(struct KeyDev *cfgd, KEYCB *kp)
 	DWORD	dwErr;
 	
 	if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_DIR) {
+		if (cfgd->kbin) {	
+			/* save, close and clean the binary block */
+			smm_config_registry_binary_close(cfgd);
+		}
 		if (cfgd->hSaveKey && (cfgd->hSaveKey != cfgd->hRootKey)) {
 			RegCloseKey(cfgd->hSaveKey);
 		}
-
 		cfgd->hSaveKey = RegKeyFromDir(cfgd->hRootKey, kp->key);
 		if (cfgd->hSaveKey == NULL) {
 			return SMM_ERR_ACCESS;
 		}
 		return SMM_ERR_NONE;
 	}
-
 	if (cfgd->hSaveKey == NULL) {
 		return SMM_ERR_ACCESS;
 	}
+
+	/* process the binary/block data
+	 * note that the 'vsize' field must be set in the KEYCB */
+	if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_BIN) {
+		if (cfgd->kbin) {	
+			/* save, close and clean the binary block */
+			smm_config_registry_binary_close(cfgd);
+		}
+		return smm_config_registry_binary_open(cfgd, kp);
+	}
+	if (cfgd->kbin) {
+		return smm_config_registry_binary_update(cfgd, kp);
+	}
+
+	/* save the normal key/value pair 
+	 * note that the binary savings are just dummies. */
 	if ((wpath = smm_mbstowcs_alloc(kp->key)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
@@ -887,6 +907,13 @@ static KEYCB *smm_config_registry_key_alloc(struct KeyDev *cfgd, int idx)
 		return NULL;
 	}
 
+	/* make the size of value is no less than 32 bytes so it can fit
+	 * CFGF_BLOCK_MAGIC properly, see csc_config.c.
+	 * I agree it's a dirty way to achieve this */
+	if (dwLeng < 32) {
+		dwLeng = 32;
+	}
+
 	/* estimate the total length of the entry according to RFC3629,
 	 * the longest UTF-8 character should be 4 bytes */
 	len = (dwSize + dwLeng) * 4 + 64;
@@ -906,11 +933,13 @@ static KEYCB *smm_config_registry_key_alloc(struct KeyDev *cfgd, int idx)
 	len -= strlen(kp->key) + 1;
 	kp->comment = kp->value + len - 64;
 
+	kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_KEY);
 	switch (dwType) {
 	case REG_BINARY:
 		memcpy(kp->value, content, dwLeng);
 		strcpy(kp->comment, "##REG_BINARY");
 		kp->vsize = (int) dwLeng;
+		csc_cfg_link_block(kp, kp->value, kp->vsize);
 		break;
 	case REG_DWORD:		/* == REG_DWORD_LITTLE_ENDIAN */
 		dwSize = *((DWORD *) content);
@@ -946,6 +975,7 @@ static KEYCB *smm_config_registry_key_alloc(struct KeyDev *cfgd, int idx)
 		memcpy(kp->value, content, dwLeng);
 		strcpy(kp->comment, "##REG_NONE");
 		kp->vsize = (int) dwLeng;
+		csc_cfg_link_block(kp, kp->value, kp->vsize);
 		break;
 	case REG_QWORD:		/* == REG_QWORD_LITTLE_ENDIAN */
 		SMM_SPRINT(kp->value, "%llu", 
@@ -962,10 +992,10 @@ static KEYCB *smm_config_registry_key_alloc(struct KeyDev *cfgd, int idx)
 		memcpy(kp->value, content, dwLeng);
 		strcpy(kp->comment, "##REG_UNKNOWN");
 		kp->vsize = (int) dwLeng;
+		csc_cfg_link_block(kp, kp->value, kp->vsize);
 		break;
 	}
 	smm_free(tbuf);
-	kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_KEY);
 
 	return kp;
 }
@@ -1021,6 +1051,79 @@ static KEYCB *smm_config_registry_path_alloc(struct KeyDev *cfgd)
 			RREF(cfgd).n_keys, RREF(cfgd).n_vals);
 	smm_free(path);
 	return kp;
+}
+
+static int smm_config_registry_binary_open(struct KeyDev *cfgd, KEYCB *kp)
+{
+	/* the 'value' field of a binary block is always stored the magic
+	 * identity so this field can be reused.
+	 * note that the 'vsize' field must be set properly in the KEYCB */
+	kp->value = NULL;
+	if (kp->vsize) {
+		kp->value = smm_alloc(kp->vsize);
+	}
+
+	/* the 'update' field will be reused too as the index */
+	kp->update = 0;
+
+	cfgd->kbin = kp;
+	return SMM_ERR_NONE;
+}
+
+static int smm_config_registry_binary_close(struct KeyDev *cfgd)
+{
+	TCHAR	*wpath;
+	DWORD	dwErr;
+	char	*key;
+
+	if (cfgd->kbin->value == NULL) {
+		cfgd->kbin->vsize = 0;
+	}
+
+	if ((key = strrchr(cfgd->kbin->key, '/')) == NULL) {
+		key = cfgd->kbin->key;
+	} else {
+		key++;
+	}
+	if ((wpath = smm_mbstowcs_alloc(key)) == NULL) {
+		smm_free(cfgd->kbin->value);
+		cfgd->kbin = NULL;
+		return SMM_ERR_LOWMEM;
+	}
+	if (kp->comment && !strcmp(kp->comment, "##REG_NONE")) {
+		dwErr = RegSetValueEx(cfgd->hSaveKey, wpath, 0,
+				REG_NONE, (void*)kp->value, kp->vsize);
+	} else {
+		dwErr = RegSetValueEx(cfgd->hSaveKey, wpath, 0,
+				REG_BINARY, (void*)kp->value, kp->vsize);
+	}
+	smm_free(wpath);
+	smm_free(cfgd->kbin->value);
+	cfgd->kbin = NULL;
+	return SMM_ERR_NONE;
+}
+
+static int smm_config_registry_binary_update(struct KeyDev *cfgd, KEYCB *kp)
+{
+	char	*src, tmp[256];
+	int	len;
+
+	if (cfgd->kbin->value == NULL) {
+		return 0;
+	}
+
+	/* convert ASC to binary */
+	src = csc_strbody(kp->key, NULL); /* strip the space */
+	len = csc_cfg_hex_to_binary(src, tmp, sizeof(tmp));
+
+	if (cfgd->kbin->update + len > cfgd->kbin->vsize) {
+		len = cfgd->kbin->vsize - cfgd->kbin->update;
+	}
+	if (len) {
+		memcpy(cfgd->kbin->value + cfgd->kbin->update, tmp, len);
+		cfgd->kbin->update += len;
+	}
+	return len;
 }
 
 static HKEY RegKeyFromDir(HKEY hRoot, char *dkey)

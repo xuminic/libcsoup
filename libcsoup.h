@@ -388,6 +388,7 @@ int csc_cfg_write_bin(KEYCB *cfg, char *dkey, char *nkey, void *bin, int bsize);
 int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
 void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
+int csc_cfg_link_block(KEYCB *block, void *bin, int bsize);
 KEYCB *csc_cfg_kcb_alloc(int psize);
 int csc_cfg_dump_kcb(KEYCB *cfg);
 int csc_cfg_dump(KEYCB *cfg);
