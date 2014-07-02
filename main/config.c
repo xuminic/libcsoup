@@ -276,6 +276,24 @@ int config_block_test(char *fname)
 	return 0;
 }
 
+
+int config_registry_test(void)
+{
+	KEYCB	*root;
+
+	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
+	root = csc_cfg_open(SMM_CFGROOT_DESKTOP, NULL, "7-Zip", CSC_CFG_READ);
+	if (root == NULL) {
+		return -1;
+	}
+	
+	csc_cfg_saveas(root, SMM_CFGROOT_MEMPOOL, NULL, NULL);
+	csc_cfg_close(root);
+	return 0;
+}
+
+
+
 int config_create_new(void)
 {
 	char	*path;
@@ -296,6 +314,7 @@ static	struct	cliopt	clist[] = {
 	{   0, NULL,        0, "OPTIONS:" },
 	{ 'h', "help",      0, "This help" },
 	{ 'o', "open-read", 0, "Open the configure file in read-only mode" },
+	{ 'r', "registry",  0, "dump the registry" },
 	{ 'k', "key-test",  0, "Test the key and value pairs" },
 	{ 'b', "block",     1, "Test the block in the configure file" },
 	{ 'c', "create",    0, "Create a new configure file" },
@@ -321,6 +340,9 @@ int config_main(void *rtime, int argc, char **argv)
 			break;
 		case 'o':
 			config_open_rdonly();
+			break;
+		case 'r':
+			config_registry_test();
 			break;
 		case 'k':
 			config_key_test();

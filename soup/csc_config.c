@@ -17,6 +17,10 @@
     (FILESYSTEM) [main/section/device]
     (REGISTRY)   main\\section\\device      (Win32 Term: keys and sub-keys)
 
+    Binary Block, a special form of Directory:
+    (FILESYSTEM) [main/section/device] = BINARY:128  ##REG_BINARY
+    (REGISTRY)   main\\section\\device	REG_BINARY
+
     Normal Key and Value:
     (FILESYSTEM) key = value #Comments
     (REGISTRY)   key REG_SZ value           (Win32 Term: values)
@@ -57,7 +61,7 @@
 
 #include "libcsoup.h"
 
-#define	CFGF_BLOCK_WID		48
+#define	CFGF_BLOCK_WID		36
 #define CFGF_BLOCK_MAGIC	"BINARY:"
 
 
@@ -83,7 +87,6 @@ static KEYCB *csc_cfg_access_update(KEYCB *cfg, int type);
 static int csc_cfg_destroy_links(CSCLNK *anchor);
 static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor);
 static int csc_cfg_attribute(KEYCB *kcb, int *attr);
-static int csc_cfg_is_block(KEYCB *kcb);
 static int csc_cfg_strcmp(char *sour, char *dest);
 static char *csc_cfg_format_directory(char *dkey);
 static char *csc_cfg_format_dir_alloc(char *dkey);
@@ -426,7 +429,7 @@ int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen)
 	if ((dcb = csc_cfg_find_dir(cfg, dkey)) == NULL) {
 		return -1; 	/* block not found */
 	}
-	if (!csc_cfg_is_block(dcb)) {
+	if (csc_cfg_block_size(dcb) < 0) {
 		return -2;	/* wrong block type */
 	}
 	if ((ncb = csc_cfg_find_key(dcb, NULL, CFGF_TYPE_PART)) == NULL) {
@@ -436,7 +439,7 @@ int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen)
 
 	amnt = 0;
 	do {
-		/* convert ASC to binary */
+		/* convert hex to binary */
 		src = csc_strbody(ncb->key, NULL); /* strip the space */
 		len = csc_cfg_hex_to_binary(src, tmp, sizeof(tmp));
 
@@ -483,6 +486,11 @@ int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize)
 		return SMM_ERR_LOWMEM;
 	} 
 
+	/* you can't write blocks into other types of dir keys */
+	if (csc_cfg_block_size(dcb) < 0) {
+		return SMM_ERR_ACCESS;
+	}
+
 	if (csc_cfg_link_block(dcb, bin, bsize) == SMM_ERR_NONE) {
 		cfg->update++;
 	}
@@ -498,20 +506,13 @@ int csc_cfg_link_block(KEYCB *block, void *bin, int bsize)
 	if (bin == NULL) {
 		bsize = 0;
 	}
-
 	if (block == NULL) {
 		return SMM_ERR_NULL;
-	}
-	if (!csc_cfg_is_block(block)) {
-		/* you can't write blocks into other types of dir keys */
-		return SMM_ERR_ACCESS;
 	}
 
 	/* if the directory key does exist, destory its contents */
 	csc_cdl_list_destroy(&block->anchor);
-	block->update = 0;
-	/* make sure it's a binary block */
-	block->flags  = CFGF_TYPE_SET(block->flags, CFGF_TYPE_BIN);
+	//block->update = 0;
 
 	for (src = bin, rest = bsize; rest > 0; rest -= CFGF_BLOCK_WID) {
 		/* convert the binary to hex codes */
@@ -523,12 +524,33 @@ int csc_cfg_link_block(KEYCB *block, void *bin, int bsize)
 		if ((ncb = csc_cfg_kcb_create(tmp, NULL, NULL)) == NULL) {
 			return SMM_ERR_LOWMEM;
 		}
-		block->update++;
+		//block->update++;
 		csc_cdl_list_insert_tail(&block->anchor, ncb->self);
 	}
+
+	/* make sure it's a binary block */
+	block->flags = CFGF_TYPE_SET(block->flags, CFGF_TYPE_DIR);
+	block->vsize = bsize;
 	sprintf(block->value, CFGF_BLOCK_MAGIC "%d", bsize);
 	return SMM_ERR_NONE;
 }
+
+/* return:
+ * 0: not a binary block
+ * <0: empty binary block
+ * n: content size of the binary block */
+#define MAGIC_LENGTH	(sizeof(CFGF_BLOCK_MAGIC) - 1)
+int csc_cfg_block_size(KEYCB *kcb)
+{
+	if (kcb->value == NULL) {
+		return -1;
+	}
+	if (strncmp(kcb->value, CFGF_BLOCK_MAGIC, MAGIC_LENGTH)) {
+		return -2;
+	}
+	return (int) strtol(kcb->value + MAGIC_LENGTH, NULL, 0);
+}
+
 
 KEYCB *csc_cfg_kcb_alloc(int psize)
 {
@@ -546,6 +568,7 @@ KEYCB *csc_cfg_kcb_alloc(int psize)
 	return kp;
 }
 
+
 #define CFGF_SHOW_CONTENT	(CSC_MEMDUMP_NO_GLYPH | CSC_MEMDUMP_NO_ADDR)
 int csc_cfg_dump_kcb(KEYCB *kp)
 {
@@ -554,17 +577,16 @@ int csc_cfg_dump_kcb(KEYCB *kp)
 		slogz("COMM_%d: %s\n", kp->update, kp->comment);
 		break;
 	case CFGF_TYPE_DIR:
-		if (kp->value) {
+		if (csc_cfg_block_size(kp) >= 0) {
+			slogz("BLCK_%d: [%s] = %s %s\n", kp->update,
+					kp->key, kp->value, kp->comment);
+		} else if (kp->value) {
 			slogz("MAIN_%d: [%s] = %s %s\n", kp->update, 
 					kp->key, kp->value, kp->comment);
 		} else {
 			slogz("MAIN_%d: [%s] %s\n", kp->update, 
 					kp->key, kp->comment);
 		}
-		break;
-	case CFGF_TYPE_BIN:
-		slogz("BLCK_%d: [%s] = %s %s\n", kp->update,
-				kp->key, kp->value, kp->comment);
 		break;
 	case CFGF_TYPE_KEY:
 		if (kp->comment == NULL) {
@@ -625,6 +647,50 @@ int csc_cfg_dump(KEYCB *entry)
 		}
 	}
 	return 0;
+}
+
+int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen)
+{
+	char	temp[4];
+	int	i;
+
+	for (i = 0; i < slen; i++) {
+		sprintf(temp, "%02X", (unsigned char) *src++);
+		if (buf && (blen > 1)) {
+			blen -= 2;
+			*buf++ = temp[0];
+			*buf++ = temp[1];
+		}
+	}
+	if (buf && (blen > 0)) {
+		*buf++ = 0;
+	}
+	return slen * 2;	/* return the length of the hex string */
+}
+
+int csc_cfg_hex_to_binary(char *src, char *buf, int blen)
+{
+	char	temp[4];
+	int	amnt = 0;
+
+	while (*src) {
+		if (isxdigit(*src)) {
+			temp[0] = *src++;
+		}
+		if (isxdigit(*src)) {
+			temp[1] = *src++;
+		} else {
+			break;
+		}
+		temp[2] = 0;
+
+		if (buf && blen) {
+			*buf++ = (char)strtol(temp, 0, 16);
+			blen--;
+		}
+		amnt++;
+	}
+	return amnt;
 }
 
 
@@ -786,19 +852,14 @@ int csc_cfg_kcb_fillup(KEYCB *kp)
 		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_KEY);
 	}
 
-	/* Last scan to decide if it is a directory or block */
+	/* Last scan to decide if it is a directory or a block */
 	if ((*kp->key == '[') && strchr(kp->key + 2, ']')) { 
 		kp->key++;	/* strip the '[]' pair */
 		p = strchr(kp->key + 1, ']');
 		*p = 0;
-		kp->key = csc_cfg_format_directory(kp->key);
-		if (csc_cfg_is_block(kp)) {
-			kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_BIN);
-			kp->vsize = (int)strtol(kp->value + 
-					sizeof(CFGF_BLOCK_MAGIC), NULL, 0);
-		} else {
-			kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_DIR);
-		}
+		kp->key   = csc_cfg_format_directory(kp->key);
+		kp->flags = CFGF_TYPE_SET(kp->flags, CFGF_TYPE_DIR);
+		kp->vsize = csc_cfg_block_size(kp);
 	}
 	return CFGF_TYPE_GET(kp->flags);
 }
@@ -839,8 +900,7 @@ static KEYCB *csc_cfg_find_dir_exec(KEYCB *cfg, char *key)
 		if ((kcb = CFGF_GETOBJ(mp)) == NULL) {
 			break;
 		}
-		if ((CFGF_TYPE_GET(kcb->flags) != CFGF_TYPE_DIR) &&
-				(CFGF_TYPE_GET(kcb->flags) != CFGF_TYPE_BIN)) {
+		if (CFGF_TYPE_GET(kcb->flags) != CFGF_TYPE_DIR) {
 			continue;
 		}
 		if (kcb->key && !csc_cfg_strcmp(kcb->key, key)) {
@@ -932,10 +992,18 @@ static int csc_cfg_insert(KEYCB *cfg, KEYCB *kcb)
 		rext->dkcb = cfg;	/* safe zone */
 	}
 
+	/* if the kcb is a binary block, it could be a control block
+	 * with or without its content block. If the kcb came from the
+	 * Win32 registry interface, it should have already generated the
+	 * whole list of the block content so it would be easy to be inserted
+	 * into the current directory. Otherwise we need to make the control
+	 * block to be the current directory and insert further contents in */
 	if (CFGF_TYPE_GET(kcb->flags) != CFGF_TYPE_DIR) {
 		csc_cdl_list_insert_tail(&rext->dkcb->anchor, kcb->self);
+	} else if (kcb->anchor) {	/* directory or binary with contents */
+		csc_cdl_list_insert_tail(&rext->dkcb->anchor, kcb->self);
 	} else {
-		rext->dkcb = csc_cfg_mkdir(cfg, kcb->key, kcb->value, 
+		rext->dkcb = csc_cfg_mkdir(cfg, kcb->key, kcb->value,
 				kcb->comment);
 		if (rext->dkcb == NULL) {
 			return SMM_ERR_NULL;
@@ -1071,7 +1139,6 @@ static int csc_cfg_attribute(KEYCB *kcb, int *attr)
 		attr[CFGF_TYPE_GET(ccb->flags)]++;
 		switch (CFGF_TYPE_GET(ccb->flags)) {
 		case CFGF_TYPE_KEY:
-		case CFGF_TYPE_BIN:
 		case CFGF_TYPE_PART:
 		case CFGF_TYPE_VALUE:
 		case CFGF_TYPE_COMM:
@@ -1082,20 +1149,17 @@ static int csc_cfg_attribute(KEYCB *kcb, int *attr)
 	attr[CFGF_TYPE_GET(kcb->flags)]++;;
 	switch (CFGF_TYPE_GET(kcb->flags)) {
 	case CFGF_TYPE_KEY:
-	case CFGF_TYPE_BIN:
 	case CFGF_TYPE_PART:
 	case CFGF_TYPE_VALUE:
 	case CFGF_TYPE_COMM:
 		keyno++;
 		break;
+	default:	/* empty block is acceptable */
+		if (csc_cfg_block_size(kcb) >= 0) {
+			keyno++;
+		}
 	}
 	return keyno;
-}
-
-static int csc_cfg_is_block(KEYCB *kcb)
-{
-	return (kcb->value && !strncmp(kcb->value, 
-				CFGF_BLOCK_MAGIC, sizeof(CFGF_BLOCK_MAGIC)));
 }
 
 /* strcmp() without comparing the head and tail white spaces */
@@ -1112,50 +1176,6 @@ static int csc_cfg_strcmp(char *sour, char *dest)
 		return strncmp(sour, dest, slen);
 	}
 	return slen - dlen;
-}
-
-int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen)
-{
-	char	temp[4];
-	int	i;
-
-	for (i = 0; i < slen; i++) {
-		sprintf(temp, "%02X", (unsigned char) *src++);
-		if (buf && (blen > 1)) {
-			blen -= 2;
-			*buf++ = temp[0];
-			*buf++ = temp[1];
-		}
-	}
-	if (buf && (blen > 0)) {
-		*buf++ = 0;
-	}
-	return slen * 2;	/* return the length of the hex string */
-}
-
-int csc_cfg_hex_to_binary(char *src, char *buf, int blen)
-{
-	char	temp[4];
-	int	amnt = 0;
-
-	while (*src) {
-		if (isxdigit(*src)) {
-			temp[0] = *src++;
-		}
-		if (isxdigit(*src)) {
-			temp[1] = *src++;
-		} else {
-			break;
-		}
-		temp[2] = 0;
-
-		if (buf && blen) {
-			*buf++ = (char)strtol(temp, 0, 16);
-			blen--;
-		}
-		amnt++;
-	}
-	return amnt;
 }
 
 static char *csc_cfg_format_directory(char *dkey)

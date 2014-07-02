@@ -318,7 +318,6 @@ int csc_memdump(void *mem, int range, int column, int flags);
 #define CFGF_TYPE_PART	4	/* partial key without value */
 #define CFGF_TYPE_VALUE	5	/* only value without the key */
 #define CFGF_TYPE_COMM	6	/* comment */
-#define CFGF_TYPE_BIN	7	/* common key with binary value (win32) */
 #define CFGF_TYPE_NULL	8	/* delimiter, not used */
 #define CFGF_TYPE_MASK	0xf
 #define CFGF_TYPE_SET(f,n)	(((f) & ~CFGF_TYPE_MASK) | (n))
@@ -389,9 +388,12 @@ int csc_cfg_read_block(KEYCB *cfg, char *dkey, char *buf, int blen);
 void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
 int csc_cfg_link_block(KEYCB *block, void *bin, int bsize);
+int csc_cfg_block_size(KEYCB *kcb);
 KEYCB *csc_cfg_kcb_alloc(int psize);
 int csc_cfg_dump_kcb(KEYCB *cfg);
 int csc_cfg_dump(KEYCB *cfg);
+int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
+int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
