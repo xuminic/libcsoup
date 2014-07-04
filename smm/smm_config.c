@@ -649,7 +649,7 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode)
 	strcat(mkey, SMM_DEF_DELIM);
 	strcat(mkey, cfgd->fname);
 
-	slogz("smc_reg_open: %s\n", mkey);
+	//slogz("smc_reg_open: %s\n", mkey);
 	if ((wkey = smm_mbstowcs_alloc(mkey)) == NULL) {
 		smm_free(mkey);
 		return SMM_ERR_LOWMEM;
@@ -695,8 +695,7 @@ static KEYCB *smc_reg_read(struct KeyDev *cfgd)
 				cfgd->idx, RREF(cfgd).i_key, RREF(cfgd).n_keys,
 				RREF(cfgd).i_val, RREF(cfgd).n_vals);*/
 		if (RREF(cfgd).i_val < (int)RREF(cfgd).n_vals) {
-			return smc_reg_key_alloc(cfgd, 
-					RREF(cfgd).i_val++);
+			return smc_reg_key_alloc(cfgd, RREF(cfgd).i_val++);
 		}
 
 		if (RREF(cfgd).i_key == (int)RREF(cfgd).n_keys) {
@@ -728,9 +727,14 @@ static int smc_reg_write(struct KeyDev *cfgd, KEYCB *kp)
 	DWORD	dwErr;
 	
 	if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_DIR) {
+		/* save, close and clean the binary block */
 		if (cfgd->kbin) {	
-			/* save, close and clean the binary block */
 			smc_reg_binary_close(cfgd);
+		}
+		/* process the binary/block data and open another cfgd->kbin.
+	 	* note that the 'vsize' field must be set in the KEYCB */
+		if (csc_cfg_block_size(kp) >= 0) {
+			return smc_reg_binary_open(cfgd, kp);
 		}
 		if (cfgd->hSaveKey && (cfgd->hSaveKey != cfgd->hRootKey)) {
 			RegCloseKey(cfgd->hSaveKey);
@@ -745,15 +749,6 @@ static int smc_reg_write(struct KeyDev *cfgd, KEYCB *kp)
 		return SMM_ERR_ACCESS;
 	}
 
-	/* process the binary/block data
-	 * note that the 'vsize' field must be set in the KEYCB */
-	if (csc_cfg_block_size(kp) >= 0) {
-		if (cfgd->kbin) {	
-			/* save, close and clean the binary block */
-			smc_reg_binary_close(cfgd);
-		}
-		return smc_reg_binary_open(cfgd, kp);
-	}
 	if (cfgd->kbin) {
 		return smc_reg_binary_update(cfgd, kp);
 	}
@@ -1156,21 +1151,19 @@ static int smc_reg_binary_close(struct KeyDev *cfgd)
 		cfgd->kbin->vsize = 0;
 	}
 
-	if ((key = strrchr(cfgd->kbin->key, '/')) == NULL) {
-		key = cfgd->kbin->key;
-	} else {
-		key++;
-	}
+	key = csc_strcpy_alloc(cfgd->kbin->key, 0);
+	str_substitue_char(key, -1, '/', '\\');
+	puts(key);
 	if ((wpath = smm_mbstowcs_alloc(key)) == NULL) {
 		smm_free(cfgd->kbin->value);
 		cfgd->kbin = NULL;
 		return SMM_ERR_LOWMEM;
 	}
 	if (cfgd->kbin->comment && !strcmp(cfgd->kbin->comment,"##REG_NONE")) {
-		dwErr = RegSetValueEx(cfgd->hSaveKey, wpath, 0, REG_NONE, 
+		dwErr = RegSetValueEx(cfgd->hRootKey, wpath, 0, REG_NONE, 
 				(void*)cfgd->kbin->value, cfgd->kbin->vsize);
 	} else {
-		dwErr = RegSetValueEx(cfgd->hSaveKey, wpath, 0, REG_BINARY, 
+		dwErr = RegSetValueEx(cfgd->hRootKey, wpath, 0, REG_BINARY, 
 				(void*)cfgd->kbin->value, cfgd->kbin->vsize);
 	}
 	smm_free(wpath);

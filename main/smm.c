@@ -74,10 +74,22 @@ static int do_smm_config(char *path)
 [/hardware/driver///howsit]\n\
 [/usr/andy]\n\
 key   =   v alue  #  hello\n\
-[/usr/boy]\n";
+[/usr/boy]\n\
+[MyBlock]=BINARY:132	##REG_BINARY\n\
+010000000400000001000000040000000100000008010000070000000100000064000000\n\
+0800000001000000640000000C0000000100000064000000350000000100000064000000\n\
+1900000001000000640000001A0000000100000064000000360000000100000064000000\n\
+1F0000000100000064000000200000000100000064000000\n\
+[usr/Columns/7-Zip.7z]=BINARY:144	##REG_BINARY\n\
+010000000000000001000000040000000100000031010000070000000100000064000000\n\
+0800000001000000640000000C0000000100000064000000090000000100000064000000\n\
+1300000001000000640000000F0000000100000064000000160000000100000064000000\n\
+1B00000001000000640000001F0000000100000064000000200000000100000064000000\n\
+";
 	KEYCB	*kbuf;
 
 	(void) path;
+	slogz("\n[SMMCONFIG] Default Path Test:\n"); 
 	for (i = 0; i < (int)(sizeof(syspath)/sizeof(int)); i++) {
 		root = smm_config_open(syspath[i], TEST_PATH, 
 				TEST_FILE, 0xdeadbeef);
@@ -86,26 +98,30 @@ key   =   v alue  #  hello\n\
 			smm_config_close(root);
 		}
 	}
+	slogz("\n[SMMCONFIG] Open memory for read:\n");
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
 	if (root) {
 		smm_config_dump(root);
 		smm_config_close(root);
 	}
-	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, sizeof(config));
+	slogz("\n[SMMCONFIG] Open memory for read/write:\n");
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, 
+			NULL, sizeof(config));
 	if (root) {
 		smm_config_dump(root);
 		smm_config_close(root);
 	}
+	slogz("\n[SMMCONFIG] Open memory for R/W/C:\n");
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, NULL, NULL, CSC_CFG_RWC);
 	if (root) {
 		smm_config_dump(root);
 		smm_config_close(root);
 	}
-
+	slogz("\n[SMMCONFIG] Dump memory configure:\n");
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
 	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
-		slogz("READ: %s", kbuf->pool);
-		if (kbuf->key == NULL) {
+		//slogz("READ: %s", kbuf->pool);
+		if (CFGF_TYPE_GET(kbuf->flags) == CFGF_TYPE_UNKWN) {
 			csc_cfg_kcb_fillup(kbuf);
 		}
 		//slogz("%s/%s/%s\n", kbuf->key, kbuf->value, kbuf->comment);
@@ -113,11 +129,13 @@ key   =   v alue  #  hello\n\
 		smm_free(kbuf);
 	}
 	smm_config_close(root);
-	slogz("\n");
 
+	slogz("\n[SMMCONFIG] Save memory configure to memory and [%s]\n",
+			TEST_FILE);
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
 	save = smm_config_open(SMM_CFGROOT_MEMPOOL, sbuf, NULL, sizeof(sbuf));
-	sfd = smm_config_open(SMM_CFGROOT_CURRENT, NULL, TEST_FILE, CSC_CFG_RWC);
+	sfd = smm_config_open(SMM_CFGROOT_CURRENT, NULL, 
+			TEST_FILE, CSC_CFG_RWC);
 	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
 		if (kbuf->key == NULL) {
 			csc_cfg_kcb_fillup(kbuf);
@@ -129,8 +147,9 @@ key   =   v alue  #  hello\n\
 	smm_config_close(sfd);
 	smm_config_close(save);
 	smm_config_close(root);
-	slogz("%s\n", sbuf);
+	slogz("\n[SMMCONFIG] In Memory (overflowed):\n%s\n", sbuf);
 
+	slogz("\n[SMMCONFIG] Dump/Copy/Append to registry 7-Zip\n");
 	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
 	root = smm_config_open(SMM_CFGROOT_DESKTOP, NULL, 
 			"7-Zip", CSC_CFG_READ);
@@ -141,8 +160,19 @@ key   =   v alue  #  hello\n\
 		smm_config_write(save, kbuf);
 		smm_free(kbuf);
 	}
-	smm_config_close(save);
 	smm_config_close(root);
+
+	root = smm_config_open(SMM_CFGROOT_MEMPOOL, config, NULL, 0);
+	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
+		if (CFGF_TYPE_GET(kbuf->flags) == CFGF_TYPE_UNKWN) {
+			csc_cfg_kcb_fillup(kbuf);
+		}
+		csc_cfg_dump_kcb(kbuf);
+		smm_config_write(save, kbuf);
+		smm_free(kbuf);
+	}
+	smm_config_close(root);
+	smm_config_close(save);
 	return 0;
 }
 
