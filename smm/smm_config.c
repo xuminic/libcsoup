@@ -27,6 +27,7 @@
 
 #include "libcsoup.h"
 
+
 /* How to find out the input/output device.
  * Input:
  *   *) Win32 Registry: hRootKey != NULL
@@ -81,6 +82,7 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode);
 static KEYCB *smc_reg_read(struct KeyDev *cfgd);
 static int smc_reg_write(struct KeyDev *cfgd, KEYCB *kp);
 static int smc_reg_delete(struct KeyDev *cfgd, char *fname);
+static int smc_reg_binary_close(struct KeyDev *cfgd);
 extern int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 #endif
 
@@ -189,6 +191,10 @@ int smm_config_close(struct KeyDev *cfgd)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
+		/* save, close and clean the binary block */
+		if (cfgd->kbin) {
+			smc_reg_binary_close(cfgd);
+		}
 		RegFlushKey(cfgd->hRootKey);
 		RegCloseKey(cfgd->hRootKey);
 	}
@@ -627,7 +633,6 @@ static KEYCB *smc_reg_block_alloc(struct KeyDev *cfgd, TCHAR *, void *, int);
 static KEYCB *smc_reg_path_alloc(struct KeyDev *cfgd, TCHAR *bkey);
 static int smc_reg_getcwd(struct KeyDev *cfgd, TCHAR *path, int n);
 static int smc_reg_binary_open(struct KeyDev *cfgd, KEYCB *kp);
-static int smc_reg_binary_close(struct KeyDev *cfgd);
 static int smc_reg_binary_update(struct KeyDev *cfgd, KEYCB *kp);
 static HKEY regy_open_dir(HKEY hRoot, char *dkey);
 static DWORD regy_puts(HKEY hKey, TCHAR *key, DWORD dwType, char *val);
@@ -657,7 +662,7 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode)
 
 	switch (mode) {
 	case CSC_CFG_READ:
-		RegOpenKeyEx(cfgd->hSysKey, wkey, 0, KEY_READ, 
+		RegOpenKeyExW(cfgd->hSysKey, wkey, 0, KEY_READ, 
 				&cfgd->hRootKey);
 		break;
 	case CSC_CFG_RWC:
@@ -1031,6 +1036,8 @@ static KEYCB *smc_reg_block_alloc(struct KeyDev *cfgd,
 }
 
 
+/* 'bkey' is used to seperate the directory and binary block.
+ * if 'bkey' is not NULL, it should create a binary block. */
 static KEYCB *smc_reg_path_alloc(struct KeyDev *cfgd, TCHAR *bkey)
 {
 	TCHAR	*path;
@@ -1143,30 +1150,61 @@ static int smc_reg_binary_open(struct KeyDev *cfgd, KEYCB *kp)
 
 static int smc_reg_binary_close(struct KeyDev *cfgd)
 {
-	TCHAR	*wpath;
-	DWORD	dwErr;
+	HKEY	hKey;
+	TCHAR	*wpath, *wkey;
+	DWORD	dwErr = ERROR_SUCCESS;
 	char	*key;
+	int	i, len;
 
 	if (cfgd->kbin->value == NULL) {
 		cfgd->kbin->vsize = 0;
 	}
 
-	key = csc_strcpy_alloc(cfgd->kbin->key, 0);
-	str_substitue_char(key, -1, '/', '\\');
-	puts(key);
-	if ((wpath = smm_mbstowcs_alloc(key)) == NULL) {
-		smm_free(cfgd->kbin->value);
-		cfgd->kbin = NULL;
+	/* make sure the length is on the boundry of TCHAR. Note that the 
+	 * 'path' is allocated by malloc so it should be always aligned. */
+	len = (strlen(cfgd->kbin->key) + sizeof(TCHAR)) / 
+		sizeof(TCHAR) * sizeof(TCHAR);
+	/* assuming the maximum array size of the UTF-16 string */
+	if ((key = csc_strcpy_alloc(cfgd->kbin->key, len * 4)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
-	if (cfgd->kbin->comment && !strcmp(cfgd->kbin->comment,"##REG_NONE")) {
-		dwErr = RegSetValueEx(cfgd->hRootKey, wpath, 0, REG_NONE, 
-				(void*)cfgd->kbin->value, cfgd->kbin->vsize);
+	str_substitue_char(key, -1, '/', '\\');
+	
+	wpath = (TCHAR*)(key + len);
+	len = len * 4 / sizeof(TCHAR);
+	MultiByteToWideChar(smm_codepage(), 0, key, -1, wpath, len);
+
+	for (wkey = NULL, i = lstrlen(wpath) - 2; i >= 0; i--) {
+		if (wpath[i] == TEXT('\\')) {
+			wpath[i] = TEXT('\0');
+			wkey = &wpath[i+1];
+			break;
+		}
+	}
+	if (wkey == NULL) {
+		wkey = wpath;
+		hKey = cfgd->hRootKey;
 	} else {
-		dwErr = RegSetValueEx(cfgd->hRootKey, wpath, 0, REG_BINARY, 
+		dwErr = RegCreateKeyEx(cfgd->hRootKey, wpath, 0, NULL, 0, 
+				KEY_ALL_ACCESS, NULL, &hKey, NULL);
+		if (dwErr != ERROR_SUCCESS) {
+			puts("cccxxxv");
+			hKey = NULL;
+		}
+	}
+	wprintf(TEXT("smc_reg_binary_close: %s %s\n"), wpath, wkey);
+	if (hKey) {	//FIXME: do I need to close the hKey?
+		DWORD	dwType = REG_BINARY;
+		
+		if (cfgd->kbin->comment && 
+				!strcmp(cfgd->kbin->comment,"##REG_NONE")) {
+			dwType = REG_NONE;
+		}
+		dwErr = RegSetValueEx(hKey, wkey, 0, dwType, 
 				(void*)cfgd->kbin->value, cfgd->kbin->vsize);
 	}
-	smm_free(wpath);
+
+	smm_free(key);
 	smm_free(cfgd->kbin->value);
 	cfgd->kbin = NULL;
 	return dwErr;
@@ -1197,59 +1235,67 @@ static int smc_reg_binary_update(struct KeyDev *cfgd, KEYCB *kp)
 
 static HKEY regy_open_dir(HKEY hRoot, char *dkey)
 {
-	HKEY	hKey;
+	HKEY	hKey = NULL;
 	TCHAR	*wpath;
 	char	*path;
 	int	len;
 
-	len = strlen(dkey) + 1;
-	if ((wpath = smm_alloc(len * (sizeof(TCHAR) + 1))) == NULL) {
+	/* make sure the length is on the boundry of TCHAR. Note that the 
+	 * 'path' is allocated by malloc so it should be always aligned. */
+	len = (strlen(dkey) + sizeof(TCHAR)) / sizeof(TCHAR) * sizeof(TCHAR);
+	/* assuming the maximum array size of the UTF-16 string */
+	if ((path = csc_strcpy_alloc(dkey, len * 4)) == NULL) {
 		return NULL;
 	}
-	path = (char*) &wpath[len];
-	strcpy(path, dkey);
 	str_substitue_char(path, -1, '/', '\\');
+
+	wpath = (TCHAR*)(path + len);
+	len = len * 4 / sizeof(TCHAR);
 	MultiByteToWideChar(smm_codepage(), 0, path, -1, wpath, len);
 
-	if (RegCreateKeyEx(hRoot, wpath, 0, NULL, 0, KEY_ALL_ACCESS, NULL, 
-				&hKey, NULL) != ERROR_SUCCESS) {
-		smm_free(wpath);
-		return NULL;
-	}
-	smm_free(wpath);
+	RegCreateKeyEx(hRoot, wpath, 0, NULL, 0, KEY_ALL_ACCESS, NULL, 
+				&hKey, NULL);
+	smm_free(path);
 	return hKey;
 }
+
 
 static DWORD regy_puts(HKEY hKey, TCHAR *key, DWORD dwType, char *val)
 {
 	TCHAR	*wval;
 	DWORD	dwErr;
+	char	*content;
+	int	len;
 
 	if (val == NULL) {
 		return RegSetValueEx(hKey, key, 0, dwType, NULL, 0);
 	}
-	if (dwType == REG_MULTI_SZ) {
-		char	*content;
-		int	len = strlen(val) + 1;
-		if ((wval = smm_alloc(len * (sizeof(TCHAR) + 1))) == NULL) {
-			return ERROR_NOT_ENOUGH_MEMORY;
-		}
-		content = (char*) &wval[len];
-		strcpy(content, val);
-		str_substitue_char(content, -1, '~', 0);
-		len = MultiByteToWideChar(smm_codepage(), 0, content, len, 
-				wval, len);
-		dwErr = RegSetValueEx(hKey, key, 0, dwType, 
-				(void*) wval, len * sizeof(TCHAR));
-		smm_free(wval);
-	} else 	{
+	if (dwType != REG_MULTI_SZ) {
 		if ((wval = smm_mbstowcs_alloc(val)) == NULL) {
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
 		dwErr = RegSetValueEx(hKey, key, 0, dwType, 
 			(void*)wval, (lstrlen(wval)+1) * sizeof(TCHAR));
 		smm_free(wval);
+		return dwErr;
 	}
+
+	/* convert it back from '~' escape if it's REG_MULTI_SZ */
+	/* make sure the length is on the boundry of TCHAR. Note that the 
+	 * 'content' is allocated by malloc so it should be always aligned. */
+	len = (strlen(val) + sizeof(TCHAR)) / sizeof(TCHAR) * sizeof(TCHAR);
+	/* assuming the maximum array size of the UTF-16 string */
+	if ((content = csc_strcpy_alloc(val, len * 4)) == NULL) {
+		return ERROR_NOT_ENOUGH_MEMORY;
+	}
+	str_substitue_char(content, -1, '~', 0);
+
+	wval = (TCHAR*)(content + len);
+	len = MultiByteToWideChar(smm_codepage(), 0, content, strlen(val) + 1, 
+			wval, len * 4 / sizeof(TCHAR));
+	dwErr = RegSetValueEx(hKey, key, 0, dwType, 
+				(void*) wval, len * sizeof(TCHAR));
+	smm_free(content);
 	return dwErr;
 }
 
