@@ -478,6 +478,7 @@ char *csc_file_load(char *path, char *buf, long *len);
 #ifndef _UNICODE
 #define _UNICODE
 #endif
+/* check the WinAPI error code at winerror.h */
 #include <windows.h>
 #endif
 

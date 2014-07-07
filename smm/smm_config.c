@@ -515,6 +515,7 @@ static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp)
 		wtd += mem_update(&cfgd->kpath, kp->value, &cfgd->mode);
 	}
 	if (kp->comment) {
+		wtd += mem_update(&cfgd->kpath, "\t", &cfgd->mode);
 		wtd += mem_update(&cfgd->kpath, kp->comment, &cfgd->mode);
 	}
 	wtd += mem_update(&cfgd->kpath, "\n", &cfgd->mode);
@@ -583,6 +584,7 @@ static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 		fputs(kp->value, fout);
 	}
 	if (kp->comment) {
+		fputc('\t', fout);
 		fputs(kp->comment, fout);
 	}
 	fputs("\n", fout);
@@ -763,6 +765,10 @@ static int smc_reg_write(struct KeyDev *cfgd, KEYCB *kp)
 	if ((wpath = smm_mbstowcs_alloc(kp->key)) == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
+	/* remove the unnamed key name */
+	if (!strcmp(kp->key, "(default)")) {
+		wpath[0] = TEXT('\0');
+	}
 	if (kp->comment == NULL) {
 		dwErr = regy_puts(cfgd->hSaveKey, wpath, 
 				REG_SZ, kp->value);
@@ -894,7 +900,7 @@ static DWORD smc_reg_open_subkey(struct KeyDev *cfgd)
 static KEYCB *smc_reg_key_alloc(struct KeyDev *cfgd, int idx)
 {
 	TCHAR	*tbuf;
-	DWORD	dwSize, dwLeng, dwType, len;
+	DWORD	dwSize, dwLeng, dwType, dwErr, len;
 	char 	*content;
 	KEYCB	*kp;
 
@@ -907,8 +913,19 @@ static KEYCB *smc_reg_key_alloc(struct KeyDev *cfgd, int idx)
 
 	dwSize = RREF(cfgd).l_vname * sizeof(TCHAR);
 	dwLeng = RREF(cfgd).l_value;
-	if (RegEnumValue(RREF(cfgd).hKey, idx, tbuf, &dwSize, NULL, &dwType,
-				(BYTE*)content, &dwLeng) != ERROR_SUCCESS) {
+
+	/* need to read it twice if in error because RegEnumValue()
+	 * can not pick up unnamed, ie the "(Default)", key. 
+	 * The ERROR_MORE_DATA was picked from the return value, maybe buggy.
+	 * see winerror.h */
+	dwErr = RegEnumValue(RREF(cfgd).hKey, idx, tbuf, &dwSize, NULL, 
+			&dwType, (BYTE*)content, &dwLeng);
+	if (dwErr == ERROR_MORE_DATA) {
+		dwErr = RegQueryValueEx(RREF(cfgd).hKey, NULL, NULL,
+				&dwType, (BYTE*)content, &dwLeng);
+		tbuf[0] = TEXT('\0');
+	}
+	if (dwErr != ERROR_SUCCESS) {
 		smm_free(tbuf);
 		return NULL;
 	}
@@ -993,7 +1010,6 @@ static KEYCB *smc_reg_key_alloc(struct KeyDev *cfgd, int idx)
 		break;
 	}
 	smm_free(tbuf);
-
 	return kp;
 }
 
@@ -1002,17 +1018,22 @@ static KEYCB *smc_reg_keyval_alloc(TCHAR *key, int vlen)
 	KEYCB	*kp;
 
 	/* estimate the total length of the entry according to RFC3629,
-	 * the longest UTF-8 character should be 4 bytes */
+	 * the longest UTF-8 character should be 4 bytes. 
+	 * Reserved 64 bytes for comments or unnamed key/value. */
 	vlen = (vlen + lstrlen(key)) * 4 + 64;
 	if ((kp = csc_cfg_kcb_alloc(vlen)) == NULL) {
 		return NULL;
 	}
 
 	kp->key = kp->pool;
-	WideCharToMultiByte(smm_codepage(), 0, key, -1, 
-			kp->key, vlen, NULL, NULL);
-	/* FIXME: replace all '#' in the key by '_' */
-	str_substitue_char(kp->key, -1, '#', '_');
+	if (*key == TEXT('\0')) {
+		strcpy(kp->key, "(default)");
+	} else {
+		WideCharToMultiByte(smm_codepage(), 0, key, -1, 
+				kp->key, vlen, NULL, NULL);
+		/* FIXME: replace all '#' in the key by '_' */
+		str_substitue_char(kp->key, -1, '#', '_');
+	}
 
 	/* make sure the 'value' field is ready for smc_reg_key_alloc() */
 	kp->value = kp->key + strlen(kp->key) + 1;
@@ -1050,10 +1071,11 @@ static KEYCB *smc_reg_path_alloc(struct KeyDev *cfgd, TCHAR *bkey)
 	}
 	/* if the directory is required to be a binary block by giving
 	 * 'bkey' string, the total size would be included the bkey and
-	 * an extra 32 bytes so it can fit the CFGF_BLOCK_MAGIC properly, 
-	 * see csc_config.c. I agree it's a bit dirty to achieve this */
+	 * an extra 48 bytes so it can fit the "(default)" and CFGF_BLOCK_MAGIC
+	 * properly, see csc_config.c. 
+	 * I agree it's a bit dirty to achieve this */
 	if (bkey) {
-		plen += lstrlen(bkey) + 32 + 1;
+		plen += lstrlen(bkey) + 48 + 1;
 	}
 	/* give some extra TCHARs for comments */
 	plen += 48;
@@ -1068,8 +1090,12 @@ static KEYCB *smc_reg_path_alloc(struct KeyDev *cfgd, TCHAR *bkey)
 	if ((path = smm_alloc(plen * sizeof(TCHAR))) != NULL) {
 		smc_reg_getcwd(cfgd, path, plen);
 		if (bkey) {
-			lstrcat(path, TEXT("/"));
-			lstrcat(path, bkey);
+			if (*bkey == TEXT('\0')) {
+				lstrcat(path, TEXT("/(default)"));
+			} else {
+				lstrcat(path, TEXT("/"));
+				lstrcat(path, bkey);
+			}
 		}
 		WideCharToMultiByte(smm_codepage(), 0, path, -1,
 				kp->key, plen * 4, NULL, NULL);
@@ -1188,17 +1214,20 @@ static int smc_reg_binary_close(struct KeyDev *cfgd)
 		dwErr = RegCreateKeyEx(cfgd->hRootKey, wpath, 0, NULL, 0, 
 				KEY_ALL_ACCESS, NULL, &hKey, NULL);
 		if (dwErr != ERROR_SUCCESS) {
-			puts("cccxxxv");
 			hKey = NULL;
 		}
 	}
-	wprintf(TEXT("smc_reg_binary_close: %s %s\n"), wpath, wkey);
+	//wprintf(TEXT("smc_reg_binary_close: %s %s\n"), wpath, wkey);
 	if (hKey) {	//FIXME: do I need to close the hKey?
 		DWORD	dwType = REG_BINARY;
 		
 		if (cfgd->kbin->comment && 
 				!strcmp(cfgd->kbin->comment,"##REG_NONE")) {
 			dwType = REG_NONE;
+		}
+		/* remove the unnamed key name */
+		if (!lstrcmp(wkey, TEXT("(default)"))) {
+			wkey[0] = TEXT('\0');
 		}
 		dwErr = RegSetValueEx(hKey, wkey, 0, dwType, 
 				(void*)cfgd->kbin->value, cfgd->kbin->vsize);

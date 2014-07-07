@@ -59,6 +59,9 @@ static int do_smm_chdir(char *path)
 #define TEST_PATH	"My/Com/pany"
 #endif
 #define TEST_FILE	"MyProduct"
+static int	syspath[] = { SMM_CFGROOT_DESKTOP, SMM_CFGROOT_USER, 
+		SMM_CFGROOT_SYSTEM, SMM_CFGROOT_CURRENT };
+
 extern int csc_cfg_kcb_fillup(KEYCB *kp);
 
 static int do_smm_config(char *path)
@@ -66,8 +69,6 @@ static int do_smm_config(char *path)
 	struct	KeyDev	*root, *save, *sfd;
 	int	i;
 	char	sbuf[256];
-	int	syspath[] = { SMM_CFGROOT_DESKTOP, SMM_CFGROOT_USER, 
-			SMM_CFGROOT_SYSTEM, SMM_CFGROOT_CURRENT };
 	char    *config = "\
 [main/dev/holiday]\n\
 [main/dev]\n\
@@ -88,7 +89,6 @@ key   =   v alue  #  hello\n\
 ";
 	KEYCB	*kbuf;
 
-	(void) path;
 	slogz("\n[SMMCONFIG] Default Path Test:\n"); 
 	for (i = 0; i < (int)(sizeof(syspath)/sizeof(int)); i++) {
 		root = smm_config_open(syspath[i], TEST_PATH, 
@@ -112,6 +112,7 @@ key   =   v alue  #  hello\n\
 		smm_config_close(root);
 	}
 	slogz("\n[SMMCONFIG] Open memory for R/W/C:\n");
+	/* the CSC_CFG_RWC will be ignored because 'path' is NULL */
 	root = smm_config_open(SMM_CFGROOT_MEMPOOL, NULL, NULL, CSC_CFG_RWC);
 	if (root) {
 		smm_config_dump(root);
@@ -149,12 +150,21 @@ key   =   v alue  #  hello\n\
 	smm_config_close(root);
 	slogz("\n[SMMCONFIG] In Memory (overflowed):\n%s\n", sbuf);
 
-	slogz("\n[SMMCONFIG] Dump/Copy/Append to registry 7-Zip\n");
+	slogz("\n[SMMCONFIG] Dump/Copy/Append %s in "
+			"HKEY_CURRENT_USER\\SOFTWARE\\ or .config\n", path);
 	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
-	root = smm_config_open(SMM_CFGROOT_DESKTOP, NULL, 
-			"7-Zip", CSC_CFG_READ);
-	save = smm_config_open(SMM_CFGROOT_DESKTOP, NULL,
-			"8-Zip", CSC_CFG_RWC);
+	root = smm_config_open(SMM_CFGROOT_DESKTOP, NULL, path, CSC_CFG_READ);
+	if (root == NULL) {
+		slogz("[SMMCONFIG] Can not find %s\n", path);
+		return -1;
+	}
+	sprintf(sbuf, "%s.copy", path);
+	save = smm_config_open(SMM_CFGROOT_DESKTOP, NULL, sbuf, CSC_CFG_RWC);
+	if (save == NULL) {
+		slogz("[SMMCONFIG] Failed to create %s\n", sbuf);
+		smm_config_close(root);
+		return -2;
+	}
 	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
 		csc_cfg_dump_kcb(kbuf);
 		smm_config_write(save, kbuf);
@@ -175,6 +185,37 @@ key   =   v alue  #  hello\n\
 	smm_config_close(save);
 	return 0;
 }
+
+static int do_smm_config_dump(char *path)
+{
+	struct	KeyDev	*root, *output;
+	int	sysidx;
+	KEYCB	*kbuf;
+
+	sysidx = 0;
+	if (isdigit(*path)) {
+		sysidx = *path - '0';
+		path++;
+	}
+
+	root = smm_config_open(syspath[sysidx], NULL, path, CSC_CFG_READ);
+	if (root == NULL) {
+		slogz("[SMMCONFIG] Can not find %s\n", path);
+		return -1;
+	}
+	output = smm_config_open(SMM_CFGROOT_MEMPOOL, NULL, NULL, 0);
+	while ((kbuf = smm_config_read_alloc(root)) != NULL) {
+		if (CFGF_TYPE_GET(kbuf->flags) == CFGF_TYPE_UNKWN) {
+			csc_cfg_kcb_fillup(kbuf);
+		}
+		smm_config_write(output, kbuf);
+		smm_free(kbuf);
+	}
+	smm_config_close(output);
+	smm_config_close(root);
+	return 0;
+}
+
 
 static int do_smm_mkpath(char *path)
 {
@@ -303,7 +344,8 @@ static int do_path_trek(char *path, int flags)
 static	struct	cliopt	clist[] = {
 	{   0, NULL,      0, "OPTIONS:" },
 	{ 'c', NULL,      1, "change current working directory" },
-	{ 'f', NULL,	  0, "configure file process" },
+	{ 'f', NULL,	  1, "configure file process" },
+	{ 'F', NULL,	  1, "dump configure file" },
 	{ 'm', NULL,	  1, "make directory" },
 	{ 'p', NULL,      1, "push/pop current working directory" },
 	{ 'r', NULL,      1, "process directory recurrsively" },
@@ -362,7 +404,10 @@ int smm_main(void *rtime, int argc, char **argv)
 			do_smm_chdir(optarg);
 			break;
 		case 'f':
-			do_smm_config(NULL);
+			do_smm_config(optarg);
+			break;
+		case 'F':
+			do_smm_config_dump(optarg);
 			break;
 		case 'm':
 			do_smm_mkpath(optarg);
