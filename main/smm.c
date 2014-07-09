@@ -125,7 +125,6 @@ key   =   v alue  #  hello\n\
 		if (CFGF_TYPE_GET(kbuf->flags) == CFGF_TYPE_UNKWN) {
 			csc_cfg_kcb_fillup(kbuf);
 		}
-		//slogz("%s/%s/%s\n", kbuf->key, kbuf->value, kbuf->comment);
 		smm_config_write(root, kbuf);
 		smm_free(kbuf);
 	}

@@ -1,3 +1,11 @@
+
+20140707: 0.7.0
+	Rewrote the configure management module to concentrate in the 
+	csc_config interface. Win32 registry supported.
+
+	* smm_config.c: rewrote to be the underlayer of csc_config.c.
+	* csc_config.c: using smm_config.c as its I/O interface.
+
 20140516: 0.6.4
 	* smm_config.c: Renamed smm_config_read() to smm_config_read_alloc()
 	to reflect its allocation nature. 

@@ -76,6 +76,7 @@ static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp);
 static KEYCB *smm_config_file_read(struct KeyDev *cfgd);
 static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp);
 static int str_substitue_char(char *s, int len, char src, char dst);
+static int mem_copy(char **dest, int *room, char *s);
 
 #ifdef	CFG_WIN32_API
 static int smc_reg_open(struct KeyDev *cfgd, int mode);
@@ -277,6 +278,100 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 	return smm_errno_update(SMM_ERR_NULL);
 }
 
+/* return:
+ *   'buf' a string list of file path, registry path and registry root. 
+ *   Each string ends of \0 and the whole list ends of another \0. 
+ *   For example:
+ *   "/etc/posix/rcfile\0SOFTWARE\\posix\0HKEY_LOCAL_MACHINE\0\0"
+ * The function returns the total size of the string list, includes all \0 */
+int smm_config_path(int sysdir, char *path, char *fname, char *buf, int blen)
+{
+	char	*home;
+	int	len = 0;
+
+	home = getenv("HOME");
+	switch (sysdir) {
+	case SMM_CFGROOT_USER:
+		/* SMM_DEF_DELIM causes nasty looking in Windows like:
+		 * C:/MinGW/msys/1.0/home/User\.config\7-Zip
+		 * so better to keep this a straight "/". */
+		if (home) {
+			len += mem_copy(&buf, &blen, home);
+			len += mem_copy(&buf, &blen, "/");
+		}
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+			len += mem_copy(&buf, &blen, "/");
+		}
+		len += mem_copy(&buf, &blen, fname);
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+
+		len += mem_copy(&buf, &blen, "CONSOLE");
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+		}
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+
+		len += mem_copy(&buf, &blen, "HKEY_CURRENT_USER");
+		len += mem_copy(&buf, &blen, NULL);  /* insert \0 */
+		break;
+	case SMM_CFGROOT_SYSTEM:
+		len += mem_copy(&buf, &blen, "/etc/");	//FIXME
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+			len += mem_copy(&buf, &blen, "/");
+		}
+		len += mem_copy(&buf, &blen, fname);
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+
+		len += mem_copy(&buf, &blen, "SOFTWARE");
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+		}
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+
+		len += mem_copy(&buf, &blen, "HKEY_LOCAL_MACHINE");
+		len += mem_copy(&buf, &blen, NULL);  /* insert \0 */
+		break;
+	case SMM_CFGROOT_DESKTOP:
+		if (home) {
+			len += mem_copy(&buf, &blen, home);
+			len += mem_copy(&buf, &blen, "/");
+		}
+		len += mem_copy(&buf, &blen, ".config");
+		len += mem_copy(&buf, &blen, "/");
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+			len += mem_copy(&buf, &blen, "/");
+		}
+		len += mem_copy(&buf, &blen, fname);
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+
+		len += mem_copy(&buf, &blen, "SOFTWARE");
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+		}
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+
+		len += mem_copy(&buf, &blen, "HKEY_CURRENT_USER");
+		len += mem_copy(&buf, &blen, NULL);  /* insert \0 */
+		break;
+	case SMM_CFGROOT_CURRENT:
+	default:
+		if (path) {
+			len += mem_copy(&buf, &blen, path);
+			len += mem_copy(&buf, &blen, "/");
+		}
+		len += mem_copy(&buf, &blen, fname);
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+		len += mem_copy(&buf, &blen, NULL);	/* insert \0 */
+		break;
+	}
+	len += mem_copy(&buf, &blen, NULL);  /* terminate the string list */
+	return len;
+}
+
 void smm_config_dump(struct KeyDev *cfgd)
 {
 	slogz("Device:    Read from ");
@@ -331,38 +426,14 @@ void smm_config_dump(struct KeyDev *cfgd)
 static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 {
 	struct	KeyDev	*cfgd;
-	char	*home;
 	int	tlen;
 
 	if (fname == NULL) {
 		return NULL;
 	}
-	home = getenv("HOME");
-
-	tlen = sizeof(struct KeyDev) + strlen(fname) * 2 + 16;
-	if (path) {
-		tlen += strlen(path) * 2;
-	}
-	switch (sysdir) {
-	case SMM_CFGROOT_USER:
-		if (home) {
-			tlen += strlen(home) + 1;
-		}
-		tlen += 8;	/* size of "CONSOLE\\" */
-		break;
-	case SMM_CFGROOT_SYSTEM:
-		tlen += 4;	/* size of "/etc" */
-		tlen += 9;	/* size of "SOFTWARE\\" */
-		break;
-	case SMM_CFGROOT_DESKTOP:
-		if (home == NULL) {
-			tlen += 7;	/* size of ".config" */
-		} else {
-			tlen += strlen(home) + 8;  /* size of "/.config" */
-		}
-		tlen += 9;	/* size of "SOFTWARE\\" */
-		break;
-	}
+	tlen = sizeof(struct KeyDev) + strlen(fname) + 16;
+	tlen += path ? strlen(path) : 0;
+	tlen += smm_config_path(sysdir, path, fname, NULL, 0);
 
 	if ((cfgd = smm_alloc(tlen)) == NULL) {
 		smm_errno_update(SMM_ERR_LOWMEM);
@@ -372,87 +443,32 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 	cfgd->fname = cfgd->pool;
 	strcpy(cfgd->fname, fname);
 	cfgd->fpath = cfgd->fname + strlen(cfgd->fname) + 1;
-	cfgd->fpath[0] = 0;
+	tlen -= sizeof(struct KeyDev) + strlen(cfgd->fname) + 1;
+	smm_config_path(sysdir, path, fname, cfgd->fpath, tlen);
 	
-	switch (sysdir) {
-	case SMM_CFGROOT_USER:
-		if (home) {
-			strcat(cfgd->fpath, home);
-			strcat(cfgd->fpath, SMM_DEF_DELIM);
-		}
-		if (path) {
-			strcat(cfgd->fpath, path);
-			strcat(cfgd->fpath, SMM_DEF_DELIM);
-		}
-		strcat(cfgd->fpath, fname);
-
-		cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
-		strcpy(cfgd->kpath, "CONSOLE\\");
-		if (path) {
-			strcat(cfgd->kpath, path);
-		}
+	cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
 #ifdef	CFG_WIN32_API
+	fname = cfgd->kpath + strlen(cfgd->kpath) + 1;
+	if (!strcmp(fname, "HKEY_CURRENT_USER")) {
 		cfgd->hSysKey = HKEY_CURRENT_USER;
-#endif
-		break;
-	case SMM_CFGROOT_SYSTEM:
-		strcat(cfgd->fpath, "/etc/");	//FIXME
-		if (path) {
-			strcat(cfgd->fpath, path);
-			strcat(cfgd->fpath, SMM_DEF_DELIM);
-		}
-		strcat(cfgd->fpath, fname);
-
-		cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
-		strcpy(cfgd->kpath, "SOFTWARE\\");
-		if (path) {
-			strcat(cfgd->kpath, path);
-		}
-#ifdef	CFG_WIN32_API
+	} else if (!strcmp(fname, "HKEY_LOCAL_MACHINE")) {
 		cfgd->hSysKey = HKEY_LOCAL_MACHINE;
-#endif
-		break;
-	case SMM_CFGROOT_DESKTOP:
-		if (home) {
-			strcat(cfgd->fpath, home);
-			strcat(cfgd->fpath, SMM_DEF_DELIM);
-		}
-		strcat(cfgd->fpath, ".config");
-		strcat(cfgd->fpath, SMM_DEF_DELIM);
-		if (path) {
-			strcat(cfgd->fpath, path);
-			strcat(cfgd->fpath, SMM_DEF_DELIM);
-		}
-		strcat(cfgd->fpath, fname);
-
-		cfgd->kpath = cfgd->fpath + strlen(cfgd->fpath) + 1;
-		strcpy(cfgd->kpath, "SOFTWARE\\");
-		if (path) {
-			strcat(cfgd->kpath, path);
-		}
-#ifdef	CFG_WIN32_API
-		cfgd->hSysKey = HKEY_CURRENT_USER;
-#endif
-		break;
-	case SMM_CFGROOT_CURRENT:
-	default:
-		if (path) {
-			strcat(cfgd->fpath, path);
-			strcat(cfgd->fpath, SMM_DEF_DELIM);
-		}
-		strcat(cfgd->fpath, fname);
-		break;
 	}
-	
-	/* convert the '/' to '\\' in the registry path */
-	if (cfgd->kpath) {
+#endif
+	/* memory mode will re-use the kpath field so we clear the pointer
+	 * when it's not been using */
+	if (*cfgd->kpath == '\0') {
+		cfgd->kpath = NULL;
+	} else {
 		str_substitue_char(cfgd->kpath, -1, '/', '\\');
 	}
 
 	/* check point */
-	//slogz("smm_config_alloc::fpath = %s\n", cfgd->fpath);
-	//slogz("smm_config_alloc::kpath = %s\n", cfgd->kpath);
-	//slogz("smm_config_alloc::fname = %s\n", cfgd->fname);
+	/*
+	slogz("smm_config_alloc::fpath = %s\n", cfgd->fpath);
+	slogz("smm_config_alloc::kpath = %s\n", cfgd->kpath);
+	slogz("smm_config_alloc::fname = %s\n", cfgd->fname);
+	*/
 	return cfgd;
 }
 
@@ -477,23 +493,6 @@ static KEYCB *smm_config_mem_read(struct KeyDev *cfgd)
 	return kp;
 }
 
-static int mem_update(char **dest, char *s, int *room)
-{
-	int	n;
-
-	n = strlen(s);
-	if (*room > n) {
-		strcpy(*dest, s);
-	} else if ((n = *room - 1) > 0) {
-		strncpy(*dest, s, n);
-	}
-	*dest += n;
-	*room -= n;
-	**dest = 0;
-	return n;
-}
-
-
 static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp)
 {
 	int	wtd = 0;
@@ -503,22 +502,22 @@ static int smm_config_mem_write(struct KeyDev *cfgd, KEYCB *kp)
 	}
 	if (kp->key) {
 		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_DIR) {
-			wtd += mem_update(&cfgd->kpath, "[", &cfgd->mode);
-			wtd += mem_update(&cfgd->kpath, kp->key, &cfgd->mode);
-			wtd += mem_update(&cfgd->kpath, "]", &cfgd->mode);
+			wtd += mem_copy(&cfgd->kpath, &cfgd->mode, "[");
+			wtd += mem_copy(&cfgd->kpath, &cfgd->mode, kp->key);
+			wtd += mem_copy(&cfgd->kpath, &cfgd->mode, "]");
 		} else {
-			wtd += mem_update(&cfgd->kpath, kp->key, &cfgd->mode);
+			wtd += mem_copy(&cfgd->kpath, &cfgd->mode, kp->key);
 		}
 	}
-	if (kp->value) {
-		wtd += mem_update(&cfgd->kpath, "=", &cfgd->mode);
-		wtd += mem_update(&cfgd->kpath, kp->value, &cfgd->mode);
+	if (kp->value && *kp->value) {
+		wtd += mem_copy(&cfgd->kpath, &cfgd->mode, "=");
+		wtd += mem_copy(&cfgd->kpath, &cfgd->mode, kp->value);
 	}
-	if (kp->comment) {
-		wtd += mem_update(&cfgd->kpath, "\t", &cfgd->mode);
-		wtd += mem_update(&cfgd->kpath, kp->comment, &cfgd->mode);
+	if (kp->comment && *kp->comment) {
+		wtd += mem_copy(&cfgd->kpath, &cfgd->mode, "\t");
+		wtd += mem_copy(&cfgd->kpath, &cfgd->mode, kp->comment);
 	}
-	wtd += mem_update(&cfgd->kpath, "\n", &cfgd->mode);
+	wtd += mem_copy(&cfgd->kpath, &cfgd->mode, "\n");
 	kp->update = 0;		/* reset the update counter */
 	return wtd;
 }
@@ -579,11 +578,11 @@ static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 			fputs(kp->key, fout);
 		}
 	}
-	if (kp->value) {
+	if (kp->value && *kp->value) {
 		fputc('=', fout);
 		fputs(kp->value, fout);
 	}
-	if (kp->comment) {
+	if (kp->comment && *kp->comment) {
 		fputc('\t', fout);
 		fputs(kp->comment, fout);
 	}
@@ -604,6 +603,48 @@ static int str_substitue_char(char *s, int len, char src, char dst)
 			n++;
 		}
 	}
+	return n;
+}
+
+/* Concatenate a string into a memory pool which is specified by 'dest' with 
+ * the size of 'room'. After the appending, the 'dest' will be increased and 
+ * the 'room' will be decreased by the length of 's'. The memory pool will 
+ * always be ended by \0 so if there's not enough memory in 'room', the string
+ * will be truncated and the function will return the truly size of copied 
+ * string. If 's' is NULL, the function will append a '\0' into the 'dest'.
+ * Returns:
+ * If the '*dest' is not NULL, it will return the actual lenght of copied
+ * string. Otherwise it returns the length of the source string 's'. */
+static int mem_copy(char **dest, int *room, char *s)
+{
+	int	n;
+
+	if (s == NULL) {
+		n = 1;		/* extra '\0' */
+	} else {
+		n = strlen(s);
+	}
+	if (*dest == NULL) {	/* virtual operation */
+		return n;
+	}
+
+	if ((room == NULL) ||	/* don't care the buffer length */
+			(*room > n)) {
+		if (s) {
+			strcpy(*dest, s);
+		} else {
+			**dest = '\0';
+		}
+	} else if ((n = *room - 1) > 0) {
+		if (s) {
+			strncpy(*dest, s, n);
+		}
+	}
+	*dest += n;
+	if (room) {
+		*room -= n;
+	}
+	**dest = '\0';
 	return n;
 }
 
@@ -653,7 +694,7 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode)
 	if (mkey == NULL) {
 		return SMM_ERR_LOWMEM;
 	}
-	strcat(mkey, SMM_DEF_DELIM);
+	strcat(mkey, "\\");
 	strcat(mkey, cfgd->fname);
 
 	//slogz("smc_reg_open: %s\n", mkey);

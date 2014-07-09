@@ -277,14 +277,39 @@ int config_block_test(char *fname)
 }
 
 
-int config_registry_test(void)
+int config_registry_test(char *syspath, char *path, char *fname)
 {
 	KEYCB	*root;
+	char	*buf, *p;
+	int	sysp, len;
 
-	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
-	root = csc_cfg_open(SMM_CFGROOT_DESKTOP, NULL, "7-Zip", CSC_CFG_READ);
-	if (root == NULL) {
+	if (!strcmp(syspath, "DESKTOP")) {
+		sysp = SMM_CFGROOT_DESKTOP;
+	} else if (!strcmp(syspath, "USER")) {
+		sysp = SMM_CFGROOT_USER;
+	} else if (!strcmp(syspath, "SYSTEM")) {
+		sysp = SMM_CFGROOT_SYSTEM;
+	} else if (!strcmp(syspath, "CURRENT")) {
+		sysp = SMM_CFGROOT_CURRENT;
+	} else {
+		slogz("Unknown system path - %s\n", syspath);
 		return -1;
+	}
+		
+	/* open HKEY_CURRENT_USER\\SOFTWARE\\7-Zip */
+	if ((root = csc_cfg_open(sysp, path, fname, CSC_CFG_READ)) == NULL) {
+		slogz("Can't open\n");
+		return -1;
+	}
+
+	len = smm_config_path(sysp, path, fname, NULL, 0);
+	if ((buf = smm_alloc(len)) != NULL) {
+		smm_config_path(sysp, path, fname, buf, len);
+		slogz("# File System Path: %s\n", buf);
+		buf += strlen(buf) + 1;
+		p  = buf + strlen(buf) + 1;
+		slogz("# Registry Path:    %s\\%s\n", p, buf);
+		smm_free(buf);
 	}
 	
 	csc_cfg_saveas(root, SMM_CFGROOT_MEMPOOL, NULL, NULL);
@@ -314,7 +339,7 @@ static	struct	cliopt	clist[] = {
 	{   0, NULL,        0, "OPTIONS:" },
 	{ 'h', "help",      0, "This help" },
 	{ 'o', "open-read", 0, "Open the configure file in read-only mode" },
-	{ 'r', "registry",  0, "dump the registry" },
+	{ 'r', "registry",  1, "dump the registry" },
 	{ 'k', "key-test",  0, "Test the key and value pairs" },
 	{ 'b', "block",     1, "Test the block in the configure file" },
 	{ 'c', "create",    0, "Create a new configure file" },
@@ -325,6 +350,7 @@ static	struct	cliopt	clist[] = {
 int config_main(void *rtime, int argc, char **argv)
 {
 	int	c;
+	char	*sdir = NULL;
 
 	if (argc < 2) {
 		csc_cli_print(clist, NULL);
@@ -342,7 +368,7 @@ int config_main(void *rtime, int argc, char **argv)
 			config_open_rdonly();
 			break;
 		case 'r':
-			config_registry_test();
+			sdir = csc_cli_qopt_optarg(rtime);
 			break;
 		case 'k':
 			config_key_test();
@@ -366,6 +392,17 @@ int config_main(void *rtime, int argc, char **argv)
 			break;
 		}
 	}
+
+	if (sdir) {
+		c = csc_cli_qopt_optind(rtime);
+		//printf("options: %d %d %s\n", c, argc, argv[c]);
+		if (c + 1 == argc) {
+			config_registry_test(sdir, NULL, argv[c]);
+		} else if (c + 1 < argc) {
+			config_registry_test(sdir, argv[c+1], argv[c]);
+		}
+	}
+
 	csc_cli_qopt_close(rtime);
 	return 0;
 }
