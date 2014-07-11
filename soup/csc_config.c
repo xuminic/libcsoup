@@ -330,6 +330,27 @@ int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value)
 	return SMM_ERR_NONE;
 }
 
+int csc_cfg_read_int(KEYCB *cfg, char *dkey, char *nkey, int *val)
+{
+	char 	*value;
+
+	if ((value = csc_cfg_read(cfg, dkey, nkey)) == NULL) {
+		return SMM_ERR_NULL;
+	}
+	if (val) {
+		*val = (int) strtol(value, NULL, 0);
+	}
+	return SMM_ERR_NONE;
+}
+
+int csc_cfg_write_int(KEYCB *cfg, char *dkey, char *nkey, int val)
+{
+	char	buf[32];
+
+	sprintf(buf, "%d", val);
+	return csc_cfg_write(cfg, dkey, nkey, buf);
+}
+
 int csc_cfg_read_long(KEYCB *cfg, char *dkey, char *nkey, long *val)
 {
 	char 	*value;

@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	7		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -377,6 +377,8 @@ char *csc_cfg_read_first(KEYCB *cfg, char *dkey, char **key);
 char *csc_cfg_read_next(KEYCB *cfg, char **key);
 char *csc_cfg_copy(KEYCB *cfg, char *dkey, char *nkey, int extra);
 int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value);
+int csc_cfg_read_int(KEYCB *cfg, char *dkey, char *nkey, int *val);
+int csc_cfg_write_int(KEYCB *cfg, char *dkey, char *nkey, int val);
 int csc_cfg_read_long(KEYCB *cfg, char *dkey, char *nkey, long *val);
 int csc_cfg_write_long(KEYCB *cfg, char *dkey, char *nkey, long val);
 int csc_cfg_read_longlong(KEYCB *cfg, char *dkey, char *nkey, long long *val);

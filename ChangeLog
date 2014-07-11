@@ -1,4 +1,7 @@
 
+20140711: 0.7.1:
+	* csc_config.c: added csc_cfg_read_int() and csc_cfg_write_int().
+
 20140707: 0.7.0
 	Rewrote the configure management module to concentrate in the 
 	csc_config interface. Win32 registry supported.
