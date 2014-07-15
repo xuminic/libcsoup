@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	7		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	2		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -392,6 +392,7 @@ int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
 int csc_cfg_link_block(KEYCB *block, void *bin, int bsize);
 int csc_cfg_block_size(KEYCB *kcb);
 KEYCB *csc_cfg_kcb_alloc(int psize);
+int csc_cfg_kcb_free(KEYCB *kcb);
 int csc_cfg_dump_kcb(KEYCB *cfg);
 int csc_cfg_dump(KEYCB *cfg);
 int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);

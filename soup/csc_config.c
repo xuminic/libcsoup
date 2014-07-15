@@ -132,7 +132,7 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 		if (mode == CSC_CFG_RWC) {
 			return root;
 		}
-		smm_free(root);
+		csc_cfg_kcb_free(root);
 		return NULL;
 	}
 
@@ -587,6 +587,11 @@ KEYCB *csc_cfg_kcb_alloc(int psize)
 	kp = (KEYCB*) &node[1];
 	kp->self = node;
 	return kp;
+}
+
+int csc_cfg_kcb_free(KEYCB *kcb)
+{
+	return smm_free(kcb->self);
 }
 
 

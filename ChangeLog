@@ -1,4 +1,8 @@
 
+20140715: 0.7.2:
+	* csc_config.c: added csc_cfg_kcb_free() instead of the smm_free() to
+	free the root KEYCB. Otherwise coredumped at csc_cfg_open().
+
 20140711: 0.7.1:
 	* csc_config.c: added csc_cfg_read_int() and csc_cfg_write_int().
 
