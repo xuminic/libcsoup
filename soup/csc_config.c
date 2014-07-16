@@ -97,7 +97,7 @@ int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
 
 static KEYCB *CFGF_GETOBJ(CSCLNK *self)
 {
-	KEYCB   *kcb = (KEYCB *) &self[1];
+	KEYCB   *kcb = csc_cdl_payload(self);
 
 	if ((CFGF_TYPE_GET(kcb->flags) > CFGF_TYPE_UNKWN) && 
 			(CFGF_TYPE_GET(kcb->flags) < CFGF_TYPE_NULL)) {
@@ -127,9 +127,10 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 	 * The configure file then will be closed until saving the contents
 	 * back to the file. It's pointless to create a new file in the
 	 * csc_cfg_open() stage */
-	cfgd = smm_config_open(sysdir, path, filename, CSC_CFG_READ);
+	cfgd = smm_config_open(sysdir, path, filename, 
+			CFGF_MODE_SET(mode, CSC_CFG_READ));
 	if (cfgd == NULL) {
-		if (mode == CSC_CFG_RWC) {
+		if (CFGF_MODE_GET(mode) == CSC_CFG_RWC) {
 			return root;
 		}
 		csc_cfg_kcb_free(root);
@@ -581,10 +582,10 @@ KEYCB *csc_cfg_kcb_alloc(int psize)
 	psize += sizeof(KEYCB) + 8;	/* reserved 8 bytes */
 	psize = (psize + 3) / 4 * 4;	/* round up to 32-bit boundry */
 
-	if ((node = csc_cdl_list_alloc(psize)) == NULL) {
+	if ((node = csc_cdl_alloc(psize)) == NULL) {
 		return NULL;
 	}
-	kp = (KEYCB*) &node[1];
+	kp = (KEYCB*) csc_cdl_payload(node);
 	kp->self = node;
 	return kp;
 }

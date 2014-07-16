@@ -33,6 +33,27 @@
 #define CSC_CDLL_HEAD           -1
 #define CSC_CDLL_TAIL           -2
 
+struct	_CSCLNK {
+	struct	_CSCLNK	*next;
+	struct	_CSCLNK	*prev;
+	void	*refp;
+#ifdef	CFG_CDLL_SAFE
+	/** Size of the CSCLNK structure and the payload.
+	 * but it doesn't include the padding magic */
+	unsigned	size;
+	/** The combine of CSC_CDLL_MAGIC in higher 16-bit and a CRC16 in 
+	 * lower 16 bit of the CSCLNK structure while the majesty had been 
+	 * set to the CSC_CDLL_MAGIC. */
+	unsigned	majesty;
+#endif
+	/** Payload starts here ... */
+};
+
+#ifdef	CFG_CDLL_SAFE
+char	*csc_cdl_version_string = "csc_cdl_version-1.0-verified";
+#else
+char	*csc_cdl_version_string = "csc_cdl_version-1.0";
+#endif
 
 #ifdef	CFG_CDLL_SAFE
 static int csc_cdl_checksum(CSCLNK *node)
@@ -51,6 +72,7 @@ static int csc_cdl_checksum(CSCLNK *node)
 static int csc_cdl_verify(CSCLNK *node)
 {
 	CSCLNK	tmp;
+	int	*ptr;
 
 	if (node == NULL) {
 		return 0;
@@ -58,14 +80,60 @@ static int csc_cdl_verify(CSCLNK *node)
 	tmp = *node;
 	csc_cdl_checksum(&tmp);
 
-	if (tmp.majesty == node->majesty) {
-		return 1;
+	if (tmp.majesty != node->majesty) {
+		slogz("csc_cdl_verify: broken at %p (+%p:-%p) S:%d M:%x\n", 
+				node, node->next, node->prev, node->size, 
+				node->majesty);
+		return 0;
 	}
-	slogz("csc_cdl_verify: broken at %p (+%p:-%p) S:%d M:%x\n", node,
-			node->next, node->prev, node->size, node->majesty);
-	return 0;
+
+	/* verify the back guard */
+	ptr = (int*) (((char*)node) + node->size);
+	if (*ptr != (int) CSC_CDLL_BACKGUARD) {
+		slogz("csc_cdl_verify: backguard violated %p (+%p:-%p) %x\n",
+				node, node->next, node->prev, *ptr);
+		return 0;
+	}
+	return 1;
 }
 #endif	/* CFG_CDLL_SAFE */
+
+
+/*!\brief Allocate a CSCLNK node
+   
+   The csc_cdl_alloc() function returns a CSCLNK structure with the
+   payload of the specified size. In CFG_CDLL_SAFE it will be padded by 
+   the guarding words.
+
+   \param[in]   size The size of the payload.
+
+   \return  A pointer to the CSCLNK structure of specified size if succeed,
+   or NULL if failed.
+*/
+#ifdef	CFG_CDLL_SAFE
+CSCLNK *csc_cdl_alloc(int size)
+{
+	CSCLNK	*node;
+	int	*ptr;
+
+	size += sizeof(CSCLNK);
+	size = (size + 3) / 4 * 4;
+	if ((node = smm_alloc(size + sizeof(int))) != NULL) {
+		node->size = size;
+		ptr = (int*) (((char*)node) + node->size);
+		*ptr = CSC_CDLL_BACKGUARD;
+	}
+	return node;
+}
+#else
+CSCLNK *csc_cdl_alloc(int size)
+{
+	size += sizeof(CSCLNK);
+	size = (size + 3) / 4 * 4;
+	return smm_alloc(size);
+}
+#endif	/* CFG_CDLL_SAFE */
+
 
 /*!\brief Insert a node after the reference node.
 
@@ -381,61 +449,26 @@ int csc_cdl_setup(CSCLNK *node, void *prev, void *next, void *rp, int size)
 	return size;
 }
 
+
+/*!\brief Return the payload of a node.
+   
+   The csc_cdl_payload() function safely return the payload of a node.
+   
+   \param[in] node  The points to the node.
+
+   \return  The pointer to the payload in the CSCLNK structure. 
+*/
+void *csc_cdl_payload(CSCLNK *node)
+{
+	if (node) {
+		return &node[1];
+	}
+	return NULL;
+}
+
 /****************************************************************************
  * An application of the basic csc_cdl_* functions
  ***************************************************************************/
-#ifdef	CFG_CDLL_SAFE
-static int csc_cdl_list_verify(CSCLNK *node)
-{
-	int	*ptr;
-
-	ptr = (int*) (((char*)node) + node->size);
-	if (*ptr == (int) CSC_CDLL_BACKGUARD) {
-		return 1;
-	}
-	slogz("csc_cdl_list_verify: backguard violated %p (+%p:-%p) %x\n",
-			node, node->next, node->prev, *ptr);
-	return 0;
-}
-#endif	/* CFG_CDLL_SAFE */
-
-
-/*!\brief Allocate a CSCLNK node
-   
-   The csc_cdl_list_alloc() function returns a CSCLNK structure with the
-   payload of the specified size. In CFG_CDLL_SAFE it will be padded by 
-   the guarding words.
-
-   \param[in]   size The size of the payload.
-
-   \return  A pointer to the CSCLNK structure of specified size if succeed,
-   or NULL if failed.
-*/
-#ifdef	CFG_CDLL_SAFE
-CSCLNK *csc_cdl_list_alloc(int size)
-{
-	CSCLNK	*node;
-	int	*ptr;
-
-	size += sizeof(CSCLNK);
-	size = (size + 3) / 4 * 4;
-	if ((node = smm_alloc(size + sizeof(int))) != NULL) {
-		node->size = size;
-		ptr = (int*) (((char*)node) + node->size);
-		*ptr = CSC_CDLL_BACKGUARD;
-	}
-	return node;
-}
-#else
-CSCLNK *csc_cdl_list_alloc(int size)
-{
-	size += sizeof(CSCLNK);
-	size = (size + 3) / 4 * 4;
-	return smm_alloc(size);
-}
-#endif	/* CFG_CDLL_SAFE */
-
-
 /*!\brief Allocate a node and insert it to the head of the list.
 
    The csc_cdl_list_alloc_head() function create a brand new node by allocating
@@ -457,7 +490,7 @@ CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size)
 {
 	CSCLNK	*node;
 
-	if ((node = csc_cdl_list_alloc(size)) != NULL) {
+	if ((node = csc_cdl_alloc(size)) != NULL) {
 		*anchor = csc_cdl_insert_head(*anchor, node);
 #ifdef	CFG_CDLL_SAFE
 		if (*anchor == NULL) {
@@ -490,7 +523,7 @@ CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size)
 {
 	CSCLNK	*node;
 
-	if ((node = csc_cdl_list_alloc(size)) != NULL) {
+	if ((node = csc_cdl_alloc(size)) != NULL) {
 		*anchor = csc_cdl_insert_tail(*anchor, node);
 #ifdef	CFG_CDLL_SAFE
 		if (*anchor == NULL) {
@@ -582,9 +615,6 @@ CSCLNK *csc_cdl_list_free(CSCLNK **anchor, CSCLNK *node)
 	if (!csc_cdl_verify(node)) {
 		return NULL;
 	}
-	if (!csc_cdl_list_verify(node)) {
-		return NULL;
-	}
 #endif
 	if ((next = node->next) == node) {
 		next = NULL;	/* node is the last member in the queue */
@@ -608,14 +638,9 @@ int csc_cdl_list_destroy(CSCLNK **anchor)
 {
 	CSCLNK	*node;
 
-#ifdef	CFG_CDLL_SAFE
-	if (!csc_cdl_verify(*anchor)) {
-		return -1;
-	}
-#endif
 	for (node = *anchor; node; node = csc_cdl_list_free(anchor, node)) {
 #ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_list_verify(node)) {
+		if (!csc_cdl_verify(node)) {
 			return -1;
 		}
 #endif
@@ -636,14 +661,9 @@ int csc_cdl_list_state(CSCLNK **anchor)
 	CSCLNK	*node;
 	int	i = 0;
 
-#ifdef	CFG_CDLL_SAFE
-	if (!csc_cdl_verify(*anchor)) {
-		return -1;
-	}
-#endif
 	for (node = *anchor; node; node = csc_cdl_next(*anchor, node)) {
 #ifdef	CFG_CDLL_SAFE
-		if (!csc_cdl_list_verify(node)) {
+		if (!csc_cdl_verify(node)) {
 			return -1;
 		}
 #endif

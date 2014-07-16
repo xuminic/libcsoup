@@ -165,7 +165,7 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 		return cfgd;
 	}
 #endif
-	switch (mode) {
+	switch (CFGF_MODE_GET(mode)) {
 	case CSC_CFG_READ:
 		cfgd->fp = fopen(cfgd->fpath, "r");
 		break;
@@ -229,19 +229,19 @@ int smm_config_write(struct KeyDev *cfgd, KEYCB *kp)
 {
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		if (cfgd->mode != CSC_CFG_READ) {
+		if (CFGF_MODE_GET(cfgd->mode) != CSC_CFG_READ) {
 			return smc_reg_write(cfgd, kp);
 		}
 	}
 #endif
-	if (cfgd->fname == NULL) {
+	if (cfgd->fname == NULL) {	/* memory mode or stdout */
 		if (cfgd->fpath && cfgd->mode) {
 			return smm_config_mem_write(cfgd, kp);
 		} else {
 			return smm_config_file_write(cfgd, kp);
 		}
 	}
-	if (cfgd->mode == CSC_CFG_READ) {
+	if (CFGF_MODE_GET(cfgd->mode) == CSC_CFG_READ) {
 		return smm_errno_update(SMM_ERR_ACCESS);
 	}
 	return smm_config_file_write(cfgd, kp);
@@ -703,7 +703,7 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode)
 		return SMM_ERR_LOWMEM;
 	}
 
-	switch (mode) {
+	switch (CFGF_MODE_GET(mode)) {
 	case CSC_CFG_READ:
 		RegOpenKeyExW(cfgd->hSysKey, wkey, 0, KEY_READ, 
 				&cfgd->hRootKey);

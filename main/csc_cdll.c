@@ -5,46 +5,27 @@
 
 #include "libcsoup.h"
 
-static	struct	TestBlk	{
-	CSCLNK	link;
-	char	value[32];
-} testblock[16];
-
-
-static int cdc_cdll_safe_mode_verify(void)
-{
-	CSCLNK	*root, testnode[2];
-
-	root = csc_cdl_insert_head(NULL, &testnode[0]);
-	root->prev = NULL;
-	slogz("Verification: CSCLNK by lib %d and by program %d\n", 
-			csc_cdl_setup(NULL, NULL, NULL, NULL, 0), 
-			sizeof(CSCLNK));
-#ifdef	CFG_CDLL_SAFE
-	if (csc_cdl_insert_after(root, &testnode[1]) == 0) {
-		slogz("Fatal: this program was compiled with -DCFG_CDLL_SAFE but the library was not!\n");
-		return -1;
-	}
-#else
-	if (csc_cdl_insert_after(root, &testnode[1]) < 0) {
-		slogz("Fatal: the library was compiled with -DCFG_CDLL_SAFE but the program was not!\n");
-		return -1;
-	}
-#endif
-	slogz("Verification: succeeded.\n");
-	return 0;
-}
 
 static int csc_cdll_print_test_block(CSCLNK *root)
 {
-	struct	TestBlk	*tblk;
 	CSCLNK	*node;
 
 	for (node = root; node; node = csc_cdl_next(root, node)) {
-		tblk = (struct TestBlk *) node;
-		slogz("%s ", tblk->value);
+		slogz("%s ", csc_cdl_payload(node));
 	}
 	slogz("\n");
+	return 0;
+}
+
+static int csc_cdll_free_test_block(CSCLNK *root)
+{
+	CSCLNK	*node;
+
+	while (root) {
+		node = root;
+		root = csc_cdl_remove(root, node);
+		smm_free(node);
+	}
 	return 0;
 }
 
@@ -55,48 +36,59 @@ static int csc_cdll_my_compare(void *src, void *dst)
 
 static int csc_cdll_basic_function(void)
 {
-	struct	TestBlk	*tblk;
 	CSCLNK	*root, *node;
+	char	*value;
 	int	i;
 
 	for (i = 0, root = NULL; i < 16; i++) {
-		testblock[i].value[0] = 'A' + i;
-		testblock[i].value[1] = 0;
-		root = csc_cdl_insert_head(root, &testblock[i].link);
+		if ((node = csc_cdl_alloc(16)) != NULL) {
+			value = csc_cdl_payload(node);
+			value[0] = 'A' + i;
+			value[1] = 0;
+			root = csc_cdl_insert_head(root, node);
+		}
 	}
 	slogz("Stack:  ");
 	csc_cdll_print_test_block(root);
+	csc_cdll_free_test_block(root);
 
 	for (i = 0, root = NULL; i < 16; i++) {
-		testblock[i].value[0] = 'A' + i;
-		testblock[i].value[1] = 0;
-		root = csc_cdl_insert_tail(root, &testblock[i].link);
+		if ((node = csc_cdl_alloc(16)) != NULL) {
+			value = csc_cdl_payload(node);
+			value[0] = 'A' + i;
+			value[1] = 0;
+			root = csc_cdl_insert_tail(root, node);
+		}
 	}
 	slogz("FIFO:   ");
 	csc_cdll_print_test_block(root);
 
 	node = csc_cdl_search(root, NULL, csc_cdll_my_compare, "D");
-	tblk = (struct TestBlk *) node;
-	if (tblk) {
-		slogz("Search: %s\n", tblk->value);
+	if (node) {
+		slogz("Search: %s\n", csc_cdl_payload(node));
+	} else {
+		slogz("Search: not found\n");
 	}
 
 	for (i = 0, node = root; node; node = csc_cdl_next(root, node), i++) {
 		if (i & 1) {
+			slogz("Removing: %s\n", csc_cdl_payload(node));
 			root = csc_cdl_remove(root, node);
 		}
 	}
-	slogz("Remove: ");
+	slogz("Removed: ");
 	csc_cdll_print_test_block(root);
 
 	i = 3;
 	node = csc_cdl_goto(root, i);
-	tblk = (struct TestBlk *) node;
-	if (tblk) {
-		slogz("Goto/%d: %s\n", i, tblk->value);
+	if (node) {
+		slogz("Goto/%d: %s\n", i, csc_cdl_payload(node));
+	} else {
+		slogz("Goto/%d: out of range.\n", i);
 	}
 
 	slogz("Number: %d\n", csc_cdl_index(root, NULL));
+	csc_cdll_free_test_block(root);
 	return 0;
 }
 
@@ -107,17 +99,17 @@ static int csc_cdll_list_function(void)
 
 	
 	node = csc_cdl_list_alloc_head(&anchor, 16);
-	strcpy((char*)&node[1], cont[0]);
+	strcpy(csc_cdl_payload(node), cont[0]);
 
 	node = csc_cdl_list_alloc_head(&anchor, 16);
-	strcpy((char*)&node[1], cont[1]);
+	strcpy(csc_cdl_payload(node), cont[1]);
 
 	node = csc_cdl_list_alloc_tail(&anchor, 16);                
-	strcpy((char*)&node[1], cont[2]);
+	strcpy(csc_cdl_payload(node), cont[2]);
 
 	slogz("State:  %d\n", csc_cdl_list_state(&anchor));
 	for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
-		slogz("%s\n", (char*)&node[1]);
+		slogz("%s\n", csc_cdl_payload(node));
 	}
 
 	csc_cdl_list_destroy(&anchor);
@@ -129,10 +121,6 @@ int csc_cdll_main(void *rtime, int argc, char **argv)
 	/* stop the compiler complaining */
 	(void) rtime; (void) argc; (void) argv;
 	
-	if (cdc_cdll_safe_mode_verify() < 0) {
-		return -1;	/* wrong compiling macro */
-	}
-
 	csc_cdll_basic_function();
 	csc_cdll_list_function();
 	return 0;
