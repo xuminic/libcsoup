@@ -71,6 +71,8 @@ struct	KEYROOT	{
 	KEYCB	*nkcb;	/* latest accessed sub key */
 	int	mode;
 	int	sysdir;
+	int	items;	/* number of keys that has been read */
+	char	*fulldir;	/* the full path of configure file */
 	char	pool[1];
 };
 
@@ -110,6 +112,7 @@ static KEYCB *CFGF_GETOBJ(CSCLNK *self)
 KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 {
 	struct	KeyDev	*cfgd;
+	struct	KEYROOT	*rext;
 	KEYCB	*root, *kp;
 
 	/* create the root control block */
@@ -137,6 +140,12 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 		return NULL;
 	}
 
+	rext = (struct KEYROOT *) root->pool;
+	rext->items = smm_config_current(cfgd, NULL, 0) + 4;
+	if ((rext->fulldir = smm_alloc(rext->items)) != NULL) {
+		smm_config_current(cfgd, rext->fulldir, rext->items);
+	}
+	rext->items = 0;
 	while ((kp = smm_config_read_alloc(cfgd)) != NULL) {
 		/* In Win32 registry interface, smm_config_read() will read 
 		 * and fill in the KEYCB structure itself. However if the 
@@ -146,20 +155,38 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 			csc_cfg_kcb_fillup(kp);
 		}
 		csc_cfg_insert(root, kp);
+
+		switch (CFGF_TYPE_GET(kp->flags)) {
+		case CFGF_TYPE_DIR:
+		case CFGF_TYPE_KEY:
+			rext->items++;
+		}
 	}
 	smm_config_close(cfgd);
 	csc_cfg_access_setup(root, root, NULL);	/* reset the directory key */
+	/*slogz("csc_cfg_open: read %d items from %s\n", 
+			rext->items, rext->fulldir);*/
 	return root;
 }
 
-int csc_cfg_abort(KEYCB *cfg)
+int csc_cfg_free(KEYCB *cfg)
 {
+	struct	KEYROOT	*rext;
+
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
 	}
 	if (cfg->anchor) {
 		csc_cfg_destroy_links(cfg->anchor);
+		cfg->anchor = NULL;
 	}
+
+	rext = (struct KEYROOT *) cfg->pool;
+	if (rext->fulldir) {
+		smm_free(rext->fulldir);
+		rext->fulldir = NULL;
+	}
+	csc_cfg_kcb_free(cfg);
 	return SMM_ERR_NONE;
 }
 
@@ -221,8 +248,22 @@ int csc_cfg_close(KEYCB *cfg)
 	int	rc;
 
 	rc = csc_cfg_flush(cfg);
-	csc_cfg_abort(cfg);
+	csc_cfg_free(cfg);
 	return rc;
+}
+
+char *csc_cfg_status(KEYCB *cfg, int *keys)
+{
+	struct	KEYROOT	*rext;
+
+	if (cfg == NULL) {
+		return NULL;
+	}
+	rext = (struct KEYROOT *) cfg->pool;
+	if (keys) {
+		*keys = rext->items;
+	}
+	return rext->fulldir;
 }
 
 char *csc_cfg_read(KEYCB *cfg, char *dkey, char *nkey)

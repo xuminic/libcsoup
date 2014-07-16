@@ -278,6 +278,43 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 	return smm_errno_update(SMM_ERR_NULL);
 }
 
+int smm_config_current(struct KeyDev *cfgd, char *buf, int blen)
+{
+	int	n = 0;
+
+#ifdef	CFG_WIN32_API
+	if (cfgd->hRootKey) {	/* I/O to the registry */
+		char	*path;
+		path = cfgd->kpath + strlen(cfgd->kpath) + 1;
+		n += mem_copy(&buf, &blen, path);
+		n += mem_copy(&buf, &blen, "\\");
+		n += mem_copy(&buf, &blen, cfgd->kpath);
+		n += mem_copy(&buf, &blen, "\\");
+		n += mem_copy(&buf, &blen, cfgd->fname);
+		return n;
+	}
+#endif
+	if (cfgd->fp) {		/* I/O to the file system */
+		n += mem_copy(&buf, &blen, cfgd->fpath);
+		return n;
+	}
+	if (cfgd->fname == NULL) {
+		char	path[128];
+		if (cfgd->fpath == NULL) {	/* I/O to the stdin/stdout */
+			sprintf(path, "con://stdio");
+		} else if (cfgd->mode == 0) {	/* I/O to the read only memory */
+			sprintf(path, "mem://%p/%d/read-only", 
+					cfgd->fpath, strlen(cfgd->fpath) + 1);
+		} else {			/* I/O to the memory */
+			sprintf(path, "mem://%p/%d/read-write", 
+					cfgd->fpath, cfgd->mode);
+		}
+		n += mem_copy(&buf, &blen, path);
+		return n;
+	}
+	return -1;
+}
+
 /* return:
  *   'buf' a string list of file path, registry path and registry root. 
  *   Each string ends of \0 and the whole list ends of another \0. 

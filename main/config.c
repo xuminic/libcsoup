@@ -99,12 +99,12 @@ static int config_open_rdonly(void)
 	csc_cfg_dump(root);
 	if (csc_cfg_save(root) == SMM_ERR_NONE) {
 		slogz("FATAL: should be read only\n");
-		csc_cfg_abort(root);
+		csc_cfg_free(root);
 		return -2;
 	}
 
 	csc_cfg_saveas(root, SMM_CFGROOT_CURRENT, TESTPATH, TESTOUTPUT);
-	csc_cfg_abort(root);
+	csc_cfg_free(root);
 	return 0;
 }
 

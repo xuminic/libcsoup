@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	7		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	3		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	4		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -358,11 +358,12 @@ extern "C"
 {
 #endif
 KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode);
-int csc_cfg_abort(KEYCB *cfg);
+int csc_cfg_free(KEYCB *cfg);
 int csc_cfg_save(KEYCB *cfg);
 int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename);
 int csc_cfg_flush(KEYCB *cfg);
 int csc_cfg_close(KEYCB *cfg);
+char *csc_cfg_status(KEYCB *cfg, int *keys);
 char *csc_cfg_read(KEYCB *cfg, char *dkey, char *nkey);
 char *csc_cfg_read_first(KEYCB *cfg, char *dkey, char **key);
 char *csc_cfg_read_next(KEYCB *cfg, char **key);
@@ -655,6 +656,7 @@ int smm_config_close(struct KeyDev *cfgd);
 KEYCB *smm_config_read_alloc(struct KeyDev *cfgd);
 int smm_config_write(struct KeyDev *cfgd, KEYCB *kp);
 int smm_config_delete(int sysdir, char *path, char *fname);
+int smm_config_current(struct KeyDev *cfgd, char *buf, int blen);
 int smm_config_path(int sysdir, char *path, char *fname, char *buf, int blen);
 void smm_config_dump(struct KeyDev *cfgd);
 

@@ -1,3 +1,8 @@
+
+20140716: 0.7.4
+	* csc_config.c/smm_config.c: added supportive functions to display 
+	the attribution of the configure files/devices.
+
 20140716: 0.7.3
 	* csc_cdll.c: hide the details of the CSCLNK structure so the	
 	CFG_CDLL_SAFE conditional compiling macro won't mess around other
