@@ -207,6 +207,10 @@ int csc_cfg_save(KEYCB *cfg)
 int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 {
 	struct	KeyDev	*cfgd;
+#ifdef	DEBUG
+	char	*odir;
+	int	oitem, olen;
+#endif
 
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
@@ -226,7 +230,17 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 		return SMM_ERR_ACCESS;
 	}
 
+#ifdef	DEBUG
+	oitem = csc_cfg_save_links(cfgd, cfg->anchor);
+	olen = smm_config_current(cfgd, NULL, 0) + 4;
+	if ((odir = smm_alloc(olen)) != NULL) {
+		smm_config_current(cfgd, odir, olen);
+		slogz("csc_cfg_saveas: write %d items to %s\n", oitem, odir);
+		smm_free(odir);
+	}
+#else
 	csc_cfg_save_links(cfgd, cfg->anchor);
+#endif
 	smm_config_close(cfgd);
 	cfg->update = 0;	/* reset the update counter */
 	return SMM_ERR_NONE;
@@ -318,6 +332,7 @@ char *csc_cfg_copy(KEYCB *cfg, char *dkey, char *nkey, int extra)
 
 int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value)
 {
+	struct	KEYROOT	*rext;
 	KEYCB	*dcb, *ncb, *kcb;
 	int	olen, nlen;
 
@@ -325,6 +340,7 @@ int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value)
 		return SMM_ERR_NULL;
 	}
 
+	rext = (struct KEYROOT *) cfg->pool;
 	if ((dcb = csc_cfg_mkdir(cfg, dkey, NULL, NULL)) == NULL) {
 		return SMM_ERR_NULL;
 	}
@@ -338,6 +354,7 @@ int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value)
 			cfg->update++;
 			csc_cdl_list_insert_tail(&dcb->anchor, ncb->self);
 			csc_cfg_access_setup(cfg, dcb, ncb);
+			rext->items++;
 		}
 		return SMM_ERR_NONE;
 	}
@@ -369,6 +386,7 @@ int csc_cfg_write(KEYCB *cfg, char *dkey, char *nkey, char *value)
 		dcb->update++;
 		cfg->update++;
 	}
+	rext->items++;
 	return SMM_ERR_NONE;
 }
 
@@ -538,6 +556,7 @@ void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize)
 
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize)
 {
+	struct	KEYROOT	*rext;
 	KEYCB	*dcb;
 
 	if (cfg == NULL) {
@@ -557,6 +576,8 @@ int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize)
 	if (csc_cfg_link_block(dcb, bin, bsize) == SMM_ERR_NONE) {
 		cfg->update++;
 	}
+	rext = (struct KEYROOT *) cfg->pool;
+	rext->items++;
 	return bsize;
 }
 
@@ -1153,6 +1174,7 @@ static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor)
 {
 	KEYCB	*dkcb;
 	CSCLNK	*mp;
+	int	count = 0;
 
 	/* output the contents in the current directory */
 	for (mp = anchor; mp; mp = csc_cdl_next(anchor, mp)) {
@@ -1161,6 +1183,9 @@ static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor)
 		}
 		if (CFGF_TYPE_GET(dkcb->flags) != CFGF_TYPE_DIR) {
 			smm_config_write(cfgd, dkcb);
+			if (CFGF_TYPE_GET(dkcb->flags) == CFGF_TYPE_KEY) {
+				count++;
+			}
 		}
 	}
 	
@@ -1180,11 +1205,12 @@ static int csc_cfg_save_links(struct KeyDev *cfgd, CSCLNK *anchor)
 		 * and eliminate the empty directories */
 		if (csc_cfg_attribute(dkcb, NULL)) {
 			smm_config_write(cfgd, dkcb);
+			count++;
 		}
 
-		csc_cfg_save_links(cfgd, dkcb->anchor);
+		count += csc_cfg_save_links(cfgd, dkcb->anchor);
 	}
-	return 0;
+	return count;
 }
 
 /* attr can be NULL, otherwise it should be at least CFGF_TYPE_MASK+1 long */
