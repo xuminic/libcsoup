@@ -170,8 +170,16 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 		cfgd->fp = fopen(cfgd->fpath, "r");
 		break;
 	case CSC_CFG_RWC:
-		if (path) {
-			smm_mkpath(path);
+		if ((path = csc_strcpy_alloc(cfgd->fpath, 0)) != NULL) {
+			int	i;
+			for (i = strlen(path); i >=0; i--) {
+				if (csc_isdelim(SMM_PATH_DELIM, path[i])) {
+					path[i] = 0;
+					smm_mkpath(path);
+					break;
+				}
+			}
+			smm_free(path);
 		}
 		if ((cfgd->fp = fopen(cfgd->fpath, "r+")) == NULL) {
 			cfgd->fp = fopen(cfgd->fpath, "w+");
@@ -303,8 +311,8 @@ int smm_config_current(struct KeyDev *cfgd, char *buf, int blen)
 		if (cfgd->fpath == NULL) {	/* I/O to the stdin/stdout */
 			sprintf(path, "con://stdio");
 		} else if (cfgd->mode == 0) {	/* I/O to the read only memory */
-			sprintf(path, "mem://%p/%d/read-only", 
-					cfgd->fpath, strlen(cfgd->fpath) + 1);
+			sprintf(path, "mem://%p/%d/read-only", cfgd->fpath, 
+					(int)(strlen(cfgd->fpath) + 1));
 		} else {			/* I/O to the memory */
 			sprintf(path, "mem://%p/%d/read-write", 
 					cfgd->fpath, cfgd->mode);

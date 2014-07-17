@@ -207,6 +207,7 @@ int csc_cfg_save(KEYCB *cfg)
 int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 {
 	struct	KeyDev	*cfgd;
+	struct	KEYROOT	*rext;
 #ifdef	DEBUG
 	char	*odir;
 	int	oitem, olen;
@@ -230,12 +231,22 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 		return SMM_ERR_ACCESS;
 	}
 
+	/* if csc_cfg_open() hasn't create the full directory field, which
+	 * is possible by open an empty configure, it's time to make one */
+	rext = (struct KEYROOT *) cfg->pool;
+	if (rext->fulldir == NULL) {
+		int len = smm_config_current(cfgd, NULL, 0) + 4;
+		if ((rext->fulldir = smm_alloc(len)) != NULL) {
+			smm_config_current(cfgd, rext->fulldir, len);
+		}
+	}
+
 #ifdef	DEBUG
 	oitem = csc_cfg_save_links(cfgd, cfg->anchor);
 	olen = smm_config_current(cfgd, NULL, 0) + 4;
 	if ((odir = smm_alloc(olen)) != NULL) {
 		smm_config_current(cfgd, odir, olen);
-		slogz("csc_cfg_saveas: write %d items to %s\n", oitem, odir);
+		//slogz("csc_cfg_saveas: write %d items to %s\n", oitem, odir);
 		smm_free(odir);
 	}
 #else
