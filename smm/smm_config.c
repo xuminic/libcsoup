@@ -133,6 +133,7 @@ extern int csc_cfg_binary_to_hex(char *src, int slen, char *buf, int blen);
 struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 {
 	struct	KeyDev	*cfgd;
+	int	i, ctmp;
 
 	/* configure in memory mode.
 	 * Note that in memory mode, the 'path' parameter points to the 
@@ -170,16 +171,14 @@ struct KeyDev *smm_config_open(int sysdir, char *path, char *fname, int mode)
 		cfgd->fp = fopen(cfgd->fpath, "r");
 		break;
 	case CSC_CFG_RWC:
-		if ((path = csc_strcpy_alloc(cfgd->fpath, 0)) != NULL) {
-			int	i;
-			for (i = strlen(path); i >=0; i--) {
-				if (csc_isdelim(SMM_PATH_DELIM, path[i])) {
-					path[i] = 0;
-					smm_mkpath(path);
-					break;
-				}
+		for (i = strlen(cfgd->fpath); i >= 0; i--) {
+			if (csc_isdelim(SMM_PATH_DELIM, cfgd->fpath[i])) {
+				ctmp = cfgd->fpath[i];
+				cfgd->fpath[i] = 0;
+				smm_mkpath(cfgd->fpath);
+				cfgd->fpath[i] = (char)ctmp;
+				break;
 			}
-			smm_free(path);
 		}
 		if ((cfgd->fp = fopen(cfgd->fpath, "r+")) == NULL) {
 			cfgd->fp = fopen(cfgd->fpath, "w+");

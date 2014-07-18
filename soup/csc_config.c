@@ -71,8 +71,8 @@ struct	KEYROOT	{
 	KEYCB	*nkcb;	/* latest accessed sub key */
 	int	mode;
 	int	sysdir;
-	int	items;	/* number of keys that has been read */
-	char	*fulldir;	/* the full path of configure file */
+	int	items;	/* number of keys that has been read (debug) */
+	char	*fulldir;	/* the full path of configure file (debug) */
 	char	pool[1];
 };
 
@@ -208,10 +208,6 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 {
 	struct	KeyDev	*cfgd;
 	struct	KEYROOT	*rext;
-#ifdef	DEBUG
-	char	*odir;
-	int	oitem, olen;
-#endif
 
 	if (cfg == NULL) {
 		return SMM_ERR_NULL;
@@ -241,17 +237,10 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 		}
 	}
 
-#ifdef	DEBUG
-	oitem = csc_cfg_save_links(cfgd, cfg->anchor);
-	olen = smm_config_current(cfgd, NULL, 0) + 4;
-	if ((odir = smm_alloc(olen)) != NULL) {
-		smm_config_current(cfgd, odir, olen);
-		//slogz("csc_cfg_saveas: write %d items to %s\n", oitem, odir);
-		smm_free(odir);
-	}
-#else
-	csc_cfg_save_links(cfgd, cfg->anchor);
-#endif
+	rext->items = csc_cfg_save_links(cfgd, cfg->anchor);
+	//slogz("csc_cfg_saveas: write %d items to %s\n", 
+	//		rext->items, rext->fulldir);
+
 	smm_config_close(cfgd);
 	cfg->update = 0;	/* reset the update counter */
 	return SMM_ERR_NONE;

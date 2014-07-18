@@ -1,3 +1,7 @@
+20140717: 0.7.6:
+	* csc_cfg_saveas(): update rext->items while saving
+	Note that csc_cfg_status() is limited functioned to debug only.
+
 20140717: 0.7.5
 	* smm_config_open(): fixed a bug that created the wrong directory.
 
