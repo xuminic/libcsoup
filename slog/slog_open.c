@@ -30,98 +30,150 @@
 
 #include "libcsoup.h"
 
-static	SMMDBG	*SlogCB = NULL;
+static int slog_unbind_file(SMMDBG *dbgc);
 
-void slog_def_open(int cword)
+
+SMMDBG *slog_initialize(void *mem, int cword)
 {
-	SlogCB = slog_open(cword);
-}
+	SMMDBG	*dbgc = mem;
 
-void slog_def_close(void)
-{
-	slog_close(NULL);
-	SlogCB = NULL;
-}
-
-int slog_def_stdout(int cword, char *buf, int len)
-{
-	if (buf) {
-		len = fwrite(buf, len, 1, stdout);
-	}
-	if (cword & SLOG_FLUSH) {
-		fflush(stdout);
-	}
-	return len;
-}
-
-int slog_def_stderr(int cword, char *buf, int len)
-{
-	if (buf) {
-		len = fwrite(buf, len, 1, stderr);
-	}
-	if (cword & SLOG_FLUSH) {
-		fflush(stderr);
-	}
-	return len;
-}
-
-void *slog_open(int cword)
-{
-	SMMDBG	*dbgc;
-
-	if ((dbgc = smm_alloc(sizeof(SMMDBG))) != NULL) {
-		dbgc->cword  = (unsigned) cword;
-		dbgc->device = SLOG_TO_STDOUT;
-
-		dbgc->stdoutput = slog_def_stdout;
-		dbgc->stderrput = slog_def_stderr;
-	}
+	memset(dbgc, 0, sizeof(SMMDBG));
+	dbgc->magic = SLOG_MAGIC;
+	dbgc->cword = cword;
+	
+	dbgc->stdio = stdout;
 	return dbgc;
 }
 
-int slog_close(void *control)
+int slog_shutdown(SMMDBG *dbgc)
 {
-	SMMDBG	*dbgc;
-
-	if ((dbgc = slog_control(control)) == NULL) {
-		return 0;
-	}
-
-	if (dbgc->device & SLOG_TO_STDOUT) {
-		dbgc->stdoutput(SLOG_FLUSH, NULL, 0);
-	}
-	if (dbgc->device & SLOG_TO_STDERR) {
-		dbgc->stderrput(SLOG_FLUSH, NULL, 0);
-	}
-	if (dbgc->device & SLOG_TO_FILE) {
-		fflush(dbgc->logd);
-		fclose(dbgc->logd);
-	}
-
-	smm_free(dbgc);
+	slog_unbind_file(dbgc);
 	return 0;
 }
 
-SMMDBG *slog_control(void *control)
+int slog_bind_file(SMMDBG *dbgc, char *fname)
 {
-	if (control == NULL) {
-		control = SlogCB;
+	if (dbgc->logd) {
+		slog_unbind_file(dbgc);
 	}
-	return control;
+	if (fname == NULL) {
+		return 0;	/* unbind */
+	}
+	
+	/* always appending */
+	if ((dbgc->logd = fopen(fname, "a+")) == NULL) {	
+		return SMM_ERR_OPEN;
+	}
+	
+	dbgc->filename = csc_strcpy_alloc(fname, 0);
+	return 0;
 }
 
-int slog_validate(SMMDBG *dbgc, int cw)
+int slog_bind_stdio(SMMDBG *dbgc, FILE *ioptr)
 {
+	dbgc->stdio = ioptr;
+	return 0;
+}
+
+
+
+int slog_output(SMMDBG *dbgc, int cw, char *buf)
+{
+	char	*mypre;
+	int	len;
+
+	len = strlen(buf);
+	if (dbgc == NULL) {	/* ignore the control */
+		fputs(buf, stdout);
+		fflush(stdout);
+		return len;
+	}
+
+	if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
+		mypre = dbgc->f_prefix(dbgc, cw);
+		len += strlen(mypre);
+	}
+	if (dbgc->logd) {
+		if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
+			fputs(mypre, dbgc->logd);
+		}
+		fputs(buf, dbgc->logd);
+		fflush(dbgc->logd);
+	}
+	if (dbgc->stdio) {
+		if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
+			fputs(mypre, dbgc->stdio);
+		}
+		fputs(buf, dbgc->stdio);
+		fflush(dbgc->stdio);
+	}
+	return len;
+}
+
+int slogs(SMMDBG *dbgc, int cw, char *buf)
+{
+	if (!slog_validate(dbgc, 0, cw)) {
+		return -1;
+	}
+	return slog_output(dbgc, cw, buf);
+}
+
+int slogf(SMMDBG *dbgc, int cw, char *fmt, ...)
+{
+	char	logbuf[SLOG_BUFFER];
+	va_list	ap;
+
+	if (!slog_validate(dbgc, 0, cw)) {
+		return -1;
+	}
+
+	va_start(ap, fmt);
+	SMM_VSNPRINT(logbuf, sizeof(logbuf), fmt, ap);
+	va_end(ap);
+	return slog_output(dbgc, cw, logbuf);
+}
+
+int slog_validate(SMMDBG *dbgc, int setcw, int cw)
+{
+	int level;
+
 	if (dbgc == NULL) {
 		return 1;	/* no control block means always enabled */
 	}
-	if (SLOG_LEVEL(cw) <= SLOG_LEVEL(dbgc->cword)) {
+	if (dbgc->magic != SLOG_MAGIC) {
+		return 0;	/* uninitialized control block means disable*/
+	}
+	if (SLOG_MODUL_GET(cw)) {
+		if ((SLOG_MODUL_GET(cw) & SLOG_MODUL_GET(dbgc->cword)) == 0) {
+			return 0;	/* discard disabled modules */
+		}
+	}
+
+	if (setcw) {
+		level = SLOG_LEVEL_GET(setcw);
+	} else {
+		level = SLOG_LEVEL_GET(dbgc->cword);
+	}
+	if (SLOG_LEVEL_GET(cw) <= level) {
 		return 1;	/* required debug level met */
 	}
-	if (SLOG_LEVEL(cw) <= SLOG_LVL_ERROR) {
+	if (SLOG_LEVEL_GET(cw) <= SLOG_LVL_ERROR) {
 		return 1;	/* non-blocked error level met */
 	}
 	return 0;
 }
 
+static int slog_unbind_file(SMMDBG *dbgc)
+{
+	if (dbgc->logd) {
+		fflush(dbgc->logd);
+		fclose(dbgc->logd);
+		dbgc->logd = NULL;
+	}
+	if (dbgc->filename) {
+		smm_free(dbgc->filename);
+		dbgc->filename = NULL;
+	}
+	return 0;
+}
 

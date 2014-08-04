@@ -139,43 +139,45 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_LVL_MODULE		6
 #define SLOG_LVL_FUNC		7
 #define SLOG_LVL_MASK		7
-#define SLOG_FLUSH		8
+#define SLOG_FLUSH		8	/* no modifier */
 
-#define SLOG_LEVEL(x)	((x) & SLOG_LVL_MASK)
-#define SLOG_MODULE(x)	((x) & ~SLOG_LVL_MASK)
+#define SLOG_LEVEL_GET(l)	((l) & SLOG_LVL_MASK)
+#define SLOG_LEVEL_SET(l,x)	(((l) & ~SLOG_LVL_MASK) | (x))
 
-/* short name of slog debug level */
-#define SLSHOW		SLOG_LVL_SHOWOFF
-#define SLERR		SLOG_LVL_ERROR
-#define SLWARN		SLOG_LVL_WARNING
-#define SLINFO		SLOG_LVL_INFO
-#define SLDBG		SLOG_LVL_DEBUG
-#define SLPROG		SLOG_LVL_PROGRAM
-#define SLMOD		SLOG_LVL_MODULE
-#define SLFUNC		SLOG_LVL_FUNC
+#define SLOG_MODUL_ENUM(x)	(1 << ((x)+4))		/* x>=0 && x<=27 */
+#define SLOG_MODUL_GET(m)	((m) & ~SLOG_LVL_MASK)
+#define SLOG_MODUL_SET(m,x)	((m) | SLOG_MODUL_ENUM(x))
+#define SLOG_MODUL_CLR(m,x)	((m) & ~SLOG_MODUL_ENUM(x))
+#define SLOG_MODUL_ALL(m)	((m) | (-1 << 4))
 
-/* device bit mask */
-#define SLOG_TO_STDOUT		1
-#define SLOG_TO_STDERR		2
-#define SLOG_TO_FILE		4
-#define SLOG_TO_SOCKET		8
-#define SLOG_TO_WINDOW		16
+#define SLOG_CWORD(m,l)		(SLOG_MODUL_GET(m) | SLOG_LEVEL_GET(l))
+
+#define SLOG_MAGIC	(('S'<<24) | ('L'<< 16) | ('O'<<8) | 'G')
 
 
 typedef int (*F_STD)(int, char*, int);
+typedef	char	*(*F_PRF)(void *, int);
 
 
-typedef	struct		{
-	unsigned	cword;		/* control word: modules and level */
-	unsigned	device;		/* mask of output devices */
+typedef	struct	{
+	int	magic;
+	int	cword;		/* control word: modules and level */
+	int	option;
 
-	/* log file as output device */
-	char		*filename;
-	FILE		*logd;
+	/* log into the file */
+	char	*filename;
+	FILE	*logd;
+	/* log into the socket */
+	int	socket;
+	/* log into the standard output, stdout or stderr */
+	FILE	*stdio;
+
+	/* for generating a prefix according to the 'option' field */
+	F_PRF	f_prefix;
 
 	/* standard i/o as output device */
-	F_STD		stdoutput;
-	F_STD		stderrput;
+	//F_STD	stdoutput;
+	//F_STD	stderrput;
 } SMMDBG;
 
 
@@ -184,33 +186,14 @@ extern "C"
 {
 #endif
 
-void slog_def_open(int cword);
-void slog_def_close(void);
-int slog_def_stdout(int flush, char *buf, int len);
-int slog_def_stderr(int flush, char *buf, int len);
-void *slog_open(int cword);
-int slog_close(void *control);
-SMMDBG *slog_control(void *control);
-int slog_validate(SMMDBG *dbgc, int cw);
-unsigned slog_control_word_read(void *control);
-unsigned slog_control_word_write(void *control, unsigned cword);
-int slog_level_read(void *control);
-int slog_level_write(void *control, int dbg_lvl);
-int slog_bind_stdout(void *control, F_STD func);
-int slog_unbind_stdout(void *control);
-int slog_bind_stderr(void *control, F_STD func);
-int slog_unbind_stderr(void *control);
-int slog_bind_file(void *control, char *fname, int append);
-int slog_unbind_file(void *control);
-int slog_output(SMMDBG *dbgc, int cw, char *buf, int len);
-int slogc(void *control, int cw, char *fmt, ...);
-int slogs(void *control, int cw, char *buf, int len);
-
-int slog(int cw, char *fmt, ...);
-int slos(int cw, char *buf);
-
-int slogz(char *fmt, ...);
-int slosz(char *buf);
+SMMDBG *slog_initialize(void *mem, int cword);
+int slog_shutdown(SMMDBG *dbgc);
+int slog_bind_file(SMMDBG *dbgc, char *fname);
+int slog_bind_stdio(SMMDBG *dbgc, FILE *ioptr);
+int slog_output(SMMDBG *dbgc, int cw, char *buf);
+int slogs(SMMDBG *dbgc, int cw, char *buf);
+int slogf(SMMDBG *dbgc, int cw, char *fmt, ...);
+int slog_validate(SMMDBG *dbgc, int setcw, int cw);
 
 #ifdef __cplusplus
 } // __cplusplus defined.

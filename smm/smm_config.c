@@ -26,6 +26,7 @@
 #include <errno.h>
 
 #include "libcsoup.h"
+#include "csoup_internal.h"
 
 
 /* How to find out the input/output device.
@@ -418,52 +419,52 @@ int smm_config_path(int sysdir, char *path, char *fname, char *buf, int blen)
 
 void smm_config_dump(struct KeyDev *cfgd)
 {
-	slogz("Device:    Read from ");
+	CDB_SHOW(("Device:    Read from "));
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		slogz("Registry");
+		CDB_SHOW(("Registry"));
 	} else
 #endif
 	if (cfgd->fp) {
-		slogz("%s", cfgd->fname);
+		CDB_SHOW(("%s", cfgd->fname));
 	} else if (cfgd->fname == NULL) {
 		if (cfgd->fpath) {
-			slogz("%p", cfgd->fpath);
+			CDB_SHOW(("%p", cfgd->fpath));
 		} else {
-			slogz("stdin");
+			CDB_SHOW(("stdin"));
 		}
 	} else {
-		slogz("*%s", cfgd->fname);
+		CDB_SHOW(("*%s", cfgd->fname));
 	}
-	slogz(". Write to ");
+	CDB_SHOW((". Write to "));
 #ifdef	CFG_WIN32_API
 	if (cfgd->hRootKey) {
-		slogz("(Registry)");
+		CDB_SHOW(("(Registry)"));
 	}
 #endif
 	if (cfgd->fp) {
-		slogz("(%s)", cfgd->fname);
+		CDB_SHOW(("(%s)", cfgd->fname));
 	}
 	if (cfgd->fname == NULL) {
 		if (cfgd->fpath == NULL) {
-			slogz("(*stdout)");
+			CDB_SHOW(("(*stdout)"));
 		} else if (cfgd->mode) {
-			slogz("(%p+%d)", cfgd->fpath, cfgd->mode);
+			CDB_SHOW(("(%p+%d)", cfgd->fpath, cfgd->mode));
 		} else {
-			slogz("(stdout)");
+			CDB_SHOW(("(stdout)"));
 		}
 	} else {
-		slogz("(*%s)", cfgd->fname);
+		CDB_SHOW(("(*%s)", cfgd->fname));
 	}
-	slogz("\n");
+	CDB_SHOW(("\n"));
 
 	if (!cfgd->fname && cfgd->fpath) {
-		slogz("Memory:    %p %p\n", cfgd->fpath, cfgd->kpath);
+		CDB_SHOW(("Memory:    %p %p\n", cfgd->fpath, cfgd->kpath));
 	} else {
-		slogz("Full Path: %s\n", cfgd->fpath);
-		slogz("Reg Path:  %s\n", cfgd->kpath);
+		CDB_SHOW(("Full Path: %s\n", cfgd->fpath));
+		CDB_SHOW(("Reg Path:  %s\n", cfgd->kpath));
 	}
-	slogz("\n");
+	CDB_SHOW(("\n"));
 }
 
 
