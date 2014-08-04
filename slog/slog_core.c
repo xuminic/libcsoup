@@ -89,6 +89,11 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf)
 		return len;
 	}
 
+	/* take the mutex lock */
+	if (dbgc->f_lock) {
+		dbgc->f_lock(dbgc);
+	}
+
 	if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
 		mypre = dbgc->f_prefix(dbgc, cw);
 		len += strlen(mypre);
@@ -106,6 +111,10 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf)
 		}
 		fputs(buf, dbgc->stdio);
 		fflush(dbgc->stdio);
+	}
+
+	if (dbgc->f_unlock) {
+		dbgc->f_unlock(dbgc);
 	}
 	return len;
 }

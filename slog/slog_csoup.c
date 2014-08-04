@@ -20,6 +20,7 @@
 */
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 #include <time.h>
 #include "csoup_internal.h"
 
@@ -32,7 +33,8 @@ SMMDBG	csoup_debug_control = {
 	NULL, NULL,				/* file name and FILEP */
 	0,					/* socket */
 	NULL,					/* standard i/o */
-	slog_csoup_prefix			/* generating the prefix */
+	slog_csoup_prefix,			/* generating the prefix */
+	NULL, NULL, NULL			/* mutex */
 };
 
 int	csoup_debug_cword = 0;
@@ -80,7 +82,7 @@ static char *slog_csoup_prefix(void *self, int cw)
 	static	char	buffer[64];
 	SMMDBG	*dbgc = self;
 
-	sprintf(buffer, "[%d]", time(NULL));
+	sprintf(buffer, "[%ld]", time(NULL));
 	if (cw & CSOUP_MOD_SLOG) {
 		strcat(buffer, "[SLOG]");
 	} else if (cw & CSOUP_MOD_CLI) {

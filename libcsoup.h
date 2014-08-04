@@ -155,7 +155,7 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_MAGIC	(('S'<<24) | ('L'<< 16) | ('O'<<8) | 'G')
 
 
-typedef int (*F_STD)(int, char*, int);
+typedef int	(*F_LCK)(void *);
 typedef	char	*(*F_PRF)(void *, int);
 
 
@@ -175,9 +175,10 @@ typedef	struct	{
 	/* for generating a prefix according to the 'option' field */
 	F_PRF	f_prefix;
 
-	/* standard i/o as output device */
-	//F_STD	stdoutput;
-	//F_STD	stderrput;
+	/* mutex for multithread */
+	void	*lock;
+	F_LCK	f_lock;
+	F_LCK	f_unlock;
 } SMMDBG;
 
 

@@ -2,7 +2,7 @@
 CFLAGS	+= -I..
 
 #SRCS   := $(shell echo *.c)
-SRCS	:= slog_open.c slog_csoup.c
+SRCS	:= slog_core.c slog_csoup.c
 
 OBJS	:= $(SRCS:.c=.o)
 
