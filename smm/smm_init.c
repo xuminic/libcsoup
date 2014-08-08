@@ -26,11 +26,10 @@
 int	smm_error_no;
 
 
-int smm_init(int logcw)
+int smm_init(void)
 {
 	smm_error_no = SMM_ERR_NONE;
 	smm_codepage_reset();
-	//FIXME: logcw 
 	return SMM_ERR_NONE;
 }
 

@@ -19,7 +19,7 @@ TARGET	= csoup
 all: $(TARGET)
 
 $(TARGET): $(SRCS) main_define.h
-	$(CC) $(CFLAGS) -L.. -o $@ $(SRCS) -lcsoup
+	$(CC) $(CFLAGS) -L.. -o $@ $(SRCS) -lcsoup -lpthread
 
 main_define.h: mkclicmd
 	grep "extern.*struct.*clicmd" $(SRCS) | cut -d: -f2 |tr -d '\r' > $@

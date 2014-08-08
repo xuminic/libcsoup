@@ -23,10 +23,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
 
 #include "libcsoup.h"
 
@@ -39,7 +35,8 @@ SMMDBG *slog_initialize(void *mem, int cword)
 
 	memset(dbgc, 0, sizeof(SMMDBG));
 	dbgc->magic = SLOG_MAGIC;
-	dbgc->cword = cword;
+	dbgc->cword = SLOG_MODUL_ALL(cword);
+	dbgc->option = SLOG_OPT_ALL;
 	
 	dbgc->stdio = stdout;
 	return dbgc;
@@ -48,6 +45,11 @@ SMMDBG *slog_initialize(void *mem, int cword)
 int slog_shutdown(SMMDBG *dbgc)
 {
 	slog_unbind_file(dbgc);
+
+	if (dbgc->f_inet) {
+		dbgc->f_inet(dbgc, NULL, NULL);
+		dbgc->f_inet = NULL;
+	}
 	return 0;
 }
 
@@ -75,8 +77,6 @@ int slog_bind_stdio(SMMDBG *dbgc, FILE *ioptr)
 	return 0;
 }
 
-
-
 int slog_output(SMMDBG *dbgc, int cw, char *buf)
 {
 	char	*mypre;
@@ -94,23 +94,37 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf)
 		dbgc->f_lock(dbgc);
 	}
 
+	mypre = NULL;
 	if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
 		mypre = dbgc->f_prefix(dbgc, cw);
 		len += strlen(mypre);
 	}
+
 	if (dbgc->logd) {
-		if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
+		if (mypre) {
 			fputs(mypre, dbgc->logd);
 		}
 		fputs(buf, dbgc->logd);
 		fflush(dbgc->logd);
 	}
-	if (dbgc->stdio) {
-		if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
+	if (dbgc->stdio == (void*) -1) {
+		if (mypre) {
+			fputs(mypre, stdout);
+		}
+		fputs(buf, stdout);
+		fflush(stdout);
+	} else if (dbgc->stdio) {
+		if (mypre) {
 			fputs(mypre, dbgc->stdio);
 		}
 		fputs(buf, dbgc->stdio);
 		fflush(dbgc->stdio);
+	}
+	if (dbgc->f_inet) {
+		if (mypre) {
+			dbgc->f_inet(dbgc, dbgc->netobj, mypre);
+		}
+		dbgc->f_inet(dbgc, dbgc->netobj, buf);
 	}
 
 	if (dbgc->f_unlock) {

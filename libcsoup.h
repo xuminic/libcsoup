@@ -139,25 +139,30 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_LVL_MODULE		6
 #define SLOG_LVL_FUNC		7
 #define SLOG_LVL_MASK		7
-#define SLOG_FLUSH		8	/* no modifier */
+#define SLOG_FLUSH		8	/* no prefix */
+#define SLOG_MODUL_MASK		(-1 << 4)
 
 #define SLOG_LEVEL_GET(l)	((l) & SLOG_LVL_MASK)
 #define SLOG_LEVEL_SET(l,x)	(((l) & ~SLOG_LVL_MASK) | (x))
 
 #define SLOG_MODUL_ENUM(x)	(1 << ((x)+4))		/* x>=0 && x<=27 */
-#define SLOG_MODUL_GET(m)	((m) & ~SLOG_LVL_MASK)
+#define SLOG_MODUL_GET(m)	((m) & SLOG_MODUL_MASK)
 #define SLOG_MODUL_SET(m,x)	((m) | SLOG_MODUL_ENUM(x))
 #define SLOG_MODUL_CLR(m,x)	((m) & ~SLOG_MODUL_ENUM(x))
 #define SLOG_MODUL_ALL(m)	((m) | (-1 << 4))
 
 #define SLOG_CWORD(m,l)		(SLOG_MODUL_GET(m) | SLOG_LEVEL_GET(l))
 
-#define SLOG_MAGIC	(('S'<<24) | ('L'<< 16) | ('O'<<8) | 'G')
+#define SLOG_MAGIC		(('S'<<24) | ('L'<< 16) | ('O'<<8) | 'G')
+
+#define SLOG_OPT_TMSTAMP	1
+#define SLOG_OPT_MODULE		2
+#define SLOG_OPT_ALL		3
 
 
 typedef int	(*F_LCK)(void *);
 typedef	char	*(*F_PRF)(void *, int);
-
+typedef	int	(*F_EXT)(void *, void *, char *);
 
 typedef	struct	{
 	int	magic;
@@ -167,13 +172,15 @@ typedef	struct	{
 	/* log into the file */
 	char	*filename;
 	FILE	*logd;
-	/* log into the socket */
-	int	socket;
 	/* log into the standard output, stdout or stderr */
 	FILE	*stdio;
 
 	/* for generating a prefix according to the 'option' field */
 	F_PRF	f_prefix;
+
+	/* log into the socket extension */
+	F_EXT	f_inet;
+	void	*netobj;
 
 	/* mutex for multithread */
 	void	*lock;
@@ -195,6 +202,7 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf);
 int slogs(SMMDBG *dbgc, int cw, char *buf);
 int slogf(SMMDBG *dbgc, int cw, char *fmt, ...);
 int slog_validate(SMMDBG *dbgc, int setcw, int cw);
+void *slog_bind_tcp(SMMDBG *dbgc, int port);
 
 #ifdef __cplusplus
 } // __cplusplus defined.
@@ -654,7 +662,7 @@ int smm_errno_update(int value);
 long long smm_filesize(char *fname);
 char *smm_fontpath(char *ftname, char **userdir);
 int smm_fstat(char *fname);
-int smm_init(int logcw);
+int smm_init(void);
 int smm_mkdir(char *path);
 int smm_mkpath(char *path);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);

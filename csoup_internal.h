@@ -35,7 +35,7 @@
 
 extern	SMMDBG	csoup_debug_control;
 
-SMMDBG *slog_csoup_open(FILE *stdio, char *fname, int cword);
+SMMDBG *slog_csoup_open(FILE *stdio, char *fname);
 int slog_csoup_close(void);
 int slog_csoup_puts(SMMDBG *dbgc, int setcw, int cw, char *buf);
 char *slog_csoup_format(char *fmt, ...);

@@ -28,19 +28,17 @@ static char *slog_csoup_prefix(void *self, int cw);
 
 SMMDBG	csoup_debug_control = {
 	SLOG_MAGIC,				/* the magic word */
-	SLOG_LEVEL_SET(-1, SLOG_LVL_ERROR),	/* control word in host */
-	0,					/* option */
+	SLOG_MODUL_ALL(SLOG_LVL_ERROR),		/* control word in host */
+	SLOG_OPT_ALL,				/* option */
 	NULL, NULL,				/* file name and FILEP */
-	0,					/* socket */
-	NULL,					/* standard i/o */
+	(void*) -1,				/* standard i/o */
 	slog_csoup_prefix,			/* generating the prefix */
-	NULL, NULL, NULL			/* mutex */
+	NULL, NULL,				/* socket extension */
+	NULL, NULL, NULL			/* mutex setting */
 };
 
-int	csoup_debug_cword = 0;
 
-
-SMMDBG *slog_csoup_open(FILE *stdio, char *fname, int cword)
+SMMDBG *slog_csoup_open(FILE *stdio, char *fname)
 {
 	if (stdio) {
 		slog_bind_stdio(&csoup_debug_control, stdio);
@@ -48,7 +46,6 @@ SMMDBG *slog_csoup_open(FILE *stdio, char *fname, int cword)
 	if (fname) {
 		slog_bind_file(&csoup_debug_control, fname);
 	}
-	csoup_debug_cword = cword;
 	return &csoup_debug_control;
 }
 
@@ -79,18 +76,33 @@ char *slog_csoup_format(char *fmt, ...)
 
 static char *slog_csoup_prefix(void *self, int cw)
 {
-	static	char	buffer[64];
+	static	char	buffer[256];
 	SMMDBG	*dbgc = self;
+	struct	tm	*lctm;
+	time_t	sec;
 
-	sprintf(buffer, "[%ld]", time(NULL));
-	if (cw & CSOUP_MOD_SLOG) {
-		strcat(buffer, "[SLOG]");
-	} else if (cw & CSOUP_MOD_CLI) {
-		strcat(buffer, "[CLI]");
-	} else  if (cw & CSOUP_MOD_CONFIG) {
-		strcat(buffer, "[CONFIG]");
+	if (dbgc->option & SLOG_OPT_TMSTAMP) {
+		time(&sec);
+		lctm = localtime(&sec);
+		sprintf(buffer, "[%d%02d%02d-%02d%02d%02d]", 
+				lctm->tm_year + 1900, 
+				lctm->tm_mon, lctm->tm_mday,
+				lctm->tm_hour, lctm->tm_min, lctm->tm_sec);
 	}
-	strcat(buffer, " ");
+	if (dbgc->option & SLOG_OPT_MODULE) {
+		if (cw & CSOUP_MOD_SLOG) {
+			strcat(buffer, "[SLOG]");
+		}
+		if (cw & CSOUP_MOD_CLI) {
+			strcat(buffer, "[CLI]");
+		}
+		if (cw & CSOUP_MOD_CONFIG) {
+			strcat(buffer, "[CONFIG]");
+		}
+	}
+	if (dbgc->option) {
+		strcat(buffer, " ");
+	}
 	return buffer;
 }
 

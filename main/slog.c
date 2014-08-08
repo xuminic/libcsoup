@@ -22,7 +22,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_SLOG, SLOG_LVL_INFO)
+//#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_SLOG, SLOG_LVL_INFO)
 
 #include "libcsoup.h"
 #include "csoup_internal.h"
@@ -101,6 +101,16 @@ int slog_main(void *rtime, int argc, char **argv)
 	CDB_PROG(("Internal: PROG\n"));
 	CDB_MODL(("Internal: MODule\n"));
 	CDB_FUNC(("Internal: function\n"));
+
+	CDB_SHOW(("Socket test: connecting to 6666\n"));
+	slog_bind_tcp(tstdbg, 6666);
+	while (1) {
+		for (i = 0; i < 8; i++) {
+			slogf(tstdbg, SLOG_CWORD(CSOUP_MOD_SLOG, i),
+					"%d: debug test\n", i);
+			sleep(1);
+		}
+	}
 
 	slog_shutdown(tstdbg);
 	return 0;

@@ -31,8 +31,8 @@ int main(int argc, char **argv)
 {
 	SMMDBG	*dbgc;
 
-	dbgc = slog_csoup_open(stdout, NULL, 0);
-	smm_init(0);
+	dbgc = slog_csoup_open(NULL, NULL);
+	smm_init();
 
 	if (argc < 2) {
 		slogs(dbgc, SLOG_LVL_SHOWOFF, 
