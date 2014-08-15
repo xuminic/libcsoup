@@ -102,16 +102,17 @@ int slog_main(void *rtime, int argc, char **argv)
 	CDB_MODL(("Internal: MODule\n"));
 	CDB_FUNC(("Internal: function\n"));
 
+#ifdef	CFG_SLOG_SOCKET
 	CDB_SHOW(("Socket test: connecting to 6666\n"));
 	slog_bind_tcp(tstdbg, 6666);
 	while (1) {
 		for (i = 0; i < 8; i++) {
 			slogf(tstdbg, SLOG_CWORD(CSOUP_MOD_SLOG, i),
 					"%d: debug test\n", i);
-			sleep(1);
+			smm_sleep(1,0);
 		}
 	}
-
+#endif
 	slog_shutdown(tstdbg);
 	return 0;
 }
