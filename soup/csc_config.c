@@ -59,6 +59,7 @@
 #include <string.h>
 #include <stdarg.h>
 
+#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_CONFIG, SLOG_LVL_ERROR)
 #include "libcsoup.h"
 #include "csoup_internal.h"
 
@@ -165,7 +166,7 @@ KEYCB *csc_cfg_open(int sysdir, char *path, char *filename, int mode)
 	}
 	smm_config_close(cfgd);
 	csc_cfg_access_setup(root, root, NULL);	/* reset the directory key */
-	CDB_PROG(("csc_cfg_open: read %d items from %s\n", 
+	CDB_DEBUG(("csc_cfg_open: read %d items from %s\n", 
 			rext->items, rext->fulldir));
 	return root;
 }
@@ -239,7 +240,7 @@ int csc_cfg_saveas(KEYCB *cfg, int sysdir, char *path, char *filename)
 	}
 
 	rext->items = csc_cfg_save_links(cfgd, cfg->anchor);
-	CDB_PROG(("csc_cfg_saveas: write %d items to %s\n", 
+	CDB_DEBUG(("csc_cfg_saveas: write %d items to %s\n", 
 			rext->items, rext->fulldir));
 
 	smm_config_close(cfgd);
@@ -1291,7 +1292,7 @@ static char *csc_cfg_format_directory(char *dkey)
 		}
 	}
 	*dbuf++ = 0;
-	CDB_FUNC(("csc_cfg_format_directory: %s\n", drtn));
+	CDB_PROG(("csc_cfg_format_directory: %s\n", drtn));
 	return drtn;
 }
 

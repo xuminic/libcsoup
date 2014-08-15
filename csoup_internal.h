@@ -66,12 +66,19 @@ char *slog_csoup_format(char *fmt, ...);
 					slog_csoup_format x)
 #endif
 
+/* only for critical error */
 #define CDB_ERROR(x)	CDB_OUTPUT(SLOG_LVL_ERROR, x)
+/* for non-critical error; remote access error */
 #define CDB_WARN(x)	CDB_OUTPUT(SLOG_LVL_WARNING, x)
+/* FYI; show conditions */
 #define CDB_INFO(x)	CDB_OUTPUT(SLOG_LVL_INFO, x)
+/* low frequency debug */
 #define CDB_DEBUG(x)	CDB_OUTPUT(SLOG_LVL_DEBUG, x)
+/* high frequency debug */
 #define CDB_PROG(x)	CDB_OUTPUT(SLOG_LVL_PROGRAM, x)
+/* get in/out the function module */
 #define CDB_MODL(x)	CDB_OUTPUT(SLOG_LVL_MODULE, x)
+/* get in/out the function; print logs in a direct loop */
 #define CDB_FUNC(x)	CDB_OUTPUT(SLOG_LVL_FUNC, x)
 
 #define CDB_CONTI(l,x)	CDB_OUTPUT((l)|SLOG_FLUSH, x)

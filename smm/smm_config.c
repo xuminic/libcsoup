@@ -25,6 +25,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_CONFIG, SLOG_LVL_ERROR)
+
 #include "libcsoup.h"
 #include "csoup_internal.h"
 
@@ -509,11 +511,9 @@ static struct KeyDev *smm_config_alloc(int sysdir, char *path, char *fname)
 	}
 
 	/* check point */
-	/*
-	slogz("smm_config_alloc::fpath = %s\n", cfgd->fpath);
-	slogz("smm_config_alloc::kpath = %s\n", cfgd->kpath);
-	slogz("smm_config_alloc::fname = %s\n", cfgd->fname);
-	*/
+	CDB_INFO(("smm_config_alloc::fpath = %s\n", cfgd->fpath));
+	CDB_INFO(("smm_config_alloc::kpath = %s\n", cfgd->kpath));
+	CDB_INFO(("smm_config_alloc::fname = %s\n", cfgd->fname));
 	return cfgd;
 }
 
@@ -742,7 +742,7 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode)
 	strcat(mkey, "\\");
 	strcat(mkey, cfgd->fname);
 
-	//slogz("smc_reg_open: %s\n", mkey);
+	CDB_INFO(("smc_reg_open: %s\n", mkey));
 	if ((wkey = smm_mbstowcs_alloc(mkey)) == NULL) {
 		smm_free(mkey);
 		return SMM_ERR_LOWMEM;
@@ -784,9 +784,9 @@ static int smc_reg_open(struct KeyDev *cfgd, int mode)
 static KEYCB *smc_reg_read(struct KeyDev *cfgd)
 {
 	while (!smc_reg_eof(cfgd)) {
-		/*slogz("smc_reg_read: %d I(%d/%u) V(%d/%u)\n", 
+		CDB_FUNC(("smc_reg_read: %d I(%d/%u) V(%d/%u)\n", 
 				cfgd->idx, RREF(cfgd).i_key, RREF(cfgd).n_keys,
-				RREF(cfgd).i_val, RREF(cfgd).n_vals);*/
+				RREF(cfgd).i_val, RREF(cfgd).n_vals));
 		if (RREF(cfgd).i_val < (int)RREF(cfgd).n_vals) {
 			return smc_reg_key_alloc(cfgd, RREF(cfgd).i_val++);
 		}
