@@ -1,3 +1,6 @@
+20151012: 0.8.2
+	* Makefile: added _FILE_OFFSET_BITS=64 macro otherwise the smm_fstat()
+	would be failed when file size was over 2GB.
 
 20140815: 0.8.1
 	* Makefile: disable the slog-to-socket by macro SLOG_SOCKET
