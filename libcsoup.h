@@ -375,6 +375,8 @@ void *csc_cfg_copy_block(KEYCB *cfg, char *dkey, int *bsize);
 int csc_cfg_write_block(KEYCB *cfg, char *dkey, void *bin, int bsize);
 int csc_cfg_link_block(KEYCB *block, void *bin, int bsize);
 int csc_cfg_block_size(KEYCB *kcb);
+int csc_cfg_delete_key(KEYCB *cfg, char *dkey, char *nkey);
+int csc_cfg_delete_block(KEYCB *cfg, char *dkey);
 KEYCB *csc_cfg_kcb_alloc(int psize);
 int csc_cfg_kcb_free(KEYCB *kcb);
 int csc_cfg_dump_kcb(KEYCB *cfg);

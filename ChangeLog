@@ -1,3 +1,6 @@
+20150424: 0.8.5
+	* csc_config.c: added csc_cfg_delete_key() and csc_cfg_delete_block().
+
 20150311: 0.8.4
 	* main/Makefile: fixed a bug that mkclicmd was forgotten to be cleaned.
 
