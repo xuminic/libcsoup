@@ -234,6 +234,7 @@ CSCLNK *csc_cdl_goto(CSCLNK *anchor, int idx);
 int csc_cdl_index(CSCLNK *anchor, CSCLNK *node);
 int csc_cdl_setup(CSCLNK *node, void *prev, void *next, void *rp, int size);
 void *csc_cdl_payload(CSCLNK *node);
+CSCLNK *csc_cdl_paylink(void *payload);
 
 CSCLNK *csc_cdl_list_alloc_head(CSCLNK **anchor, int size);
 CSCLNK *csc_cdl_list_alloc_tail(CSCLNK **anchor, int size);
