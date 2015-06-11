@@ -25,12 +25,15 @@ typedef	enum	{
 	Attrib_15
 } ATTRIB;
 
+
 static int coo_class_write_over(MUnit *unit, int type, void *buf, int len);
 static MUnit *coo_class_block_find(CCLASS *class, int id);
 static MUnit *coo_class_block_add(CCLASS *class, int id, int type);
 static MUnit *coo_class_link_find(CCLASS *class, int id);
 static MUnit *coo_class_link_add(CCLASS *class, int id, int type, int plsize);
 static int coo_class_dump_munit(MUnit *unit);
+
+static	CCLASS	*coo_root = NULL;
 
 
 CCLASS *coo_class_new(char *cname, int attrno)
@@ -191,6 +194,39 @@ int coo_class_delete(CCLASS *class, int id)
 		anchor = class->repo.d_point;
 		csc_cdl_list_free(&anchor, csc_cdl_paylink(unit));
 		class->total--;
+	}
+	return 0;
+}
+
+int coo_class_inherit(CCLASS *class, CCLASS *giver)
+{
+	int	i;
+
+	if ((class->parents + class->childs >= COO_MAX_INHERIT) ||
+			(giver->parents + giver->childs >= COO_MAX_INHERIT)) {
+		return -1;	/* FIXME: should be unlimited */
+	}
+	if (class->childs > 0) {
+		return -2;	/* NO inheritance once give child */
+	}
+	for (i = 0; i < class->parents; i++) {
+		if (class->inherit[i] == giver) {
+			break;	/* already inherited */
+		}
+	}
+	if (i == class->parents) {
+		class->inherit[class->parents] = giver;
+		class->parents++;
+	}
+
+	for (i = 0; i < giver->childs; i++) {
+		if (giver->inherit[giver->parents + i] == class) {
+			break;
+		}
+	}
+	if (i == giver->childs) {
+		giver->inherit[giver->parents + i] = class;
+		giver->childs++;
 	}
 	return 0;
 }
@@ -411,6 +447,49 @@ static int coo_class_dump_munit(MUnit *unit)
 }
 
 
+int coo_framework_init(void)
+{
+	coo_root = coo_class_new("coo_framework", 32);
+	return 0;
+}
+
+CCLASS *coo_frameowrk_find_class(char *cname)
+{
+	return NULL;
+}
+
+/*
+CCLASS *coo_object_new(CCLASS *class)
+{
+	CCLASS	*object;
+	MUnit	*unit;
+	int	i;
+
+	object = coo_class_new(class->cname, 32);
+	for (i = 0; i < class->parents; i++) {
+		object->inherit[i] = coo_object_new(class->inherit[i]);
+	}
+
+	if (COO_MTYPE_GET(class->repo.type) == COO_MTYPE_PREDEF) {
+		sunit = class->repo.d_point;
+		dunit = object->repo.d_point;
+		for (i = 0; i < class->total; i++, sunit++, dunit++) {
+			coo_object_copy_attribute(dunit, sunit);
+		}
+	} else {
+		anchor = class->repo.d_point;
+		dunit = object->repo.d_point;
+		for (node = anchor; node; node = csc_cdl_next(anchor, node)) {
+			sunit = (MUnit *) csc_cdl_payload(node);
+			coo_object_copy_attribute(dunit++, sunit);
+		}
+	}
+}
+
+int coo_object_copy_attribute(MUnit *dest, MUnit *sour)
+{
+*/
+
 static int coo_test_for_block(void)
 {
 	CCLASS	*class;
@@ -502,6 +581,52 @@ static int coo_test_for_link(void)
 
 	coo_class_dump(class);
 	coo_class_destroy(class);
+	return 0;
+}
+
+static int coo_test_for_instance(void)
+{
+	CCLASS	*human, *woman, *man, *mother, *father, *son;
+	CCLASS	*ison;
+	int	i;
+
+	coo_framework_init();
+
+	human = coo_class_new("human", 32);
+	coo_class_inherit(human, coo_root);
+	coo_class_write(human, 1, COO_DTYPE_STRING|COO_MTYPE_PREDEF, 
+			"Weight between 0-200kg", 0);
+	coo_class_write(human, 2, COO_DTYPE_STRING|COO_MTYPE_PREDEF,
+			 "humanoid body type", 0);
+	i = 10;
+	coo_class_write(human, 3, COO_DTYPE_I32, &i, 0);
+
+	man = coo_class_new("man", 32);
+	coo_class_inherit(man, human);
+	
+	woman = coo_class_new("woman", 32);
+	coo_class_inherit(woman, human);
+	coo_class_write(woman, 1, COO_DTYPE_STRING|COO_MTYPE_PREDEF, 
+			"Weight between 0-100kg", 0);
+
+	father = coo_class_new("father", 32);
+	coo_class_inherit(father, man);
+	coo_class_write(father, 1, COO_DTYPE_STRING|COO_MTYPE_PREDEF, 
+			"Weight between 50-200kg", 0);
+
+	mother = coo_class_new("mother", 32);
+	coo_class_inherit(mother, woman);
+	coo_class_write(mother, 1, COO_DTYPE_STRING|COO_MTYPE_PREDEF,
+			"Weight between 40-100kg", 0);
+
+	son = coo_class_new("son", 32);
+	coo_class_inherit(son, father);
+	coo_class_inherit(son, mother);
+	coo_class_write(son, 1, COO_DTYPE_STRING|COO_MTYPE_PREDEF,
+			"Weight between 0-40kg", 0);
+
+	coo_class_dump(son);
+	coo_class_destroy(son);
 	return 0;
 }
 
