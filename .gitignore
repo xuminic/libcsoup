@@ -1,3 +1,6 @@
 libcsoup.a
 csoup
 *.o
+main/mkclicmd
+main/main_define.h
+
