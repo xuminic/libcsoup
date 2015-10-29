@@ -1,3 +1,6 @@
+20151021: 0.8.8:
+	* csc_strcmp_param.c: added
+
 20151020: 0.8.7
 	* csc_strbody.c: do not calculate the length if len is NULL.
 
