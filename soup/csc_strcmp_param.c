@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "libcsoup.h"
+
 /*!\brief Compare two parameter strings while empty or blank string is equal 
    to a NULL string pointer.
 
@@ -43,22 +45,25 @@
    \return     an integer less than, equal to, or greater than zero if 's1' is
    found, respectively, to be less than, to match, or be greater than 's2'.
 */
-int csc_strcmp_param(const char *s1, const char *s2)
+int csc_strcmp_param(char *s1, char *s2)
 {
+	int	len1, len2;
+
 	//printf("csc_strcmp_param: {%s}{%s}\n", dest, sour);
-	if (dest && sour) {
-		dest = csc_strbody(dest, NULL);
-		sour = csc_strbody(sour, NULL);
-		return strcmp(dest, sour);
-	} else if (!dest && !sour) {
-		return 0;
-	} else if (dest) {
-		dest = csc_strbody(dest, NULL);
-		return *dest;
-	} else {
-		sour = csc_strbody(sour, NULL);
-		return *sour;
+	len1 = len2 = 0;
+	if (s1) {
+		s1 = csc_strbody(s1, &len1);
 	}
-	return 0;
+	if (s2) {
+		s2 = csc_strbody(s2, &len2);
+	}
+	if (s1 && s2) {
+		return strncmp(s1, s2, len1 < len2 ? len2 : len1);
+	} else if (!s1 && !s2) {
+		return 0;
+	} else if (s1) {
+		return *s1;
+	}
+	return *s2;
 }
 

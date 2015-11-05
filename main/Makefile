@@ -14,7 +14,7 @@ EXLIBS	= -lpthread
 endif
 
 SRCS	= main.c fixtoken.c memdump.c slog.c crc.c fontpath.c config.c \
-	  csc_cdll.c csc_cli.c smm.c coo_frmwk.c
+	  csc_cdll.c csc_cli.c smm.c coo_frmwk.c strings.c
 
 TARGET	= csoup
 

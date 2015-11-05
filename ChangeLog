@@ -1,3 +1,6 @@
+20151105: 0.8.10:
+	* csc_strcmp_param.c: fixed the bug and added a test case in main.
+
 20151104: 0.8.9:
 	* csc_config.c: csc_cfg_mkdir() updated the cfg->update flag once an
 	internal directory was created, which is not necessary. It caused
