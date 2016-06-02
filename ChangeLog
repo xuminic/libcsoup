@@ -1,3 +1,8 @@
+20160602: 0.8.11:
+	* csc_cli_print.c: trimmed the output effect of the optional
+	parameters, from "--help [ARGS]" to "--help=[OPTS]"
+	* coo_frmwk.c: been removed from the main tests.
+
 20151105: 0.8.10:
 	* csc_strcmp_param.c: fixed the bug and added a test case in main.
 

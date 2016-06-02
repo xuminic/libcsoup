@@ -30,7 +30,7 @@
 #include "csc_cli_private.h"
 
 #define CLI_FIXED_ARGS		"ARGS"
-#define CLI_OPT_ARGS		"[ARGS]"
+#define CLI_OPT_ARGS		"[OPTS]"
 
 /* The display can be combination of followings
  * ([FF]=Front padding, [BB]=Back padding):
@@ -134,8 +134,12 @@ static int csc_cli_format(struct cliopt *optbl, int type, int optlen,
 		strcat(buf, " ");
 		strcat(buf, CLI_FIXED_ARGS);
 	} else if (optbl->param > 1) {
-		strcat(buf, " ");
-		strcat(buf, CLI_OPT_ARGS);
+		if (csc_cli_type(optbl) == CLI_SHORT) {
+			strcat(buf, CLI_OPT_ARGS);
+		} else {
+			strcat(buf, "=");
+			strcat(buf, CLI_OPT_ARGS);
+		}
 	}
 	csc_strfill(buf, optlen, ' ');
 
