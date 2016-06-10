@@ -1,3 +1,7 @@
+
+20160610: 0.8.13:
+	* smm_userpath.c: added to support the user default directory.
+
 20160610: 0.8.12:
 	* csc_strbival.c: added to grab two integers from string like "100x20"
 	

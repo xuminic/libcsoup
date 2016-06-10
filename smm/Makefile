@@ -21,6 +21,7 @@ OBJS	= smm_alloc.o		\
 	  smm_sleep.o		\
 	  smm_time_diff.o	\
 	  smm_time_get_epoch.o	\
+	  smm_userpath.o	\
 	  smm_mbstowcs.o
 
 .PHONY: all clean

@@ -73,12 +73,12 @@ static int strings_strbival(void)
 	CDB_SHOW(("\ncsc_strbival_int() testing: xX+*\n"));
 	for (i = 0; testcase[i]; i++) {
 		v1 = csc_strbival_int(testcase[i], "xX+*", &v2);
-		printf("[%s]:  %d %d\n", testcase[i], v1, v2);
+		CDB_SHOW(("[%s]:  %d %d\n", testcase[i], v1, v2));
 	}
 	CDB_SHOW(("csc_strbival_int() testing:\n"));
 	for (i = 0; testcase[i]; i++) {
 		v1 = csc_strbival_int(testcase[i], NULL, &v2);
-		printf("[%s]:  %d %d\n", testcase[i], v1, v2);
+		CDB_SHOW(("[%s]:  %d %d\n", testcase[i], v1, v2));
 	}
 
 	return 0;
