@@ -24,7 +24,7 @@
 #include "libcsoup.h"
 #include "csoup_internal.h"
 
-int strings_main(void *rtime, int argc, char **argv)
+int strings_strbody(void)
 {
 	struct	dicts	{
 		char	*dest;
@@ -37,9 +37,6 @@ int strings_main(void *rtime, int argc, char **argv)
 	};
 	char	*p;
 	int	i, rc;
-
-	/* stop the compiler complaining */
-	(void) rtime; (void) argc; (void) argv;
 
 	CDB_SHOW(("csc_strcmp_param() testing:\n"));
 	for (i = 0; i < (int)(sizeof(testcase)/sizeof(struct dicts)); i++) {
@@ -58,8 +55,45 @@ int strings_main(void *rtime, int argc, char **argv)
 			CDB_SHOW(("Picking from {%s} ... %s (%d)\n", testcase[i].sour, p, rc));
 		}
 	}				
+
 	return 0;
 }
+
+static int strings_strbival(void)
+{
+	char	*testcase[] = {
+		"1024x768x24",
+		"  1024  768  24  ",
+		"0x100x0x200+0xff",
+		"0123",
+		NULL
+	};
+	int	i, v1, v2;
+
+	CDB_SHOW(("\ncsc_strbival_int() testing: xX+*\n"));
+	for (i = 0; testcase[i]; i++) {
+		v1 = csc_strbival_int(testcase[i], "xX+*", &v2);
+		printf("[%s]:  %d %d\n", testcase[i], v1, v2);
+	}
+	CDB_SHOW(("csc_strbival_int() testing:\n"));
+	for (i = 0; testcase[i]; i++) {
+		v1 = csc_strbival_int(testcase[i], NULL, &v2);
+		printf("[%s]:  %d %d\n", testcase[i], v1, v2);
+	}
+
+	return 0;
+}
+
+int strings_main(void *rtime, int argc, char **argv)
+{
+	/* stop the compiler complaining */
+	(void) rtime; (void) argc; (void) argv;
+
+	strings_strbody();
+	strings_strbival();
+	return 0;
+}
+
 
 struct	clicmd	strings_cmd = {
 	"strings", strings_main, NULL, "Testing the string process functions"

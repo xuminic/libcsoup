@@ -22,6 +22,7 @@ SRCS	:= csc_cdll.c		\
 	   csc_isdelim.c	\
 	   csc_iso639.c		\
 	   csc_memdump.c	\
+	   csc_strbival.c	\
 	   csc_strbody.c	\
 	   csc_strcmp_list.c	\
 	   csc_strcmp_param.c	\
