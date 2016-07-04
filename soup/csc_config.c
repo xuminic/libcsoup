@@ -707,7 +707,8 @@ KEYCB *csc_cfg_kcb_alloc(int psize)
 
 int csc_cfg_kcb_free(KEYCB *kcb)
 {
-	return smm_free(kcb->self);
+	smm_free(kcb->self);
+	return 0;
 }
 
 

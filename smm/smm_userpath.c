@@ -26,6 +26,10 @@
 
 #include "libcsoup.h"
 
+#ifdef	CFG_WIN32_API
+#include "Shlobj.h"
+#endif
+
 char *smm_userpath(char *buffer, int len)
 {
 #ifdef	CFG_WIN32_API

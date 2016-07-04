@@ -30,7 +30,7 @@
 #include "csc_cli_private.h"
 
 #define CLI_FIXED_ARGS		"ARGS"
-#define CLI_OPT_ARGS		"[OPTS]"
+#define CLI_OPT_ARGS		"[ARGS]"
 
 /* The display can be combination of followings
  * ([FF]=Front padding, [BB]=Back padding):
@@ -93,10 +93,12 @@ static int csc_cli_format(struct cliopt *optbl, int type, int optlen,
 		char *buf, int blen)
 {
 	char	tmp[16];
-	int	rc;
 
 	if (!buf || (blen <= optlen)) {
 		return 0;
+	}
+	if (optbl->comment && (*optbl->comment == '*')) {
+		return 0;	/* hidden option */
 	}
 	
 	*buf = 0;
@@ -134,41 +136,46 @@ static int csc_cli_format(struct cliopt *optbl, int type, int optlen,
 		strcat(buf, " ");
 		strcat(buf, CLI_FIXED_ARGS);
 	} else if (optbl->param > 1) {
-		if (csc_cli_type(optbl) == CLI_SHORT) {
-			strcat(buf, CLI_OPT_ARGS);
-		} else {
-			strcat(buf, "=");
-			strcat(buf, CLI_OPT_ARGS);
-		}
+		strcat(buf, " ");
+		strcat(buf, CLI_OPT_ARGS);
 	}
 	csc_strfill(buf, optlen, ' ');
 
 format_end:
-	rc = strlen(buf);
-	if (optbl->comment != NULL) {
-		rc += csc_strlcpy(buf + rc, optbl->comment, blen - rc);
-		if (*optbl->comment == '*') {
-			rc = 0;
-		}
-	}
-	return rc;
+	return strlen(buf);
 }	
 
 int csc_cli_print(struct cliopt *optbl, int (*show)(char *))
 {
 	char	sbuf[256];
-	int	optlen, type;
+	int	optlen, type, pflag;
 
 	optlen = csc_cli_find_longest(optbl);
 	type = csc_cli_table_type(optbl);
 	while (csc_cli_type(optbl) != CLI_EOL) {
+		pflag = 0;
 		if (csc_cli_format(optbl, type, optlen, 
 					sbuf, sizeof(sbuf) - 1)) {
-			strcat(sbuf, "\n");
 			if (show) {
 				show(sbuf);
 			} else {
 				CDB_SHOW(("%s", sbuf));
+			}
+			pflag++;
+		}
+		if (optbl->comment && (*optbl->comment != '*')) {
+			if (show) {
+				show(optbl->comment);
+			} else {
+				CDB_SHOW(("%s", optbl->comment));
+			}
+			pflag++;
+		}
+		if (pflag) {
+			if (show) {
+				show("\n");
+			} else {
+				CDB_SHOW(("\n"));
 			}
 		}
 		optbl++;

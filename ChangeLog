@@ -1,3 +1,11 @@
+20160701: 0.8.16
+	* csc_strlcat.c: added for systems where no strlcat().
+	* csc_cli_print.c: remove the size limit of printing comments
+	* smm_alloc.c: smm_free() returns NULL;
+
+20160622: 0.8.15
+	* smm_userpath.c: added win32 include file Shlobj.h
+
 20160617: 0.8.14
 	* csc_path_path.c: fixed a bug that the trailing '/' was missing.
 

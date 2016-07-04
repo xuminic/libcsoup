@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	8		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	14		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	16		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -403,6 +403,7 @@ int csc_extname_filter_export(void *efft, char *buf, int blen);
 char *csc_extname_filter_export_alloc(void *efft);
 
 char *csc_strfill(char *s, int padto, int ch);
+size_t csc_strlcat(char *dst, const char *src, size_t siz);
 size_t csc_strlcpy(char *dst, const char *src, size_t siz);
 char *csc_strcpy_alloc(const char *src, int extra);
 int csc_fixtoken(char *sour, char **idx, int ids, char *delim);
@@ -648,7 +649,7 @@ extern "C"
 {
 #endif
 void *smm_alloc(size_t size);
-int smm_free(void *ptr);
+void *smm_free(void *ptr);
 int smm_chdir(char *path);
 int smm_codepage(void);
 int smm_codepage_set(int cpno);

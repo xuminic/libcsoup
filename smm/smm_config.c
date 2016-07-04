@@ -218,7 +218,8 @@ int smm_config_close(struct KeyDev *cfgd)
 	if (cfgd->fp) {
 		fclose(cfgd->fp);
 	}
-	return smm_free(cfgd);
+	smm_free(cfgd);
+	return 0;
 }
 
 KEYCB *smm_config_read_alloc(struct KeyDev *cfgd)
