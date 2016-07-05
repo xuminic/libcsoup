@@ -1,3 +1,6 @@
+20160705: 0.8.17
+	* csc_strinsert.c: introduced csc_strinsert() function.
+
 20160701: 0.8.16
 	* csc_strlcat.c: added for systems where no strlcat().
 	* csc_cli_print.c: remove the size limit of printing comments

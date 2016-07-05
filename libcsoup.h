@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	8		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	16		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	17		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -434,6 +434,7 @@ int csc_strcmp_param(char *s1, char *s2);
 
 char *csc_path_basename(char *path, char *buffer, int blen);
 char *csc_path_path(char *path, char *buffer, int blen);
+int csc_strinsert(char *buf, int len, char *ip, int del, char *s);
 
 /* see csc_crc*.c */
 unsigned short csc_crc16_byte(unsigned short crc, char data);

@@ -84,6 +84,61 @@ static int strings_strbival(void)
 	return 0;
 }
 
+static int strings_strinsert(void)
+{
+#define	STRINSERTSMPL	"Alpha AXP of DEC"
+	char	buf[24];
+	int	rc;
+
+	CDB_SHOW(("\nFrom [Alpha AXP of DEC] to [Alpha RISC of DEC]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), &buf[6], 3, "RISC");
+	CDB_SHOW(("%s\n", buf));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to [RISCAlpha AXP of DEC]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), NULL, 0, "RISC");
+	CDB_SHOW(("%s\n", buf));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to [Alpha AXP of DECCISC]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), buf+sizeof(buf), 0, "CISC");
+	CDB_SHOW(("%s\n", buf));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to [Alpha RISCCISAXP of DEC]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), &buf[6], 0, "RISCCIS");
+	CDB_SHOW(("%s\n", buf));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to buffer overflow: "));
+	strcpy(buf, STRINSERTSMPL);
+	rc = csc_strinsert(buf, sizeof(buf), &buf[6], 0, "RISCCISC");
+	CDB_SHOW(("%s [%d]\n", buf, rc));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to [Alpha AXP _AXP of DEC]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), buf+10, -4, "_");
+	CDB_SHOW(("%s\n", buf));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to out of boundry: "));
+	strcpy(buf, STRINSERTSMPL);
+	rc = csc_strinsert(buf, sizeof(buf), &buf[3], -4, "_");
+	CDB_SHOW(("%s [%d]\n", buf, rc));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to [Alpha is gone]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), buf+6, 100, "is gone");
+	CDB_SHOW(("%s\n", buf));
+
+	CDB_SHOW(("From [Alpha AXP of DEC] to [Alpha of DEC]: "));
+	strcpy(buf, STRINSERTSMPL);
+	csc_strinsert(buf, sizeof(buf), buf+6, 4, NULL);
+	CDB_SHOW(("%s\n", buf));
+
+	return 0;
+}
+
+
 int strings_main(void *rtime, int argc, char **argv)
 {
 	/* stop the compiler complaining */
@@ -91,6 +146,7 @@ int strings_main(void *rtime, int argc, char **argv)
 
 	strings_strbody();
 	strings_strbival();
+	strings_strinsert();
 	return 0;
 }
 

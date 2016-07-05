@@ -28,6 +28,7 @@ SRCS	:= csc_cdll.c		\
 	   csc_strcmp_param.c	\
 	   csc_strcpy_alloc.c	\
 	   csc_strfill.c	\
+	   csc_strinsert.c	\
 	   csc_strlcat.c	\
 	   csc_strlcpy.c	\
 	   csc_ziptoken.c
