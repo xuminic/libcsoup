@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	8		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	17		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	18		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -500,34 +500,8 @@ char *csc_file_load(char *path, char *buf, long *len);
 #define SMM_ERR_LENGTH		SMM_ERR(9)	/* general fail of length */
 #define SMM_ERR_PWNAM		SMM_ERR(10)	/* passwd and name */
 #define SMM_ERR_MKDIR		SMM_ERR(11)
-#define SMM_ERR_NULL		SMM_ERR(32)	/* empty content */
-#define SMM_ERR_OBJECT		SMM_ERR(33)	/* wrong object */
-
-
-#define SMM_FSTAT_ERROR		-1
-#define	SMM_FSTAT_REGULAR	0
-#define SMM_FSTAT_DIR		1
-#define SMM_FSTAT_DEVICE	2
-#define SMM_FSTAT_LINK		3
-
-/* Error mask is always 1000 0000 ... in 32-bit error code
- * libsmm error mask uses 0100 0000 ... in 32-bit error code */
-#define SMM_ERR_MASK		0xC0000000	/* 1100 0000 0000 ... */
-#define SMM_ERR(x)		(SMM_ERR_MASK | (x))
-
-#define SMM_ERR_NONE		0
-#define SMM_ERR_NONE_READ	SMM_ERR(0)	/* errno read mode */
-#define SMM_ERR_LOWMEM		SMM_ERR(1)
-#define SMM_ERR_ACCESS		SMM_ERR(2)	/* access denied */
-#define SMM_ERR_EOP		SMM_ERR(3)	/* end of process */
-#define SMM_ERR_CHDIR		SMM_ERR(4)	/* change path */
-#define SMM_ERR_OPENDIR		SMM_ERR(5)	/* open directory */
-#define SMM_ERR_GETCWD		SMM_ERR(6)
-#define SMM_ERR_OPEN		SMM_ERR(7)	/* open file */
-#define SMM_ERR_STAT		SMM_ERR(8)	/* stat failed */
-#define SMM_ERR_LENGTH		SMM_ERR(9)	/* general fail of length */
-#define SMM_ERR_PWNAM		SMM_ERR(10)	/* passwd and name */
-#define SMM_ERR_MKDIR		SMM_ERR(11)
+#define SMM_ERR_RENAME		SMM_ERR(12)
+#define SMM_ERR_FOPEN		SMM_ERR(13)
 #define SMM_ERR_NULL		SMM_ERR(32)	/* empty content */
 #define SMM_ERR_OBJECT		SMM_ERR(33)	/* wrong object */
 
@@ -675,11 +649,15 @@ int smm_errno_update(int value);
 long long smm_filesize(char *fname);
 char *smm_fontpath(char *ftname, char **userdir);
 int smm_fstat(char *fname);
+void *smm_fopen(char *path, char *mode);
+int smm_fclose(void *fp);
+int smm_fncmp(char *dstname, char *srcname);
 int smm_init(void);
 int smm_mkdir(char *path);
 int smm_mkpath(char *path);
 int smm_pathtrek(char *path, int flags, F_DIR msg, void *option);
 int smm_pwuid(char *uname, long *uid, long *gid);
+int smm_rename(char *oldname, char *newname);
 int smm_signal_break(int (*handle)(int));
 int smm_sleep(int sec, int usec);
 int smm_time_diff(SMM_TIME *tmbuf);

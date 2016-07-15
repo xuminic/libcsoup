@@ -1,3 +1,8 @@
+20160715: 0.8.18
+	* smm_fstat.c: added smm_fncmp() to support filename comparing
+	* smm_rename.c: added to support UTF-16
+	* smm_fopen.c: have NOT looked through the details
+
 20160705: 0.8.17
 	* csc_strinsert.c: introduced csc_strinsert() function.
 

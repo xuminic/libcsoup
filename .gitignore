@@ -1,6 +1,7 @@
 libcsoup.a
 csoup
 *.o
+*.exe
 main/mkclicmd
 main/main_define.h
 doc/html
