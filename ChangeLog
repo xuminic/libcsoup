@@ -1,3 +1,7 @@
+20160718: 0.8.20:
+	* smm_fstat.c: fixed the missing string.h
+	Removed the temporary files in main/
+
 20160718: 0.8.19
 	* smm_fopen.c: better simulated the fopen().
 
