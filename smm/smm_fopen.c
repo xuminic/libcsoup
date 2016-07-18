@@ -55,9 +55,10 @@ void *smm_fopen(char *path, char *mode)
 		} else if (!strncmp(mode, "a+", 2)) {
 			/* Open for reading and appending (writing at end of 
 			 * file). The file is created if it does not exist.The
-			 * initial  file position for reading is at the begin-
+			 * initial file position for reading is at the begin-
 			 * ning of the file, but output is always appended to 
-			 * the end of the file. */
+			 * the end of the file. 
+			 * FIXME: this can not be fully simulated */
 			dwDesiredAccess = GENERIC_READ | GENERIC_WRITE;
 			dwCreationDisposition = OPEN_ALWAYS;
 			mode += 2;
@@ -90,8 +91,19 @@ void *smm_fopen(char *path, char *mode)
 		}
 	}
 
-	fp = CreateFile(wpath, dwDesiredAccess, 0, NULL, 
+	/* We don't use CREATE_ALWAYS actually. We use it to simulate 
+	 * the Posix fopen's doing, create-truncating */
+	if (dwCreationDisposition == CREATE_ALWAYS) {
+		fp = CreateFile(wpath, dwDesiredAccess, 0, NULL,
+			TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (fp == INVALID_HANDLE_VALUE) {  /* file not existed */
+			fp = CreateFile(wpath, dwDesiredAccess, 0, NULL,
+				CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+		}
+	} else {
+		fp = CreateFile(wpath, dwDesiredAccess, 0, NULL, 
 			dwCreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+	}
 
 	smm_free(wpath);
 	if (fp == INVALID_HANDLE_VALUE) {
@@ -99,6 +111,10 @@ void *smm_fopen(char *path, char *mode)
 		return NULL;
 	}
 
+	/* The OPEN_ALWAYS implied the append mode */
+	if (dwCreationDisposition == OPEN_ALWAYS) {
+		SetFilePointer(fp, 0, NULL, FILE_END);
+	}
 	smm_errno_update(SMM_ERR_NONE);
 	return fp;
 }
@@ -118,7 +134,7 @@ void *smm_fopen(char *path, char *mode)
 	FILE	*fp;
 
 	if ((fp = fopen(path, mode)) == NULL) {
-		smm_errno_update(SMM_ERR_FOPEN)
+		smm_errno_update(SMM_ERR_FOPEN);
 	} else {
 		smm_errno_update(SMM_ERR_NONE);
 	}
