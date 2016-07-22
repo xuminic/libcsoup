@@ -37,7 +37,7 @@
 #include <pthread.h>
 #include <errno.h>
 
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 struct	slog_socket	{
 	pthread_t	listenner;

@@ -61,7 +61,7 @@
 
 #define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_CONFIG, SLOG_LVL_ERROR)
 #include "libcsoup.h"
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 #define	CFGF_BLOCK_WID		36
 #define CFGF_BLOCK_MAGIC	"BINARY:"

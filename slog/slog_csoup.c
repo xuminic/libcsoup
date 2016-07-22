@@ -22,7 +22,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 static char *slog_csoup_prefix(void *self, int cw);
 

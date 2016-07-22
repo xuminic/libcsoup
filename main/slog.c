@@ -25,7 +25,7 @@
 //#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_SLOG, SLOG_LVL_INFO)
 
 #include "libcsoup.h"
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 
 int slog_main(void *rtime, int argc, char **argv)

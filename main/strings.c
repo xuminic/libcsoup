@@ -22,7 +22,7 @@
 #include <string.h>
 
 #include "libcsoup.h"
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 int strings_strbody(void)
 {

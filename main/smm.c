@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "libcsoup.h"
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 #define VERSION	"0.1"
 

@@ -23,7 +23,7 @@
 #include <string.h>
 
 #include "libcsoup.h"
-#include "csoup_internal.h"
+#include "libcsoup_debug.h"
 
 #include "main_define.h"
 
