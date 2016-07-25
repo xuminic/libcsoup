@@ -39,6 +39,7 @@ SMMDBG *slog_csoup_open(FILE *stdio, char *fname);
 int slog_csoup_close(void);
 int slog_csoup_set_level(int cw);
 int slog_csoup_set_module(int cw);
+int slog_csoup_reach_level(int setcw, int cw);
 int slog_csoup_puts(int setcw, int cw, char *buf);
 char *slog_csoup_format(char *fmt, ...);
 
@@ -57,9 +58,11 @@ char *slog_csoup_format(char *fmt, ...);
 #define CDB_SHOW_CW		(SLOG_FLUSH | SLOG_LVL_AUTO)
 
 #ifdef	CSOUP_DEBUG_LOCAL
-#define CDB_SHOW(x)		slog_csoup_puts(CSOUP_DEBUG_LOCAL, CDB_SHOW_CW,\
+#define CDB_REACH(l)		slog_csoup_reach_level(CSOUP_DEBUG_LOCAL, (l))
+#define CDB_SHOW(x)		slog_csoup_puts(CSOUP_DEBUG_LOCAL,CDB_SHOW_CW,\
 					slog_csoup_format x)
 #else
+#define CDB_REACH(l)		slog_csoup_reach_level(SLOG_LVL_WARNING, (l))
 #define	CDB_SHOW(x) 		slog_csoup_puts(SLOG_LVL_AUTO, CDB_SHOW_CW, \
 					slog_csoup_format x)
 #endif

@@ -1,3 +1,6 @@
+20160725: 0.9.1
+	* slog_csoup.c: added slog_csoup_reach_level()
+
 20160725: 0.9.0
 	* slog_csoup.c: updated its interface so it can be reused by other
 	projects, which make life easier and happier.
