@@ -1,4 +1,8 @@
-20160718: 0.8.20:
+20160725: 0.9.0
+	* slog_csoup.c: updated its interface so it can be reused by other
+	projects, which make life easier and happier.
+
+20160718: 0.8.20
 	* smm_fstat.c: fixed the missing string.h
 	Removed the temporary files in main/
 

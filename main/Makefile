@@ -5,7 +5,7 @@ CP      = cp
 RM      = rm -f
 
 ifndef	CFLAGS
-CFLAGS	= -Wall -Wextra
+CFLAGS	= -Wall -Wextra -DDEBUG -DCFG_CDLL_SAFE
 endif
 CFLAGS	+= -I.. -I.
 

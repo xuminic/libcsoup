@@ -30,8 +30,8 @@
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	8		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	20		/* 0-4095 */
+#define LIBCSOUP_VER_MINOR	9		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -130,7 +130,7 @@ slog(int control_word, char *fmt, ...);
 */
 #define	SLOG_BUFFER		1024	/* maximum log buffer */
 
-#define SLOG_LVL_SHOWOFF	0
+#define SLOG_LVL_AUTO		0	/* decided by local macroes */
 #define SLOG_LVL_ERROR		1
 #define SLOG_LVL_WARNING	2
 #define SLOG_LVL_INFO		3
@@ -161,7 +161,8 @@ slog(int control_word, char *fmt, ...);
 
 
 typedef int	(*F_LCK)(void *);
-typedef	char	*(*F_PRF)(void *, int);
+typedef	int	(*F_PRF_DATE)(char *buf, int);
+typedef int	(*F_PRF_MODL)(int cw, char *buf, int);
 typedef	int	(*F_EXT)(void *, void *, char *);
 
 typedef	struct	{
@@ -176,7 +177,8 @@ typedef	struct	{
 	FILE	*stdio;
 
 	/* for generating a prefix according to the 'option' field */
-	F_PRF	f_prefix;
+	F_PRF_DATE	f_trans_date;
+	F_PRF_MODL	f_trans_modu;
 
 	/* log into the socket extension */
 	F_EXT	f_inet;

@@ -37,32 +37,30 @@ extern	SMMDBG	csoup_debug_control;
 
 SMMDBG *slog_csoup_open(FILE *stdio, char *fname);
 int slog_csoup_close(void);
-int slog_csoup_puts(SMMDBG *dbgc, int setcw, int cw, char *buf);
+int slog_csoup_set_level(int cw);
+int slog_csoup_set_module(int cw);
+int slog_csoup_puts(int setcw, int cw, char *buf);
 char *slog_csoup_format(char *fmt, ...);
 
 
 #ifndef  DEBUG
 #define CDB_OUTPUT(l,args)
 #elif	defined(CSOUP_DEBUG_LOCAL)
-#define	CDB_OUTPUT(l,args)	slog_csoup_puts(&csoup_debug_control, \
-					CSOUP_DEBUG_LOCAL, \
-					SLOG_LEVEL_SET(CSOUP_DEBUG_LOCAL,(l)),\
+#define	CDB_OUTPUT(l,args)	slog_csoup_puts(CSOUP_DEBUG_LOCAL, (l),\
 					slog_csoup_format args)
 #else
-#define	CDB_OUTPUT(l,args)	slogs(&csoup_debug_control, (l), \
+#define	CDB_OUTPUT(l,args)	slog_csoup_puts(SLOG_LVL_WARNING, (l),\
 					slog_csoup_format args)
-#endif
+#endif	/* DEBUG */
 
 
-#define CDB_SHOW_CW(cw)		(SLOG_MODUL_GET(cw)|SLOG_FLUSH|SLOG_LVL_SHOWOFF)
+#define CDB_SHOW_CW		(SLOG_FLUSH | SLOG_LVL_AUTO)
 
 #ifdef	CSOUP_DEBUG_LOCAL
-#define CDB_SHOW(x)		slog_csoup_puts(&csoup_debug_control, \
-					CSOUP_DEBUG_LOCAL,\
-					CDB_SHOW_CW(CSOUP_DEBUG_LOCAL),\
+#define CDB_SHOW(x)		slog_csoup_puts(CSOUP_DEBUG_LOCAL, CDB_SHOW_CW,\
 					slog_csoup_format x)
 #else
-#define	CDB_SHOW(x) 		slogs(&csoup_debug_control, CDB_SHOW_CW(0),\
+#define	CDB_SHOW(x) 		slog_csoup_puts(SLOG_LVL_AUTO, CDB_SHOW_CW, \
 					slog_csoup_format x)
 #endif
 

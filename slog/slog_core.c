@@ -79,7 +79,7 @@ int slog_bind_stdio(SMMDBG *dbgc, FILE *ioptr)
 
 int slog_output(SMMDBG *dbgc, int cw, char *buf)
 {
-	char	*mypre;
+	char	prefix[512];
 	int	len;
 
 	len = strlen(buf);
@@ -94,35 +94,43 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf)
 		dbgc->f_lock(dbgc);
 	}
 
-	mypre = NULL;
-	if (dbgc->f_prefix && ((cw & SLOG_FLUSH) == 0)) {
-		mypre = dbgc->f_prefix(dbgc, cw);
-		len += strlen(mypre);
+	prefix[0] = 0;
+	if ((cw & SLOG_FLUSH) == 0) {
+		if ((dbgc->option & SLOG_OPT_TMSTAMP) && dbgc->f_trans_date) {
+			dbgc->f_trans_date(prefix, sizeof(prefix));
+		}
+		if ((dbgc->option & SLOG_OPT_MODULE) && dbgc->f_trans_modu) {
+			dbgc->f_trans_modu(cw, prefix, sizeof(prefix));
+		}
+		if (prefix[0] != 0) {
+			csc_strlcat(prefix, " ", sizeof(prefix));
+		}
+		len += strlen(prefix);
 	}
 
 	if (dbgc->logd) {
-		if (mypre) {
-			fputs(mypre, dbgc->logd);
+		if (prefix[0]) {
+			fputs(prefix, dbgc->logd);
 		}
 		fputs(buf, dbgc->logd);
 		fflush(dbgc->logd);
 	}
 	if (dbgc->stdio == (void*) -1) {
-		if (mypre) {
-			fputs(mypre, stdout);
+		if (prefix[0]) {
+			fputs(prefix, stdout);
 		}
 		fputs(buf, stdout);
 		fflush(stdout);
 	} else if (dbgc->stdio) {
-		if (mypre) {
-			fputs(mypre, dbgc->stdio);
+		if (prefix[0]) {
+			fputs(prefix, dbgc->stdio);
 		}
 		fputs(buf, dbgc->stdio);
 		fflush(dbgc->stdio);
 	}
 	if (dbgc->f_inet) {
-		if (mypre) {
-			dbgc->f_inet(dbgc, dbgc->netobj, mypre);
+		if (prefix[0]) {
+			dbgc->f_inet(dbgc, dbgc->netobj, prefix);
 		}
 		dbgc->f_inet(dbgc, dbgc->netobj, buf);
 	}
@@ -172,10 +180,8 @@ int slog_validate(SMMDBG *dbgc, int setcw, int cw)
 		}
 	}
 
-	if (setcw) {
+	if ((level = SLOG_LEVEL_GET(dbgc->cword)) == SLOG_LVL_AUTO) {
 		level = SLOG_LEVEL_GET(setcw);
-	} else {
-		level = SLOG_LEVEL_GET(dbgc->cword);
 	}
 	if (SLOG_LEVEL_GET(cw) <= level) {
 		return 1;	/* required debug level met */

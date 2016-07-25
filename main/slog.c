@@ -22,9 +22,8 @@
 #include <string.h>
 #include <unistd.h>
 
-//#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_SLOG, SLOG_LVL_INFO)
-
 #include "libcsoup.h"
+#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_SLOG, SLOG_LVL_INFO)
 #include "libcsoup_debug.h"
 
 
@@ -45,7 +44,6 @@ int slog_main(void *rtime, int argc, char **argv)
 	slogs(&localdbgc, SLOG_LVL_ERROR, "FAILED\n");
 
 	tstdbg = slog_initialize(&localdbgc, SLOG_MODUL_ALL(SLOG_LVL_DEBUG));
-	//tstdbg->cword = SLOG_MODUL_ALL(tstdbg->cword);
 	CDB_SHOW(("Testing slog by a control block (%x)\n", tstdbg->cword));
 	for (i = 0; i < 8; i++) {
 		slogf(tstdbg, i, "%d/%d: debug level test\n", 
@@ -97,6 +95,7 @@ int slog_main(void *rtime, int argc, char **argv)
 				"%d: debug level test\n", i);
 	}
 
+	CDB_SHOW(("Internal test %d\n", CSOUP_DEBUG_LOCAL));
 	CDB_ERROR(("Internal: ERROR\n"));
 	CDB_WARN(("Internal: Warning\n"));
 	CDB_INFO(("Internal: INFO\n"));
@@ -104,6 +103,15 @@ int slog_main(void *rtime, int argc, char **argv)
 	CDB_PROG(("Internal: PROG\n"));
 	CDB_MODL(("Internal: MODule\n"));
 	CDB_FUNC(("Internal: function\n"));
+	slog_csoup_set_level(SLOG_LVL_FUNC);
+	CDB_ERROR(("Internal: ERROR\n"));
+	CDB_WARN(("Internal: Warning\n"));
+	CDB_INFO(("Internal: INFO\n"));
+	CDB_DEBUG(("Internal: DEBUG\n"));
+	CDB_PROG(("Internal: PROG\n"));
+	CDB_MODL(("Internal: MODule\n"));
+	CDB_FUNC(("Internal: function\n"));
+
 
 #ifdef	CFG_SLOG_SOCKET
 	CDB_SHOW(("Socket test: connecting to 6666\n"));
