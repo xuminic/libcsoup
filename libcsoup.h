@@ -31,7 +31,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	9		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	2		/* 0-4095 */
 
 
 /*****************************************************************************
@@ -112,6 +112,14 @@ Debug level is 0-7 using Bit2 to Bit0 in the control word
      running detailly inside a function)
 Bit3 is used to indicate flush or non-flush mode.
 
+If the debug level of 'cword' in SMMDBG is 0/SLOG_LVL_AUTO, it means the user
+hasn't specified the runtime debug level. The debug level therefore is decided
+by the CSOUP_DEBUG_LOCAL macro in every source code file, or otherwise by 
+default hardcoded in libcsoup. 
+
+If the debug level in slogs() is 0/SLOG_LVL_AUTO, it means the debug level
+is the unmaskable and undecorated.
+
 Module indicator uses Bit31 to Bit4 in the control word (reserved)
 
 
@@ -128,7 +136,7 @@ slog_bind_window();
 slog(int control_word, char *fmt, ...);
 
 */
-#define	SLOG_BUFFER		1024	/* maximum log buffer */
+#define	SLOG_BUFFER		32768	/* maximum log buffer */
 
 #define SLOG_LVL_AUTO		0	/* decided by local macroes */
 #define SLOG_LVL_ERROR		1
@@ -202,7 +210,9 @@ int slog_bind_file(SMMDBG *dbgc, char *fname);
 int slog_bind_stdio(SMMDBG *dbgc, FILE *ioptr);
 int slog_output(SMMDBG *dbgc, int cw, char *buf);
 int slogs(SMMDBG *dbgc, int cw, char *buf);
+int slogs_long(SMMDBG *dbgc, int setcw, int cw, char *buf);
 int slogf(SMMDBG *dbgc, int cw, char *fmt, ...);
+int slogf_long(SMMDBG *dbgc, int setcw, int cw, char *fmt, ...);
 int slog_validate(SMMDBG *dbgc, int setcw, int cw);
 void *slog_bind_tcp(SMMDBG *dbgc, int port);
 

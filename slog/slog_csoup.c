@@ -56,25 +56,6 @@ int slog_csoup_close(void)
 	return slog_shutdown(&csoup_debug_control);
 }
 
-int slog_csoup_set_level(int cw)
-{
-	csoup_debug_control.cword =
-		SLOG_LEVEL_SET(csoup_debug_control.cword, cw);
-	return csoup_debug_control.cword;
-}
-
-int slog_csoup_set_module(int cw)
-{
-	csoup_debug_control.cword =
-		SLOG_MODUL_SET(csoup_debug_control.cword, cw);
-	return csoup_debug_control.cword;
-}
-
-int slog_csoup_reach_level(int setcw, int cw)
-{
-	return slog_validate(&csoup_debug_control, setcw, cw);
-}
-
 int slog_csoup_puts(int setcw, int cw, char *buf)
 {
 	int	rc;

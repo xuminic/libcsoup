@@ -149,12 +149,41 @@ int slogs(SMMDBG *dbgc, int cw, char *buf)
 	return slog_output(dbgc, cw, buf);
 }
 
+int slogs_long(SMMDBG *dbgc, int setcw, int cw, char *buf)
+{
+	/* combine the module value and the debug level */
+	cw = SLOG_LEVEL_SET(setcw, cw);
+	
+	if (!slog_validate(dbgc, setcw, cw)) {
+		return -1;
+	}
+	return slog_output(dbgc, cw, buf);
+}
+
 int slogf(SMMDBG *dbgc, int cw, char *fmt, ...)
 {
 	char	logbuf[SLOG_BUFFER];
 	va_list	ap;
 
 	if (!slog_validate(dbgc, 0, cw)) {
+		return -1;
+	}
+
+	va_start(ap, fmt);
+	SMM_VSNPRINT(logbuf, sizeof(logbuf), fmt, ap);
+	va_end(ap);
+	return slog_output(dbgc, cw, logbuf);
+}
+
+int slogf_long(SMMDBG *dbgc, int setcw, int cw, char *fmt, ...)
+{
+	char	logbuf[SLOG_BUFFER];
+	va_list	ap;
+
+	/* combine the module value and the debug level */
+	cw = SLOG_LEVEL_SET(setcw, cw);
+
+	if (!slog_validate(dbgc, setcw, cw)) {
 		return -1;
 	}
 

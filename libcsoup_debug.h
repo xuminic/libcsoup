@@ -33,13 +33,12 @@
 #define CSOUP_MOD_CLI		SLOG_MODUL_ENUM(1)
 #define CSOUP_MOD_CONFIG	SLOG_MODUL_ENUM(2)
 
+#define CCW_SHOW		(SLOG_FLUSH | SLOG_LVL_AUTO)
+
 extern	SMMDBG	csoup_debug_control;
 
 SMMDBG *slog_csoup_open(FILE *stdio, char *fname);
 int slog_csoup_close(void);
-int slog_csoup_set_level(int cw);
-int slog_csoup_set_module(int cw);
-int slog_csoup_reach_level(int setcw, int cw);
 int slog_csoup_puts(int setcw, int cw, char *buf);
 char *slog_csoup_format(char *fmt, ...);
 
@@ -47,25 +46,32 @@ char *slog_csoup_format(char *fmt, ...);
 #ifndef  DEBUG
 #define CDB_OUTPUT(l,args)
 #elif	defined(CSOUP_DEBUG_LOCAL)
-#define	CDB_OUTPUT(l,args)	slog_csoup_puts(CSOUP_DEBUG_LOCAL, (l),\
+#define	CDB_OUTPUT(l,args)	slog_csoup_puts(CSOUP_DEBUG_LOCAL, (l), \
 					slog_csoup_format args)
 #else
-#define	CDB_OUTPUT(l,args)	slog_csoup_puts(SLOG_LVL_WARNING, (l),\
+#define	CDB_OUTPUT(l,args)	slog_csoup_puts(SLOG_LVL_WARNING, (l),	\
 					slog_csoup_format args)
 #endif	/* DEBUG */
 
 
-#define CDB_SHOW_CW		(SLOG_FLUSH | SLOG_LVL_AUTO)
-
 #ifdef	CSOUP_DEBUG_LOCAL
-#define CDB_REACH(l)		slog_csoup_reach_level(CSOUP_DEBUG_LOCAL, (l))
-#define CDB_SHOW(x)		slog_csoup_puts(CSOUP_DEBUG_LOCAL,CDB_SHOW_CW,\
+#define CDB_REACH(l)		slog_validate(&csoup_debug_control, \
+					CSOUP_DEBUG_LOCAL, (l))
+#define CDB_SHOW(x)		slog_csoup_puts(CSOUP_DEBUG_LOCAL, CCW_SHOW, \
 					slog_csoup_format x)
 #else
-#define CDB_REACH(l)		slog_csoup_reach_level(SLOG_LVL_WARNING, (l))
-#define	CDB_SHOW(x) 		slog_csoup_puts(SLOG_LVL_AUTO, CDB_SHOW_CW, \
+#define CDB_REACH(l)		slog_validate(&csoup_debug_control, \
+					SLOG_LVL_WARNING, (l))
+#define	CDB_SHOW(x) 		slog_csoup_puts(SLOG_LVL_AUTO, CCW_SHOW, \
 					slog_csoup_format x)
-#endif
+#endif	/* CSOUP_DEBUG_LOCAL */
+
+#define CDB_SET_LEVEL(w)	(csoup_debug_control.cword = SLOG_LEVEL_SET(\
+					csoup_debug_control.cword, (w)))
+
+#define CDB_SET_MODULE(w)	(csoup_debug_control.cword = SLOG_MODUL_SET(\
+					csoup_debug_control.cword, (w)))
+
 
 /* only for critical error */
 #define CDB_ERROR(x)	CDB_OUTPUT(SLOG_LVL_ERROR, x)

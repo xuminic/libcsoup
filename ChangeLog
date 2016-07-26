@@ -1,3 +1,6 @@
+20160725: 0.9.2:
+	* slog_csoup.c: code review and improvement.
+
 20160725: 0.9.1
 	* slog_csoup.c: added slog_csoup_reach_level()
 

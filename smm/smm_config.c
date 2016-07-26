@@ -25,10 +25,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "libcsoup.h"
+
 #define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_CONFIG, SLOG_LVL_ERROR)
 //#define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_CONFIG, SLOG_LVL_MODULE)
-
-#include "libcsoup.h"
 #include "libcsoup_debug.h"
 
 

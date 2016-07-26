@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "libcsoup.h"
+
 #define CSOUP_DEBUG_LOCAL	SLOG_CWORD(CSOUP_MOD_SLOG, SLOG_LVL_INFO)
 #include "libcsoup_debug.h"
 
@@ -103,7 +104,7 @@ int slog_main(void *rtime, int argc, char **argv)
 	CDB_PROG(("Internal: PROG\n"));
 	CDB_MODL(("Internal: MODule\n"));
 	CDB_FUNC(("Internal: function\n"));
-	slog_csoup_set_level(SLOG_LVL_FUNC);
+	CDB_SET_LEVEL(SLOG_LVL_FUNC);
 	CDB_ERROR(("Internal: ERROR\n"));
 	CDB_WARN(("Internal: Warning\n"));
 	CDB_INFO(("Internal: INFO\n"));
