@@ -1,3 +1,8 @@
+20160808: 0.9.5
+	* smm_config.c: Fixed the bug that couldn't delete the registry keys.
+	The problem was fixed by specifying '\\' as path seperater. However
+	I wonder how the key was registered in the first place.
+
 20160803: 0.9.4
 	* smm_fopen.c: use _wfopen() to open files.
 
