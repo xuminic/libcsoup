@@ -15,6 +15,7 @@ SRCS	:= csc_cdll.c		\
 	   csc_extname_filter.c \
 	   csc_file_load.c	\
 	   csc_file_store.c	\
+	   csc_pack_hex.c	\
 	   csc_path_basename.c	\
 	   csc_path_path.c	\
 	   csc_fixtoken.c	\

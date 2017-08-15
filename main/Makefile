@@ -14,7 +14,7 @@ EXLIBS	= -lpthread
 endif
 
 SRCS	= main.c fixtoken.c memdump.c slog.c crc.c fontpath.c config.c \
-	  csc_cdll.c csc_cli.c smm.c strings.c
+	  csc_cdll.c csc_cli.c smm.c strings.c packhex.c
 
 TARGET	= csoup
 
@@ -22,7 +22,7 @@ TARGET	= csoup
 .PHONY: all clean
 all: $(TARGET)
 
-$(TARGET): $(SRCS) main_define.h
+csoup: $(SRCS) main_define.h packhex.h
 	$(CC) $(CFLAGS) -L.. -o $@ $(SRCS) -lcsoup $(EXLIBS)
 
 main_define.h: mkclicmd
@@ -31,6 +31,9 @@ main_define.h: mkclicmd
 
 mkclicmd: mkclicmd.c
 	$(CC) $(CFLAGS) -L.. -o $@ $< -lcsoup
+
+packhex.h:
+	../packhex -i packed_hex * > $@
 
 universal_crc: universal_crc.c
 	$(CC) $(CFLAGS) -o $@ $<
@@ -41,7 +44,7 @@ crc: universal_crc
 	universal_crc -a tab -b 8 -p 0x7 > crc8.c
 
 clean:
-	$(RM) $(TARGET) main_define.h universal_crc mkclicmd
+	$(RM) $(TARGET) main_define.h packhex.h universal_crc mkclicmd
 
 
 

@@ -32,6 +32,7 @@ TARGET	= libcsoup.a
 all: main
 
 main: $(TARGET)
+	$(CC) $(CFLAGS) -I. -L. -DEXECUTABLE -o packhex soup/csc_pack_hex.c -lcsoup
 	make -C main all
 
 $(TARGET) : cli slog smm soup
@@ -62,7 +63,7 @@ clean:
 	make -C slog clean
 	make -C smm clean
 	make -C soup clean
-	$(RM) $(TARGET)
+	$(RM) $(TARGET) packhex
 
 release:
 	if [ -d $(RELCS) ]; then $(RM) -r $(RELCS); fi

@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	9		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	10		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	11		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -407,6 +407,30 @@ int csc_cfg_hex_to_binary(char *src, char *buf, int blen);
 } // __cplusplus defined.
 #endif
 
+/*****************************************************************************
+ * See csc_pack_hex.c: a simple way to pack files to C array in hex.
+ * Definitions and functions for the simple packing hex array.
+ ****************************************************************************/
+typedef int	(*F_PKHEX)(void *frame, char *fname, void *data, long dlen);
+
+struct	phex_idx	{
+	char		*fname;
+	void		*data;
+	long		dlen;
+};
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+void *csc_pack_hex_verify(void *pachex, long *flen, long *fnsize);
+void *csc_pack_hex_find_next(void *pachex);
+void csc_pack_hex_list(void *pachex, F_PKHEX lsfunc);
+void *csc_pack_hex_load(void *pachex, char *path, long *size);
+void *csc_pack_hex_index(void *pachex);
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
 
 /*****************************************************************************
  * Miscellaneous Functions.
