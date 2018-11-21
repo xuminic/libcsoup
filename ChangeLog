@@ -1,3 +1,6 @@
+20181121: 0.10.0
+	* csc_tmem.c: added a tiny memory pool management functions.
+
 20170815: 0.9.11
 	* csc_pack_hex.c: supported packing a group of files in one C array.
 

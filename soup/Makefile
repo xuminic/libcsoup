@@ -34,6 +34,7 @@ SRCS	:= csc_cdll.c		\
 	   csc_strinsert.c	\
 	   csc_strlcat.c	\
 	   csc_strlcpy.c	\
+	   csc_tmem.c		\
 	   csc_url_decode.c	\
 	   csc_ziptoken.c
 

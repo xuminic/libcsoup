@@ -31,8 +31,8 @@
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	9		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	11		/* 0-4095 */
+#define LIBCSOUP_VER_MINOR	10		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -483,7 +483,7 @@ char *csc_path_basename(char *path, char *buffer, int blen);
 char *csc_path_path(char *path, char *buffer, int blen);
 int csc_strinsert(char *buf, int len, char *ip, int del, char *s);
 
-/* csc_url_decode.c */
+/* see csc_url_decode.c */
 int csc_url_decode(char *dst, int dlen, char *src);
 char *csc_url_decode_alloc(char *src);
 
@@ -502,8 +502,16 @@ char *csc_iso639_lang_to_iso(char *lang);
 char *csc_iso639_lang_to_short(char *lang);
 char *csc_iso639_iso_to_lang(char *iso);
 
+/* see csc_file_load.c and csc_file_store.c */
 long csc_file_store(char *path, int ovrd, char *src, long len);
 char *csc_file_load(char *path, char *buf, long *len);
+
+/* see csc_tmem.c */
+int csc_tmem_init(void *segment, int len);
+void *csc_tmem_alloc(void *segment, int n);
+int csc_tmem_free(void *segment, void *mem);
+int csc_tmem_dump(void *segment);
+
 #ifdef __cplusplus
 } // __cplusplus defined.
 #endif
