@@ -51,6 +51,7 @@ crc: universal_crc
 
 clean:
 	$(RM) $(TARGET) main_define.h packhex.h universal_crc mkclicmd packhex
+	$(RM) $(TARGET).exe universal_crc.exe mkclicmd.exe packhex.exe
 
 
 
