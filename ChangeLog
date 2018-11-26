@@ -1,3 +1,7 @@
+20181126: 0.10.1
+	* packhex: removed to main/
+	* csc_tmem.c: make it better to use.
+
 20181121: 0.10.0
 	* csc_tmem.c: added a tiny memory pool management functions.
 

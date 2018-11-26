@@ -32,8 +32,11 @@ main_define.h: mkclicmd
 mkclicmd: mkclicmd.c
 	$(CC) $(CFLAGS) -L.. -o $@ $< -lcsoup
 
-packhex.h:
-	../packhex -i packed_hex * > $@
+packhex.h: packhex
+	packhex -i packed_hex * > $@
+
+packhex: ../soup/csc_pack_hex.c
+	$(CC) $(CFLAGS) -L.. -DEXECUTABLE -o $@ $< -lcsoup
 
 universal_crc: universal_crc.c
 	$(CC) $(CFLAGS) -o $@ $<
@@ -44,7 +47,7 @@ crc: universal_crc
 	universal_crc -a tab -b 8 -p 0x7 > crc8.c
 
 clean:
-	$(RM) $(TARGET) main_define.h packhex.h universal_crc mkclicmd
+	$(RM) $(TARGET) main_define.h packhex.h universal_crc mkclicmd packhex
 
 
 

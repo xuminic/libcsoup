@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	10		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -510,7 +510,6 @@ char *csc_file_load(char *path, char *buf, long *len);
 int csc_tmem_init(void *segment, int len);
 void *csc_tmem_alloc(void *segment, int n);
 int csc_tmem_free(void *segment, void *mem);
-int csc_tmem_dump(void *segment);
 
 #ifdef __cplusplus
 } // __cplusplus defined.

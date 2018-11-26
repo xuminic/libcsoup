@@ -46,6 +46,7 @@
  * Memory Sight:
  *   [Managing Block][Memory Block][Memory Block]...
  */
+#define UCHAR		unsigned char
 #define CWORD		unsigned
 #define CWSIZE		((int)sizeof(CWORD))
 
@@ -65,11 +66,11 @@
 #endif
 
 static CWORD tmem_parity(CWORD cw);
-static unsigned char *tmem_begin(unsigned char *segment);
-static int tmem_end(unsigned char *segment, unsigned char *mb);
-static unsigned char *tmem_next(unsigned char *mb);
-static CWORD tmem_load_cword(unsigned char *mb);
-static void tmem_store_cword(unsigned char *mb, int size, int used);
+static UCHAR *tmem_begin(UCHAR *segment);
+static int tmem_end(UCHAR *segment, UCHAR *mb);
+static UCHAR *tmem_next(UCHAR *mb);
+static CWORD tmem_load_cword(UCHAR *mb);
+static void tmem_store_cword(UCHAR *mb, int size, int used);
 
 
 /*!\brief Initialize the memory segment to be allocable.
@@ -94,13 +95,14 @@ int csc_tmem_init(void *segment, int len)
 	tmem_store_cword(segment, len, 1);
 	
 	/* create the first memory block */
-	segment = (unsigned char *)segment + CWSIZE;
+	segment = (UCHAR *)segment + CWSIZE;
 	len -= CWSIZE;
 	tmem_store_cword(segment, len, 0);
 	return len;
 }
 
-/*!\brief allocate a piece of dynamic memory block inside the specified memory segment.
+/*!\brief allocate a piece of dynamic memory block inside the specified 
+   memory segment.
 
    \param[in]  segment the memory segment for allocation.
    \param[in]  n the size of the expecting allocated memory block.
@@ -113,9 +115,10 @@ int csc_tmem_init(void *segment, int len)
 void *csc_tmem_alloc(void *segment, int n)
 {
 	CWORD	cw;
-	unsigned char	*mb;
+	UCHAR	*mb;
 
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); mb = tmem_next(mb)) {
+	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
+			mb = tmem_next(mb)) {
 		if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
 			break;	/* chain broken or ended */
 		}
@@ -154,9 +157,10 @@ void *csc_tmem_alloc(void *segment, int n)
 int csc_tmem_free(void *segment, void *mem)
 {
 	CWORD	cw, cic; 
-	unsigned char	*mb, *mic = NULL;
+	UCHAR	*mb, *mic = NULL;
 
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); mb = tmem_next(mb)) {
+	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
+			mb = tmem_next(mb)) {
 		if (mb + CWSIZE == mem) {
 			break;	/* found it */
 		}
@@ -191,38 +195,53 @@ int csc_tmem_free(void *segment, void *mem)
 	return 0;
 }
 
-/*!\brief dump the status of the memory segment.
+static UCHAR *tmem_begin(UCHAR *segment)
+{
+	if (segment == NULL) {
+		return NULL;
+	}
+	if (tmem_load_cword(segment) == (CWORD) -1) {
+		return NULL;	/* memory segment not available */
+	}
+	return segment + CWSIZE;
+}
 
-   \param[in]  segment the memory segment for allocation.
-
-   \return    number of the memory blocks.
-*/
-int csc_tmem_dump(void *segment)
+static int tmem_end(UCHAR *segment, UCHAR *mb)
 {
 	CWORD	cw;
-	unsigned char	*mb;
-	int 	i, avail;
+
+	if ((mb == NULL) || (segment == NULL)) {
+		return 1;
+	}
 
 	if ((cw = tmem_load_cword(segment)) == (CWORD) -1) {
-		printf("Memory Segment not available at [%p].\n", segment);
-		return 0;
+		return -1;	/* control word broken */
 	}
-	printf("Memory Segment at [%p][%x]: %d bytes\n", 
-			segment, cw, TMEM_SIZE(cw));
+	segment += TMEM_SIZE(cw) + CWSIZE;	/* mark the end gate */
 
-	i = avail = 0;
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); mb = tmem_next(mb)) {
-		cw = tmem_load_cword(mb);
-		printf("[%3d][%5d][%08x]: %4d [%02x %02x %02x %02x %02x %02x %02x %02x]\n",
-				i, (int)(mb - (unsigned char*)segment), cw, TMEM_SIZE(cw),
-				mb[0], mb[1], mb[2], mb[3], mb[4], mb[5], mb[6], mb[7]);
-		i++;
-		if (TMEM_TEST_USED(cw) == 0) {
-			avail += TMEM_SIZE(cw);
-		}
+	/* if it's not in the end of the memory segment,
+	 * make sure the memory block is validated and in range */
+	if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
+		return -1;	/* control word broken */
 	}
-	printf("Total blocks: %d;  %d bytes available.\n", i, avail);
-	return i;
+	if (mb + TMEM_SIZE(cw) + CWSIZE > segment) {
+		return 1;	/* out of the memory segment */
+	}
+	return 0;	/* not at the end */
+}
+
+static UCHAR *tmem_next(UCHAR *mb)
+{
+	CWORD	cw;
+
+	if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
+		return NULL;	/* control word broken */
+	}
+
+	/* just return the next location of the memory block.
+	 * there's no need to verify its validation here */
+	mb += TMEM_SIZE(cw) + CWSIZE;
+	return mb;
 }
 
 /* applying odd parity so 15 (16-bit) or 31 (32-bit) 1-bits makes MSB[1]=0,
@@ -247,56 +266,7 @@ static CWORD tmem_parity(CWORD cw)
 	return cw;
 }
 
-static unsigned char *tmem_begin(unsigned char *segment)
-{
-	if (segment == NULL) {
-		return NULL;
-	}
-	if (tmem_load_cword(segment) == (CWORD) -1) {
-		return NULL;	/* memory segment not available */
-	}
-	return segment + CWSIZE;
-}
-
-static int tmem_end(unsigned char *segment, unsigned char *mb)
-{
-	CWORD	cw;
-
-	if ((mb == NULL) || (segment == NULL)) {
-		return 1;
-	}
-
-	if ((cw = tmem_load_cword(segment)) == (CWORD) -1) {
-		return -1;	/* control word broken */
-	}
-	segment += TMEM_SIZE(cw) + CWSIZE;	/* mark the end gate */
-
-	/* if it's not in the end of the memory segment,
-	 * make sure the memory block is validated and in range */
-	if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
-		return -1;	/* control word broken */
-	}
-	if (mb + TMEM_SIZE(cw) + CWSIZE > segment) {
-		return 1;	/* out of the memory segment */
-	}
-	return 0;	/* not at the end */
-}
-
-static unsigned char *tmem_next(unsigned char *mb)
-{
-	CWORD	cw;
-
-	if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
-		return NULL;	/* control word broken */
-	}
-
-	/* just return the next location of the memory block.
-	 * there's no need to verify its validation here */
-	mb += TMEM_SIZE(cw) + CWSIZE;
-	return mb;
-}
-
-static CWORD tmem_load_cword(unsigned char *mb)
+static CWORD tmem_load_cword(UCHAR *mb)
 {
 	CWORD	cw = 0;
 
@@ -313,7 +283,7 @@ static CWORD tmem_load_cword(unsigned char *mb)
 	return -1;
 }
 
-static void tmem_store_cword(unsigned char *mb, int size, int used)
+static void tmem_store_cword(UCHAR *mb, int size, int used)
 {
 	CWORD	n;
 
@@ -326,20 +296,39 @@ static void tmem_store_cword(unsigned char *mb, int size, int used)
 
 	mb += CWSIZE - 1;
 #if	(UINT_MAX == 4294967295U)
-	*mb-- = (unsigned char)n; n >>= 8;
-	*mb-- = (unsigned char)n; n >>= 8;
+	*mb-- = (UCHAR)n; n >>= 8;
+	*mb-- = (UCHAR)n; n >>= 8;
 #endif
-	*mb-- = (unsigned char)n; n >>= 8;
-	*mb-- = (unsigned char)n; n >>= 8;
+	*mb-- = (UCHAR)n; n >>= 8;
+	*mb-- = (UCHAR)n; n >>= 8;
 }
 
 
 #ifdef	QUICK_TEST_MAIN
+static char *linedump(void *mem, int msize)
+{	
+	unsigned char	*tmp = mem;
+	static	char	buf[256];
+	char	*vp = buf;
+
+	if (msize * 3 > sizeof(buf)) {
+		msize = sizeof(buf) / 3;
+	}
+	while (msize--) {
+		sprintf(vp, "%02X", *tmp++);
+		vp += 2;
+		*vp++ = ' ';
+	}
+	*vp = 0;
+	return buf;
+}
+
 static void *tmem_pick(void *segment, int n)
 {
-	unsigned char 	*mb;
+	UCHAR 	*mb;
 
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); mb = tmem_next(mb)) {
+	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
+			mb = tmem_next(mb)) {
 		if (n == 0) {
 			return mb + CWSIZE;
 		}
@@ -348,6 +337,36 @@ static void *tmem_pick(void *segment, int n)
 	return NULL;
 }
 
+static int tmem_dump(void *segment)
+{
+	CWORD	cw;
+	UCHAR	*mb;
+	int 	i, avail;
+
+	if ((cw = tmem_load_cword(segment)) == (CWORD) -1) {
+		printf("Memory Segment not available at [%p].\n", segment);
+		return 0;
+	}
+	printf("Memory Segment at [%p][%x]: %d bytes\n", 
+			segment, cw, TMEM_SIZE(cw));
+
+	i = avail = 0;
+	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
+			mb = tmem_next(mb)) {
+		cw = tmem_load_cword(mb);
+		printf("[%3d][%5d][%08x]: %4d [%s]\n", i, 
+				(int)(mb - (UCHAR*)segment), cw,
+				TMEM_SIZE(cw), linedump(mb, 8));
+		i++;
+		if (TMEM_TEST_USED(cw) == 0) {
+			avail += TMEM_SIZE(cw);
+		}
+	}
+	printf("Total blocks: %d;  %d bytes available.\n", i, avail);
+	return i;
+}
+
+
 int main(void)
 {
 	char	buf[256];
@@ -355,16 +374,17 @@ int main(void)
 
 	printf("ODD Parity 0x%08x: 0x%08x\n", -1, tmem_parity(-1));
 	printf("ODD Parity 0x%08x: 0x%08x\n", 0, tmem_parity(0));
-	printf("ODD Parity 0x%08x: 0x%08x\n", tmem_parity(-1), tmem_parity(tmem_parity(-1)));
+	printf("ODD Parity 0x%08x: 0x%08x\n", 
+			tmem_parity(-1), tmem_parity(tmem_parity(-1)));
 
 	memset(buf, 0, sizeof(buf));
 	csc_tmem_init(buf, sizeof(buf));
-	csc_tmem_dump(buf);
+	tmem_dump(buf);
 
 	while ((p = csc_tmem_alloc(buf, 25)) != NULL) {
 		strcpy(p, "hello");
 	}
-	csc_tmem_dump(buf);
+	tmem_dump(buf);
 
 	printf("Freeing first and last memory block.\n");
 	csc_tmem_free(buf, p);
@@ -372,19 +392,19 @@ int main(void)
 	csc_tmem_free(buf, p);
 	p = tmem_pick(buf, 7);
 	csc_tmem_free(buf, p);
-	csc_tmem_dump(buf);
+	tmem_dump(buf);
 
 	printf("Create a memory fregment.\n");
 	p = tmem_pick(buf, 2);
 	csc_tmem_free(buf, p);
 	p = tmem_pick(buf, 4);
 	csc_tmem_free(buf, p);
-	csc_tmem_dump(buf);
+	tmem_dump(buf);
 
 	printf("Merge the memory hole.\n");
 	p = tmem_pick(buf, 3);
 	csc_tmem_free(buf, p);
-	csc_tmem_dump(buf);
+	tmem_dump(buf);
 	return 0;
 }
 #endif

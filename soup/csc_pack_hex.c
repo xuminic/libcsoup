@@ -260,7 +260,7 @@ static int bin2c(char *path, char *fullname)
 	rewind(fp);
 
 	printf("\n\t/* %s: %ld (%ld) */\n\n", 
-			fullname, flen, strlen(fullname));
+			fullname, flen, (long) strlen(fullname));
 
 	/* output the lenght of the file */
 	sprintf(buf, "%ld", flen);
@@ -271,7 +271,7 @@ static int bin2c(char *path, char *fullname)
 	arraylen += strlen(buf) + 1;
 	
 	/* output the length of the file name */
-	sprintf(buf, "%ld", strlen(fullname));
+	sprintf(buf, "%ld", (long) strlen(fullname));
 	for (i = 0; i <= (long) strlen(buf); i++) {
 		printf("%3d,", (unsigned char) buf[i]);
 	}
