@@ -115,7 +115,7 @@ int csc_cli_main(void *rtime, int argc, char **argv)
 		csc_cli_print(mixed_list, NULL);
 		return 0;
 	}
-	if ((argp = csc_cli_getopt_open(mixed_list)) == NULL) {
+	if ((argp = csc_cli_getopt_open(mixed_list, &optind)) == NULL) {
 		return -1;
 	}
 	while ((c = csc_cli_getopt(argc, argv, argp)) > 0) {

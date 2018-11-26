@@ -38,7 +38,7 @@ SMMDBG *slog_initialize(void *mem, int cword)
 	dbgc->cword = SLOG_MODUL_ALL(cword);
 	dbgc->option = SLOG_OPT_ALL;
 	
-	dbgc->stdio = stdout;
+	dbgc->stdio = (void*) -1;
 	return dbgc;
 }
 
@@ -158,8 +158,8 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf)
 
 	len = strlen(buf);
 	if (dbgc == NULL) {	/* ignore the control */
-		fputs(buf, stdout);
-		fflush(stdout);
+		printf("%s", buf);
+		fflush(NULL);
 		return len;
 	}
 
@@ -193,10 +193,10 @@ int slog_output(SMMDBG *dbgc, int cw, char *buf)
 	}
 	if (dbgc->stdio == (void*) -1) {
 		if (prefix[0]) {
-			fputs(prefix, stdout);
+			printf("%s", prefix);
 		}
-		fputs(buf, stdout);
-		fflush(stdout);
+		printf("%s", buf);
+		fflush(NULL);
 	} else if (dbgc->stdio) {
 		if (prefix[0]) {
 			fputs(prefix, dbgc->stdio);

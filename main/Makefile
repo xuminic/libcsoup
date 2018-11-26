@@ -1,6 +1,9 @@
 
 CC      = gcc
 AR      = ar
+#CC      = i686-w64-mingw32-gcc
+#AR      = i686-w64-mingw32-ar
+
 CP      = cp
 RM      = rm -f
 

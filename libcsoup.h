@@ -31,8 +31,8 @@
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	10		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
+#define LIBCSOUP_VER_MINOR	11		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -80,7 +80,7 @@ int csc_cli_make_list(struct cliopt *optbl, char *list, int len);
 int csc_cli_make_table(struct cliopt *optbl, struct option *oplst, int len);
 int csc_cli_print(struct cliopt *optbl, int (*show)(char *));
 
-void *csc_cli_getopt_open(struct cliopt *optbl);
+void *csc_cli_getopt_open(struct cliopt *optbl, int *pt_optind);
 int csc_cli_getopt_close(void *clibuf);
 int csc_cli_getopt(int argc, char * const argv[], void *clibuf);
 
@@ -520,6 +520,10 @@ int csc_tmem_free(void *segment, void *mem);
 /****************************************************************************
  * System Masquerade Module
  ****************************************************************************/
+#ifdef __CYGWIN__
+#define CFG_WIN32_API	// mingw through cygwin
+#endif
+
 #if	(!defined(CFG_WIN32_API) && !defined(CFG_UNIX_API))
 /* automatically decide using UNIX or Win32 API */
 #if	(defined(_WIN32) || defined(__WIN32__) || defined(__MINGW32__))

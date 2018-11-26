@@ -375,7 +375,7 @@ int smm_main(void *rtime, int argc, char **argv)
 	/* stop the compiler complaining */
 	(void) rtime;
 
-	if ((rtbuf = csc_cli_getopt_open(clist)) == NULL) {
+	if ((rtbuf = csc_cli_getopt_open(clist, &optind)) == NULL) {
 		return -1;
 	}
 

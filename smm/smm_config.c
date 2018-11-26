@@ -23,7 +23,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include "libcsoup.h"
 
@@ -288,9 +287,9 @@ int smm_config_delete(int sysdir, char *path, char *fname)
 	if (rc == 0) {
 		return smm_errno_update(SMM_ERR_NONE);
 	}
-	if (errno == EACCES) {
+	/*if (errno == EACCES) {
 		return smm_errno_update(SMM_ERR_ACCESS);
-	}
+	}*/
 	return smm_errno_update(SMM_ERR_NULL);
 }
 
@@ -615,29 +614,47 @@ static int smm_config_file_write(struct KeyDev *cfgd, KEYCB *kp)
 	if (kp == NULL) {
 		return 0;
 	}
-	if ((fout = cfgd->fp) == NULL) {
-		fout = stdout;
-	}
+	fout = cfgd->fp;
 
 	kp->update = 0;		/* reset the update counter */
 	if (kp->key) {
 		if (CFGF_TYPE_GET(kp->flags) == CFGF_TYPE_DIR) {
-			fputc('[', fout);
-			fputs(kp->key, fout);
-			fputc(']', fout);
+			if (fout == NULL) {
+				printf("[%s]", kp->key);
+			} else {
+				fputc('[', fout);
+				fputs(kp->key, fout);
+				fputc(']', fout);
+			}
 		} else {
-			fputs(kp->key, fout);
+			if (fout == NULL) {
+				printf("%s", kp->key);
+			} else {
+				fputs(kp->key, fout);
+			}
 		}
 	}
 	if (kp->value && *kp->value) {
-		fputc('=', fout);
-		fputs(kp->value, fout);
+		if (fout == NULL) {
+			printf("=%s", kp->value);
+		} else {
+			fputc('=', fout);
+			fputs(kp->value, fout);
+		}
 	}
 	if (kp->comment && *kp->comment) {
-		fputc('\t', fout);
-		fputs(kp->comment, fout);
+		if (fout == NULL) {
+			printf("\t%s", kp->comment);
+		} else {
+			fputc('\t', fout);
+			fputs(kp->comment, fout);
+		}
 	}
-	fputs("\n", fout);
+	if (fout == NULL) {
+		printf("\n");
+	} else {
+		fputs("\n", fout);
+	}
 	return 0;
 }
 
@@ -913,7 +930,7 @@ static int smc_reg_delete(struct KeyDev *cfgd, char *fname)
 	if (RegCreateKeyEx(cfgd->hSysKey, wkey, 0, NULL, 0, KEY_ALL_ACCESS, 
 				NULL, &hPathKey, NULL) != ERROR_SUCCESS) {
 		smm_free(wkey);
-		errno = EACCES;
+		//errno = EACCES;
 		return SMM_ERR_ACCESS;
 	}
 	smm_free(wkey);
@@ -933,7 +950,7 @@ static int smc_reg_delete(struct KeyDev *cfgd, char *fname)
 	if (rcode == TRUE) {
 		return SMM_ERR_NONE;
 	}
-	errno = EACCES;
+	//errno = EACCES;
 	return SMM_ERR_ACCESS;
 }
 
