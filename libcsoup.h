@@ -433,6 +433,34 @@ void *csc_pack_hex_index(void *pachex);
 #endif
 
 /*****************************************************************************
+ * See csc_?mem.c: a group of memory management functions.
+ * Definitions and functions for the memory management.
+ ****************************************************************************/
+#define CSC_MEM_FIRST_FIT	0
+#define CSC_MEM_BEST_FIT	1
+#define CSC_MEM_WORST_FIT	2
+#define CSC_MEM_FITNESS		CSC_MEM_FIRST_FIT
+
+/* if define, fill allocated memory with 0 */
+#define CSC_MEM_CLEAN		
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+/* see csc_tmem.c */
+int csc_tmem_init(void *heap, size_t len);
+void *csc_tmem_alloc(void *heap, size_t n);
+int csc_tmem_free(void *heap, void *mem);
+void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*));
+
+/* see csc_bmem.c */
+
+#ifdef __cplusplus
+} // __cplusplus defined.
+#endif
+
+/*****************************************************************************
  * Miscellaneous Functions.
  ****************************************************************************/
 #ifdef __cplusplus
@@ -505,11 +533,6 @@ char *csc_iso639_iso_to_lang(char *iso);
 /* see csc_file_load.c and csc_file_store.c */
 long csc_file_store(char *path, int ovrd, char *src, long len);
 char *csc_file_load(char *path, char *buf, long *len);
-
-/* see csc_tmem.c */
-int csc_tmem_init(void *segment, int len);
-void *csc_tmem_alloc(void *segment, int n);
-int csc_tmem_free(void *segment, void *mem);
 
 #ifdef __cplusplus
 } // __cplusplus defined.

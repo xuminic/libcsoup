@@ -50,9 +50,10 @@
 #define CWORD		unsigned
 #define CWSIZE		((int)sizeof(CWORD))
 
-#define TMEM_MAX	((int)(UINT_MAX >> 2))
-#define TMEM_MASK	TMEM_MAX
+#define TMEM_MASK	(UINT_MAX >> 2)
 #define TMEM_SIZE(n)	((int)(n) & TMEM_MASK)
+#define TMEM_NEXT(n)	((int*)(n) + TMEM_SIZE(*(int*)(n)) + 1)
+#define TMEM_CRASH(n)	(*((int*)(n)) != tmem_parity(*((int*)(n))))
 
 
 #if	(UINT_MAX == 4294967295U)
@@ -65,88 +66,139 @@
 #define	TMEM_TEST_USED(n)	((n) & 0x4000U)
 #endif
 
-static CWORD tmem_parity(CWORD cw);
-static UCHAR *tmem_begin(UCHAR *segment);
-static int tmem_end(UCHAR *segment, UCHAR *mb);
-static UCHAR *tmem_next(UCHAR *mb);
-static CWORD tmem_load_cword(UCHAR *mb);
-static void tmem_store_cword(UCHAR *mb, int size, int used);
+static int tmem_parity(int cw);
+static int tmem_store_cword(int *mb, int size, int used);
 
 
-/*!\brief Initialize the memory segment to be allocable.
+/*!\brief Initialize the memory heap to be allocable.
 
-   \param[in]  segment the memory segment for allocation.
-   \param[in]  len the size of the memory segment.
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  len the size of the memory heap.
 
-   \return    The free space of the memory segment. 
-              or -1 if the memory segment is too large or too small.
+   \return    The free space of the memory heap in unit of int 
+              or -1 if the memory heap is too large or too small.
 
-   \remark The maximum managable memory segment is the maximum integer 
-   divided by 4, which means 1GB in 32-bit system or 16k in 8-bit system.
+   \remark The given memory pool must be started at 'int' boundry.
+   The minimum allocation unit is 'int'. Therefore the maximum managable 
+   memory is 4GB in 32/64-bit system, or 32KB in 8/16-bit system.
 */
-int csc_tmem_init(void *segment, int len)
+int csc_tmem_init(void *heap, size_t len)
 {
-	len -= CWSIZE;
-	if ((len < CWSIZE) || (len > TMEM_MAX)) {
-		return -1;	/* size out of range */
+	/* change size unit to per-int; the remains will be cut off  */
+	len /= sizeof(int);	
+
+	/* save one unit for heap managing  */
+	len--;
+	
+	/* make sure the size is not out of range */
+	if ((len < 1) || (len > (UINT_MAX >> 2))) {
+		return -1;
 	}
 
-	/* create the managing block */
-	tmem_store_cword(segment, len, 1);
+	/* create the heap management */
+	tmem_store_cword(heap, (int)len, 1);
 	
 	/* create the first memory block */
-	segment = (UCHAR *)segment + CWSIZE;
-	len -= CWSIZE;
-	tmem_store_cword(segment, len, 0);
-	return len;
+	((int*)heap)++;
+	len--;
+	tmem_store_cword(heap, (int)len, 0);
+	return (int)len;
 }
 
-/*!\brief allocate a piece of dynamic memory block inside the specified 
-   memory segment.
-
-   \param[in]  segment the memory segment for allocation.
-   \param[in]  n the size of the expecting allocated memory block.
-
-   \return    point to the allocated memory block in the memory segment. 
-              or NULL if not enough space for allocating.
-
-   \remark The strategy of allocation is first fit.
-*/
-void *csc_tmem_alloc(void *segment, int n)
+void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*))
 {
-	CWORD	cw;
-	UCHAR	*mb;
+	int	*mb;
 
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
-			mb = tmem_next(mb)) {
-		if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
-			break;	/* chain broken or ended */
+	if (TMEM_CRASH(heap)) {
+		return heap;	/* memory heap not available */
+	}
+	for (mb = ((int*)heap)+1; mb < TMEM_NEXT(heap); mb = TMEM_NEXT(mb)) {
+		if (TMEM_CRASH(mb)) {
+			return (void*)mb;	/* chain broken */
 		}
-		if (TMEM_TEST_USED(cw)) {
-			continue;	/* allocated block */
-		}
-		if (TMEM_SIZE(cw) < n) {
-			continue;	/* too small to allocate */
-		}
-
-		if (TMEM_SIZE(cw) < n + CWSIZE + CWSIZE) {	
-			/* can not or not worth to split */
-			tmem_store_cword(mb, (int) cw, 1);
+		if (TMEM_TEST_USED(*mb)) {
+			if (used && used(mb)) {
+				break;
+			}
 		} else {
-			/* split the current memory block */
-			tmem_store_cword(mb, n, 1);
-
-			segment = mb + n + CWSIZE;
-			tmem_store_cword(segment, TMEM_SIZE(cw)-n-CWSIZE, 0);
+			if (fresh && fresh(mb)) {
+				break;
+			}
 		}
-		return mb + CWSIZE;
 	}
 	return NULL;
 }
 
+/*!\brief allocate a piece of dynamic memory block inside the specified 
+   memory heap.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  n the size of the expecting allocated memory block.
+
+   \return    point to the allocated memory block in the memory heap. 
+              or NULL if not enough space for allocating.
+
+   \remark The strategy of allocation is first fit.
+*/
+void *csc_tmem_alloc(void *heap, size_t n)
+{
+	int	 *found, *next;
+	int	unum = (int)((n + sizeof(int) - 1) / sizeof(int));
+	
+	int fresh(int *mb)
+	{
+		if (TMEM_SIZE(*mb) >= unum) {
+			if (found == NULL) {
+				found = mb;
+			}
+#if	CSC_MEM_FITNESS == CSC_MEM_FIRST_FIT
+			return 1;
+#endif
+#if	CSC_MEM_FITNESS == CSC_MEM_BEST_FIT
+			if (TMEM_SIZE(*found) > TMEM_SIZE(*mb)) {
+				found = mb;
+			}
+#endif
+#if	CSC_MEM_FITNESS == CSC_MEM_WORST_FIT
+			if (TMEM_SIZE(*found) < TMEM_SIZE(*mb)) {
+				found = mb;
+			}
+#endif
+		}
+		return 0;
+	}
+
+	if (TMEM_CRASH(heap)) {
+		return NULL;	/* memory heap not available */
+	}
+	if (n > TMEM_SIZE(*((int*)heap)) * sizeof(int)) {
+		return NULL;	/* request out of size */
+	}
+
+	found = next = NULL;
+	if (csc_tmem_scan(heap, NULL, fresh)) {
+		return NULL;	/* chain broken */
+	}
+	if (found == NULL) {
+		return NULL;	/* out of memory */
+	}
+
+	if (TMEM_SIZE(*found) < unum + 2) {	
+		/* not worth to split this block */
+		tmem_store_cword(found, *found, 1);
+	} else {
+		/* split this memory block */
+		next = found + unum + 1;
+		tmem_store_cword(next, TMEM_SIZE(*found) - unum - 1, 0);
+
+		tmem_store_cword(found, unum, 1);
+	}
+	return (void*)(found+1);
+}
+
 /*!\brief free the allocated memory block.
 
-   \param[in]  segment the memory segment for allocation.
+   \param[in]  heap the memory heap for allocation.
    \param[in]  n the memory block.
 
    \return    0 if freed successfully 
@@ -154,104 +206,68 @@ void *csc_tmem_alloc(void *segment, int n)
 
    \remark csc_tmem_free() supports merging memory holes.
 */
-int csc_tmem_free(void *segment, void *mem)
+int csc_tmem_free(void *heap, void *mem)
 {
-	CWORD	cw, cic; 
-	UCHAR	*mb, *mic = NULL;
+	int	*last, *found, cw;
 
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
-			mb = tmem_next(mb)) {
-		if (mb + CWSIZE == mem) {
-			break;	/* found it */
+	int used(int *mb)
+	{
+		if ((void*)(mb+1) == mem) {
+			found = mb;
+			/* try to down-merge the next memory block */
+			mb = tmem_next(mb);
+			if (mb >= tmem_next(heap)) {
+				return 1;	/* end of memory chain */
+			}
+			if (TMEM_CRASH(*mb)) {
+				return 1;	/* broken memory chain */
+			}
+			if (TMEM_TEST_USED(*mb)) {	/* free itself */
+				tmem_store_cword(found, *found, 0);
+			} else {	/* To merge the next free block */
+				cw = TMEM_SIZE(*found) + TMEM_SIZE(*mb) + 1;
+				tmem_store_cword(found, cw, 0);
+			}
+			return 1;
 		}
-		mic = mb;
+		return 0;
 	}
-	if (tmem_end(segment, mb)) {
-		return -1;	/* not found or broken */
-	}
-
-	cw = tmem_load_cword(mb);
-
-	/* trying up-merge the previous memory block */
-	if (mic) {
-		cic = tmem_load_cword(mic);
-		if (!TMEM_TEST_USED(cic)) {
-			cw = TMEM_SIZE(cw) + TMEM_SIZE(cic) + CWSIZE;
-			mb = mic;
-		}
+	int fresh(int *mb)
+	{
+		last = mb;
+		return 0;
 	}
 
-	/* trying to down-merge the next memory block */
-	mic = mb + TMEM_SIZE(cw) + CWSIZE;
-	if (!tmem_end(segment, mic)) {
-		cic = tmem_load_cword(mic);
-		if (!TMEM_TEST_USED(cic)) {
-			cw = TMEM_SIZE(cw) + TMEM_SIZE(cic) + CWSIZE;
-		}
+	if (TMEM_CRASH(heap)) {
+		return -1;	/* memory heap not available */
 	}
 
-	/* seal the freed memory block */
-	tmem_store_cword(mb, (int) cw, 0);
+	last = found = NULL;
+	if (csc_tmem_scan(heap, used, fresh)) {
+		return -2;	/* memory chain broken */
+	}
+
+	if (found == NULL) {
+		/* BE WARE: To free a free memory returns -3 "not found" */
+		return -3;	/* memory not found */
+	}
+
+	/* try to up-merge the previous memory block */
+	if (TMEM_NEXT(last) == found) {
+		cw = TMEM_SIZE(*last) + TMEM_SIZE(*found) + 1;
+		tmem_store_cword(last, cw, 0);
+	}
 	return 0;
-}
-
-static UCHAR *tmem_begin(UCHAR *segment)
-{
-	if (segment == NULL) {
-		return NULL;
-	}
-	if (tmem_load_cword(segment) == (CWORD) -1) {
-		return NULL;	/* memory segment not available */
-	}
-	return segment + CWSIZE;
-}
-
-static int tmem_end(UCHAR *segment, UCHAR *mb)
-{
-	CWORD	cw;
-
-	if ((mb == NULL) || (segment == NULL)) {
-		return 1;
-	}
-
-	if ((cw = tmem_load_cword(segment)) == (CWORD) -1) {
-		return -1;	/* control word broken */
-	}
-	segment += TMEM_SIZE(cw) + CWSIZE;	/* mark the end gate */
-
-	/* if it's not in the end of the memory segment,
-	 * make sure the memory block is validated and in range */
-	if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
-		return -1;	/* control word broken */
-	}
-	if (mb + TMEM_SIZE(cw) + CWSIZE > segment) {
-		return 1;	/* out of the memory segment */
-	}
-	return 0;	/* not at the end */
-}
-
-static UCHAR *tmem_next(UCHAR *mb)
-{
-	CWORD	cw;
-
-	if ((cw = tmem_load_cword(mb)) == (CWORD) -1) {
-		return NULL;	/* control word broken */
-	}
-
-	/* just return the next location of the memory block.
-	 * there's no need to verify its validation here */
-	mb += TMEM_SIZE(cw) + CWSIZE;
-	return mb;
 }
 
 /* applying odd parity so 15 (16-bit) or 31 (32-bit) 1-bits makes MSB[1]=0,
  * which can easily sorting out -1 as an illegal word. */
-static CWORD tmem_parity(CWORD cw)
+static int tmem_parity(int cw)
 {
-	CWORD	tmp = cw;
+	unsigned  tmp = (unsigned)cw;
 	int	i, n;
 
-	for (i = n = 0; i < CWSIZE*8 - 1; i++, tmp >>= 1) {
+	for (i = n = 0; i < 8*sizeof(int) - 1; i++, tmp >>= 1) {
 		n += tmp & 1;
 	}
 	n++;	/* make odd bit even */
@@ -266,41 +282,13 @@ static CWORD tmem_parity(CWORD cw)
 	return cw;
 }
 
-static CWORD tmem_load_cword(UCHAR *mb)
+static int tmem_store_cword(int *mb, int size, int used)
 {
-	CWORD	cw = 0;
-
-#if	(UINT_MAX == 4294967295U)
-	cw = (cw << 8) | *mb++;
-	cw = (cw << 8) | *mb++;
-#endif
-	cw = (cw << 8) | *mb++;
-	cw = (cw << 8) | *mb++;
-
-	if (cw == tmem_parity(cw)) {
-		return cw;
-	}
-	return -1;
-}
-
-static void tmem_store_cword(UCHAR *mb, int size, int used)
-{
-	CWORD	n;
-
 	if (used) {
-		n = TMEM_SET_USED(size);
-	} else {
-		n = TMEM_CLR_USED(size);
+		size = TMEM_SET_USED(size);
 	}
-	n = tmem_parity(n);
-
-	mb += CWSIZE - 1;
-#if	(UINT_MAX == 4294967295U)
-	*mb-- = (UCHAR)n; n >>= 8;
-	*mb-- = (UCHAR)n; n >>= 8;
-#endif
-	*mb-- = (UCHAR)n; n >>= 8;
-	*mb-- = (UCHAR)n; n >>= 8;
+	*mb = tmem_parity(size);
+	return *mb;
 }
 
 
@@ -323,11 +311,11 @@ static char *linedump(void *mem, int msize)
 	return buf;
 }
 
-static void *tmem_pick(void *segment, int n)
+static void *tmem_pick(void *heap, int n)
 {
 	UCHAR 	*mb;
 
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
+	for (mb = tmem_begin(heap); !tmem_end(heap, mb); 
 			mb = tmem_next(mb)) {
 		if (n == 0) {
 			return mb + CWSIZE;
@@ -337,25 +325,25 @@ static void *tmem_pick(void *segment, int n)
 	return NULL;
 }
 
-static int tmem_dump(void *segment)
+static int tmem_dump(void *heap)
 {
 	CWORD	cw;
 	UCHAR	*mb;
 	int 	i, avail;
 
-	if ((cw = tmem_load_cword(segment)) == (CWORD) -1) {
-		printf("Memory Segment not available at [%p].\n", segment);
+	if ((cw = tmem_load_cword(heap)) == (CWORD) -1) {
+		printf("Memory Segment not available at [%p].\n", heap);
 		return 0;
 	}
 	printf("Memory Segment at [%p][%x]: %d bytes\n", 
-			segment, cw, TMEM_SIZE(cw));
+			heap, cw, TMEM_SIZE(cw));
 
 	i = avail = 0;
-	for (mb = tmem_begin(segment); !tmem_end(segment, mb); 
+	for (mb = tmem_begin(heap); !tmem_end(heap, mb); 
 			mb = tmem_next(mb)) {
 		cw = tmem_load_cword(mb);
 		printf("[%3d][%5d][%08x]: %4d [%s]\n", i, 
-				(int)(mb - (UCHAR*)segment), cw,
+				(int)(mb - (UCHAR*)heap), cw,
 				TMEM_SIZE(cw), linedump(mb, 8));
 		i++;
 		if (TMEM_TEST_USED(cw) == 0) {
