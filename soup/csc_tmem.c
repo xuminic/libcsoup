@@ -29,11 +29,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-/* gcc -Wall -DQUICK_TEST_MAIN -o tmem csc_tmem.c */
 
 #include <stdio.h>
 #include <limits.h>
 #include <string.h>
+
+#include "libcsoup.h"
 
 /* Control Word for managing block:
  *   MSB+0: parity bit
@@ -46,74 +47,95 @@
  * Memory Sight:
  *   [Managing Block][Memory Block][Memory Block]...
  */
-#define UCHAR		unsigned char
-#define CWORD		unsigned
-#define CWSIZE		((int)sizeof(CWORD))
-
-#define TMEM_MASK	(UINT_MAX >> 2)
-#define TMEM_SIZE(n)	((int)(n) & TMEM_MASK)
-#define TMEM_NEXT(n)	((int*)(n) + TMEM_SIZE(*(int*)(n)) + 1)
-#define TMEM_CRASH(n)	(*((int*)(n)) != tmem_parity(*((int*)(n))))
-
-
-#if	(UINT_MAX == 4294967295U)
-#define TMEM_SET_USED(n)	((n) | 0x40000000U)
-#define	TMEM_CLR_USED(n)	((n) & ~0x40000000U)
-#define	TMEM_TEST_USED(n)	((n) & 0x40000000U)
+#if	(UINT_MAX == 0xFFFFFFFFU)
+#define TMEM_MASK_PARITY	0x80000000U
+#define TMEM_MASK_USED		0x40000000U
 #else
-#define	TMEM_SET_USED(n)	((n) | 0x4000U)
-#define	TMEM_CLR_USED(n)	((n) & ~0x4000U)
-#define	TMEM_TEST_USED(n)	((n) & 0x4000U)
+#define TMEM_MASK_PARITY	0x8000U
+#define TMEM_MASK_USED		0x4000U
+#endif
+#define TMEM_MASK_USIZE		((int)(UINT_MAX >> 2))
+
+#define TMEM_SIZE(n)		((n) & TMEM_MASK_USIZE)
+#define TMEM_BYTES(n)		(TMEM_SIZE(n) * sizeof(int))
+#define TMEM_NEXT(p)		((int*)(p) + TMEM_SIZE(*(int*)(p)) + 1)
+
+#define TMEM_SET_USED(n)	((n) | TMEM_MASK_USED)
+#define	TMEM_CLR_USED(n)	((n) & ~TMEM_MASK_USED)
+#define	TMEM_TEST_USED(n)	((n) & TMEM_MASK_USED)
+
+#ifdef	CFG_UNIT_TEST
+static		int	tmem_config = CSC_MEM_DEFAULT;
+#else
+static	const	int	tmem_config = CSC_MEM_DEFAULT;
 #endif
 
 static int tmem_parity(int cw);
-static int tmem_store_cword(int *mb, int size, int used);
+static int tmem_verify(void *heap, int *mb);
+static int tmem_cword(int uflag, int size);
 
 
 /*!\brief Initialize the memory heap to be allocable.
 
-   \param[in]  heap the memory heap for allocation.
+   \param[in]  hmem the memory heap for allocation.
    \param[in]  len the size of the memory heap.
 
    \return    The free space of the memory heap in unit of int 
-              or -1 if the memory heap is too large or too small.
+              or -3 if the memory heap is too large or too small.
 
    \remark The given memory pool must be started at 'int' boundry.
    The minimum allocation unit is 'int'. Therefore the maximum managable 
    memory is 4GB in 32/64-bit system, or 32KB in 8/16-bit system.
 */
-int csc_tmem_init(void *heap, size_t len)
+int csc_tmem_init(void *hmem, size_t len)
 {
+	int	*heap = (int*) hmem;
+
 	/* change size unit to per-int; the remains will be cut off  */
 	len /= sizeof(int);	
 
 	/* save one unit for heap managing  */
 	len--;
 	
+	if ((tmem_config & CSC_MEM_ZERO) == 0) {
+		len--;	/* not allow allocating 0 size memory */
+	}
+
 	/* make sure the size is not out of range */
 	if ((len < 1) || (len > (UINT_MAX >> 2))) {
-		return -1;
+		return -3;	/* memory out of range */
 	}
 
 	/* create the heap management */
-	tmem_store_cword(heap, (int)len, 1);
+	*heap++ = tmem_cword(1, (int)len--);
 	
 	/* create the first memory block */
-	((int*)heap)++;
-	len--;
-	tmem_store_cword(heap, (int)len, 0);
+	*heap = tmem_cword(0, (int)len);
 	return (int)len;
 }
 
+
+/*!\brief scan the memory chain to process every piece of memory block.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  used the callback function when find a piece of used memory
+   \param[in]  fresh the callback function when find a piece of free memory
+
+   \return     NULL if successfully scanned the memory chain. If the memory
+               chain is corrupted, it returns a pointer to the broken point.
+
+   \remark The prototype of the callback functions are: int func(int *)
+           The scan process can be broken if func() returns non-zero.
+*/
 void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*))
 {
 	int	*mb;
 
-	if (TMEM_CRASH(heap)) {
+	if (tmem_verify(heap, heap) < 0) {
 		return heap;	/* memory heap not available */
 	}
 	for (mb = ((int*)heap)+1; mb < TMEM_NEXT(heap); mb = TMEM_NEXT(mb)) {
-		if (TMEM_CRASH(mb)) {
+		if (tmem_verify(heap, mb) < 0) {
 			return (void*)mb;	/* chain broken */
 		}
 		if (TMEM_TEST_USED(*mb)) {
@@ -138,7 +160,9 @@ void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*))
    \return    point to the allocated memory block in the memory heap. 
               or NULL if not enough space for allocating.
 
-   \remark The strategy of allocation is first fit.
+   \remark The strategy of allocation is defined by CSC_MEM_FITNESS
+           in libcsoup.h
+
 */
 void *csc_tmem_alloc(void *heap, size_t n)
 {
@@ -151,28 +175,33 @@ void *csc_tmem_alloc(void *heap, size_t n)
 			if (found == NULL) {
 				found = mb;
 			}
-#if	CSC_MEM_FITNESS == CSC_MEM_FIRST_FIT
-			return 1;
-#endif
-#if	CSC_MEM_FITNESS == CSC_MEM_BEST_FIT
-			if (TMEM_SIZE(*found) > TMEM_SIZE(*mb)) {
-				found = mb;
+			switch (tmem_config & CSC_MEM_FITMASK) {
+			case CSC_MEM_BEST_FIT:
+				if (TMEM_SIZE(*found) > TMEM_SIZE(*mb)) {
+					found = mb;
+				}
+				break;
+			case CSC_MEM_WORST_FIT:
+				if (TMEM_SIZE(*found) < TMEM_SIZE(*mb)) {
+					found = mb;
+				}
+				break;
+			default:	/* CSC_MEM_FIRST_FIT */
+				return 1;
 			}
-#endif
-#if	CSC_MEM_FITNESS == CSC_MEM_WORST_FIT
-			if (TMEM_SIZE(*found) < TMEM_SIZE(*mb)) {
-				found = mb;
-			}
-#endif
 		}
 		return 0;
 	}
 
-	if (TMEM_CRASH(heap)) {
+	if (tmem_verify(heap, heap) < 0) {
 		return NULL;	/* memory heap not available */
 	}
-	if (n > TMEM_SIZE(*((int*)heap)) * sizeof(int)) {
+
+	/* make sure the request is NOT out of size */
+	if (unum > TMEM_SIZE(*((int*)heap))) {
 		return NULL;	/* request out of size */
+	} else if (!unum && !(tmem_config & CSC_MEM_ZERO)) {
+		return NULL;	/* not support empty allocation */
 	}
 
 	found = next = NULL;
@@ -183,50 +212,54 @@ void *csc_tmem_alloc(void *heap, size_t n)
 		return NULL;	/* out of memory */
 	}
 
-	if (TMEM_SIZE(*found) < unum + 2) {	
+	n = tmem_config & CSC_MEM_ZERO ? 0 : 1;	/* reuse the 'n' for size test */
+	if (TMEM_SIZE(*found) <= unum + n) {	
 		/* not worth to split this block */
-		tmem_store_cword(found, *found, 1);
+		*found = tmem_cword(1, *found);
+		printf("alloca %x\n", *found);
 	} else {
 		/* split this memory block */
 		next = found + unum + 1;
-		tmem_store_cword(next, TMEM_SIZE(*found) - unum - 1, 0);
-
-		tmem_store_cword(found, unum, 1);
+		*next = tmem_cword(0, TMEM_SIZE(*found) - unum - 1);
+		*found = tmem_cword(1, unum);
+		printf("split to %x %x\n", *found, *next);
 	}
-	return (void*)(found+1);
+	found++;
+	if (tmem_config & CSC_MEM_CLEAN) {
+		memset(found, 0, TMEM_BYTES(*(found-1)));
+	}
+	return (void*)found;
 }
 
 /*!\brief free the allocated memory block.
 
    \param[in]  heap the memory heap for allocation.
-   \param[in]  n the memory block.
+   \param[in]  mem the memory block.
 
    \return    0 if freed successfully 
-              or -1 if the memory block not found.
+              -1 memory heap not initialized
+	      -2 memory chain broken
+	      -3 memory not found
 
-   \remark csc_tmem_free() supports merging memory holes.
+   \remark If using csc_tmem_free() to free a free memory block, it returns -3.
 */
 int csc_tmem_free(void *heap, void *mem)
 {
-	int	*last, *found, cw;
+	int	*last, *found, rc;
 
 	int used(int *mb)
 	{
 		if ((void*)(mb+1) == mem) {
 			found = mb;
+			*found = tmem_cword(0, *found);	/* free itself */
+			
 			/* try to down-merge the next memory block */
-			mb = tmem_next(mb);
-			if (mb >= tmem_next(heap)) {
-				return 1;	/* end of memory chain */
+			mb = TMEM_NEXT(mb);
+			if (tmem_verify(heap, mb) < 0) {
+				return 1;
 			}
-			if (TMEM_CRASH(*mb)) {
-				return 1;	/* broken memory chain */
-			}
-			if (TMEM_TEST_USED(*mb)) {	/* free itself */
-				tmem_store_cword(found, *found, 0);
-			} else {	/* To merge the next free block */
-				cw = TMEM_SIZE(*found) + TMEM_SIZE(*mb) + 1;
-				tmem_store_cword(found, cw, 0);
+			if (!TMEM_TEST_USED(*mb)) {
+				*found = tmem_cword(0, TMEM_SIZE(*found + *mb + 1));
 			}
 			return 1;
 		}
@@ -234,12 +267,13 @@ int csc_tmem_free(void *heap, void *mem)
 	}
 	int fresh(int *mb)
 	{
-		last = mb;
-		return 0;
+		last = mb; return 0;
 	}
 
-	if (TMEM_CRASH(heap)) {
-		return -1;	/* memory heap not available */
+	found = (int*)mem;
+	found -= found ? 1 : 0;
+	if ((rc = tmem_verify(heap, found)) < 0) {
+		return rc;	/* memory heap not available */
 	}
 
 	last = found = NULL;
@@ -253,146 +287,211 @@ int csc_tmem_free(void *heap, void *mem)
 	}
 
 	/* try to up-merge the previous memory block */
-	if (TMEM_NEXT(last) == found) {
-		cw = TMEM_SIZE(*last) + TMEM_SIZE(*found) + 1;
-		tmem_store_cword(last, cw, 0);
+	if (last && (TMEM_NEXT(last) == found)) {
+		*last = tmem_cword(0, TMEM_SIZE(*last + *found + 1));
 	}
 	return 0;
 }
 
+/*!\brief find the attribution of an allocated memory.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  mem the memory block.
+   \param[out] msize the size of the memory block
+
+   \return    0 free memory block
+              1 used memory block
+              -1 memory heap not initialized
+	      -2 memory block corrupted
+	      -3 memory out of range
+*/
+int csc_tmem_attrib(void *heap, void *mem, size_t *msize)
+{
+	int	rc, *mb = (int*) mem;
+
+	mb -= mb ? 1 : 0;
+	if ((rc = tmem_verify(heap, mb)) < 0) {
+		return rc;	/* memory heap not available */
+	}
+	
+	if (msize) {
+		*msize = (size_t)TMEM_BYTES(*mb);
+	}
+
+	if (TMEM_TEST_USED(*mb)) {
+		return 1;	/* used memory block */
+	}
+	return 0;		/* free memory block */
+}
+
 /* applying odd parity so 15 (16-bit) or 31 (32-bit) 1-bits makes MSB[1]=0,
  * which can easily sorting out -1 as an illegal word. */
+/* https://stackoverflow.com/questions/109023/how-to-count-the-number-of-set-bits-in-a-32-bit-integer
+ * https://stackoverflow.com/questions/30688465/how-to-check-the-number-of-set-bits-in-an-8-bit-unsigned-char
+ */
+#if	UINT_MAX == 0xFFFFFFFFU
 static int tmem_parity(int cw)
 {
-	unsigned  tmp = (unsigned)cw;
-	int	i, n;
+	unsigned  x = (unsigned)cw & ~TMEM_MASK_PARITY;
 
-	for (i = n = 0; i < 8*sizeof(int) - 1; i++, tmp >>= 1) {
-		n += tmp & 1;
-	}
-	n++;	/* make odd bit even */
-	
-#if	(UINT_MAX == 4294967295U)
-	cw &= ~0x80000000U;
-	cw |= (n << 31);
+	x = x - ((x >> 1) & 0x55555555);
+	x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+	x = (x + (x >> 4)) & 0x0F0F0F0F;
+	x = x + (x >> 8);
+	x = x + (x >> 16);
+	x &= 0x0000003F;
+	x++;	/* make odd bit even */
+	return (cw & ~TMEM_MASK_PARITY) | (x << 31);
+}
 #else
-	cw &= ~0x8000U;
-	cw |= (n << 15);
+static int tmem_parity(int cw)
+{
+	unsigned  x = (unsigned)cw & ~TMEM_MASK_PARITY;
+
+	x = x - ((x >> 1) & 0x5555);
+	x = (x & 0x3333) + ((x >> 2) & 0x3333);
+	x = (x + (x >> 4)) & 0x0F0F;
+	x = x + (x >> 8);
+	x &= 0x7;
+	x++;	/* make odd bit even */
+	return (cw & ~TMEM_MASK_PARITY) | (x << 15);
+}
 #endif
-	return cw;
+
+static int tmem_verify(void *heap, int *mb)
+{
+	if (heap == NULL) {
+		return -1;
+	}
+	if (*((int*)heap) != tmem_parity(*((int*)heap))) {
+		return -1;	/* memory heap not available */
+	}
+	if (((void*)mb < heap) || (mb >= TMEM_NEXT(heap))) {
+		return -3;	/* memory out of range */
+	}
+	if (*mb != tmem_parity(*mb)) {
+		return -2;	/* memory block corrupted */
+	}
+	return 0;
 }
 
-static int tmem_store_cword(int *mb, int size, int used)
+static int tmem_cword(int uflag, int size)
 {
-	if (used) {
+	if (uflag) {
 		size = TMEM_SET_USED(size);
+	} else {
+		size = TMEM_CLR_USED(size);
 	}
-	*mb = tmem_parity(size);
-	return *mb;
+	return tmem_parity(size);
 }
 
 
-#ifdef	QUICK_TEST_MAIN
-static char *linedump(void *mem, int msize)
-{	
-	unsigned char	*tmp = mem;
-	static	char	buf[256];
-	char	*vp = buf;
-
-	if (msize * 3 > sizeof(buf)) {
-		msize = sizeof(buf) / 3;
-	}
-	while (msize--) {
-		sprintf(vp, "%02X", *tmp++);
-		vp += 2;
-		*vp++ = ' ';
-	}
-	*vp = 0;
-	return buf;
-}
-
-static void *tmem_pick(void *heap, int n)
+#ifdef	CFG_UNIT_TEST
+static short tmem_parity16(short cw)
 {
-	UCHAR 	*mb;
+	unsigned short  x = (unsigned short)cw & ~0x8000;
 
-	for (mb = tmem_begin(heap); !tmem_end(heap, mb); 
-			mb = tmem_next(mb)) {
-		if (n == 0) {
-			return mb + CWSIZE;
-		}
-		n--;
-	}
-	return NULL;
+	x = x - ((x >> 1) & 0x5555);
+	x = (x & 0x3333) + ((x >> 2) & 0x3333);
+	x = (x + (x >> 4)) & 0x0F0F;
+	x = x + (x >> 8);
+	x &= 0x1f;
+	x++;	/* make odd bit even */
+	return (cw & ~0x8000) | (x << 15);
 }
 
-static int tmem_dump(void *heap)
+int csc_tmem_unittest(void)
 {
-	CWORD	cw;
-	UCHAR	*mb;
-	int 	i, avail;
+	int	i, buf[256];
+	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
+	char	*p;
+	size_t	msize;
 
-	if ((cw = tmem_load_cword(heap)) == (CWORD) -1) {
-		printf("Memory Segment not available at [%p].\n", heap);
+	int memc(int *mb)
+	{
+		printf("(%p:%d:%lu)", mb, TMEM_TEST_USED(*mb)?1:0, TMEM_BYTES(*mb));
 		return 0;
 	}
-	printf("Memory Segment at [%p][%x]: %d bytes\n", 
-			heap, cw, TMEM_SIZE(cw));
 
-	i = avail = 0;
-	for (mb = tmem_begin(heap); !tmem_end(heap, mb); 
-			mb = tmem_next(mb)) {
-		cw = tmem_load_cword(mb);
-		printf("[%3d][%5d][%08x]: %4d [%s]\n", i, 
-				(int)(mb - (UCHAR*)heap), cw,
-				TMEM_SIZE(cw), linedump(mb, 8));
-		i++;
-		if (TMEM_TEST_USED(cw) == 0) {
-			avail += TMEM_SIZE(cw);
-		}
+	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
+		printf("ODD Parity 0x%08x: 0x%08x 0x%08x\n", plist[i], 
+				tmem_parity(plist[i]),
+				tmem_parity(tmem_parity(plist[i])));
+		printf("ODD Parity16   0x%04x: 0x%04x 0x%04x\n", 
+				(unsigned short) plist[i], 
+				(unsigned short) tmem_parity16((short) plist[i]),
+				(unsigned short) tmem_parity16(tmem_parity16((short)plist[i])));
 	}
-	printf("Total blocks: %d;  %d bytes available.\n", i, avail);
-	return i;
-}
 
-
-int main(void)
-{
-	char	buf[256];
-	char	*p;
-
-	printf("ODD Parity 0x%08x: 0x%08x\n", -1, tmem_parity(-1));
-	printf("ODD Parity 0x%08x: 0x%08x\n", 0, tmem_parity(0));
-	printf("ODD Parity 0x%08x: 0x%08x\n", 
-			tmem_parity(-1), tmem_parity(tmem_parity(-1)));
-
-	memset(buf, 0, sizeof(buf));
-	csc_tmem_init(buf, sizeof(buf));
-	tmem_dump(buf);
-
-	while ((p = csc_tmem_alloc(buf, 25)) != NULL) {
-		strcpy(p, "hello");
+	/* create a smallest heap where has only one heap control and 
+	 * one block control */
+	if ((i = csc_tmem_init(buf, sizeof(int)*2+1)) < 0) {
+		printf("Heap failed %d\n", i);
+		return 0;
 	}
-	tmem_dump(buf);
+	printf("TMEM_SIZE of the heap: %d (1)\n", TMEM_SIZE(buf[0]));
+	printf("TMEM_NEXT of the heap: %p\n", TMEM_NEXT(buf));
+	printf("TMEM_SIZE of the first block: %d (0)\n", TMEM_SIZE(buf[1]));
+	printf("TMEM_NEXT of the first block: %p (%p)\n", TMEM_NEXT(&buf[1]), TMEM_NEXT(buf));
 
-	printf("Freeing first and last memory block.\n");
-	csc_tmem_free(buf, p);
-	p = tmem_pick(buf, 0);
-	csc_tmem_free(buf, p);
-	p = tmem_pick(buf, 7);
-	csc_tmem_free(buf, p);
-	tmem_dump(buf);
+	p = csc_tmem_alloc(buf, 1);
+	if (p == NULL) {
+		printf("Can not allocate 1 byte from the full heap\n");
+	}
 
-	printf("Create a memory fregment.\n");
-	p = tmem_pick(buf, 2);
-	csc_tmem_free(buf, p);
-	p = tmem_pick(buf, 4);
-	csc_tmem_free(buf, p);
-	tmem_dump(buf);
+	p = csc_tmem_alloc(buf, 0);
+	if (p != NULL) {
+		printf("Can allocate 0 byte from the full heap %p\n", p);
+	}
+	printf("TMEM_SIZE of the first block: %d (0)\n", TMEM_SIZE(buf[1]));
 
-	printf("Merge the memory hole.\n");
-	p = tmem_pick(buf, 3);
+	i = csc_tmem_attrib(buf, &buf[1], &msize);
+	printf("Attribution of the heap: %d %ld (1 4)\n", i, msize);
+	i = csc_tmem_attrib(buf, p, &msize);
+	printf("Attribution of the first block: %d %ld (1 0)\n", i, msize);
+
 	csc_tmem_free(buf, p);
-	tmem_dump(buf);
+	i = csc_tmem_attrib(buf, p, &msize);
+	printf("Attribution of the freed block: %d %ld (0 0)\n", i, msize);
+
+	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
+	if (csc_tmem_init(buf, sizeof(int)*4+1) < 0) {
+		printf("Heap failed\n");
+		return 0;
+	}
+	p = csc_tmem_alloc(buf, 1);
+	printf("Allocated memory %p (%p) %x\n", p, &buf[2], buf[1]);
+	printf("Next memory %p (%p)\n", TMEM_NEXT(&buf[1]), &buf[3]);
+	printf("End of the memory %p (%p)\n", TMEM_NEXT(&buf[3]), TMEM_NEXT(buf));
+	i = csc_tmem_attrib(buf, &buf[1], &msize);
+	printf("Attribution of the heap: %d %ld (1 12)\n", i, msize);
+	i = csc_tmem_attrib(buf, p, &msize);
+	printf("Attribution of the allocated memory: %d %ld (1 4)\n", i, msize);
+	i = csc_tmem_attrib(buf, &buf[4], &msize);
+	printf("Attribution of the free memory: %d %ld (0 0)\n", i, msize);
+
+	printf("Free NULL memory: %d %d\n", csc_tmem_free(NULL, NULL), csc_tmem_free(buf, NULL));
+	csc_tmem_free(buf, p);
+	i = csc_tmem_attrib(buf, p, &msize);
+	printf("Attribution of the freed memory: %d %ld (0 8)\n", i, msize);
+	printf("The next address of the freed memory: %p %p\n", TMEM_NEXT(&buf[1]), TMEM_NEXT(buf));
+
+	printf("Allocating 3 empty memory: %p %p %p\n", csc_tmem_alloc(buf, 0),
+			csc_tmem_alloc(buf, 0), csc_tmem_alloc(buf, 0));
+	csc_tmem_free(buf, &buf[3]);
+	csc_tmem_scan(buf, memc, memc);
+	printf("\n");
+
+	/* create a smallest heap */
+	tmem_config = CSC_MEM_FIRST_FIT;
+	if ((i = csc_tmem_init(buf, sizeof(int)*2+1)) < 0) {
+		printf("Minimum size of heap must be 3-int higher\n");
+	}
+	if ((i = csc_tmem_init(buf, sizeof(int)*3+1)) < 0) {
+		printf("Heap create failed.\n");
+		return 0;
+	}
+
 	return 0;
 }
 #endif

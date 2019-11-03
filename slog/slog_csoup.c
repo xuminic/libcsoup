@@ -72,7 +72,7 @@ int slog_csoup_puts(int setcw, int cw, char *buf)
 	return rc;
 }
 
-/** better use this as an example becuase it's not thread safe */
+/** better use this as an example because it's not thread safe */
 char *slog_csoup_format(char *fmt, ...)
 {
 	char	logbuf[SLOG_BUFFER];
@@ -82,6 +82,42 @@ char *slog_csoup_format(char *fmt, ...)
 	SMM_VSNPRINT(logbuf, sizeof(logbuf), fmt, ap);
 	va_end(ap);
 	return csc_strcpy_alloc(logbuf, 0);
+}
+
+int cslog(char *fmt, ...)
+{
+	char	logbuf[SLOG_BUFFER];
+	va_list ap;
+
+	va_start(ap, fmt);
+	SMM_VSNPRINT(logbuf, sizeof(logbuf), fmt, ap);
+	va_end(ap);
+	return slog_output(&csoup_debug_control, SLOG_FLUSH, logbuf);
+}
+
+int cclog(int cond, char *fmt, ...)
+{
+	char	logbuf[SLOG_BUFFER];
+	va_list ap;
+
+	switch (cond) {
+	case 0:	
+		strcpy(logbuf, "*** ");
+		break;
+	case -1:
+		strcpy(logbuf, "+++ ");
+		break;
+	case -2:
+		strcpy(logbuf, "$$$ ");
+		break;
+	default:
+		strcpy(logbuf, "--- ");
+		break;
+	}
+	va_start(ap, fmt);
+	SMM_VSNPRINT(logbuf+4, sizeof(logbuf)-4, fmt, ap);
+	va_end(ap);
+	return slog_output(&csoup_debug_control, SLOG_FLUSH, logbuf);
 }
 
 static int slog_csoup_trans_date(int cw, char *buf, int blen)

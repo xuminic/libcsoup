@@ -1,6 +1,6 @@
 
 export	CC	= gcc
-export	AR	= ar
+export	AR	= ar crs
 export	CP	= cp
 export	RM	= rm -f
 
@@ -12,7 +12,7 @@ MANDIR	= /usr/local/man/man1
 
 # Options: CFG_WIN32_API, CFG_UNIX_API CFG_SLOG_SOCKET
 SYSAPI	= 
-DEBUG	= -g -DDEBUG -DCFG_CDLL_SAFE
+DEBUG	= -g -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
 DEFINES = -DUNICODE -D_UNICODE -D_FILE_OFFSET_BITS=64 $(SLOG_SOCKET)
 
 export	CFLAGS	= -Wall -Wextra -O1 $(DEBUG) $(DEFINES) $(SYSAPI) 
@@ -36,7 +36,7 @@ main: $(TARGET)
 
 $(TARGET) : cli slog smm soup
 	$(RM) $(TARGET)
-	$(AR) crus $(TARGET) cli/*.o slog/*.o smm/*.o soup/*.o 
+	$(AR) $(TARGET) cli/*.o slog/*.o smm/*.o soup/*.o 
 
 cli:
 	make -C cli all

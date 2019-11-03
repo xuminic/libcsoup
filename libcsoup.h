@@ -439,10 +439,11 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MEM_FIRST_FIT	0
 #define CSC_MEM_BEST_FIT	1
 #define CSC_MEM_WORST_FIT	2
-#define CSC_MEM_FITNESS		CSC_MEM_FIRST_FIT
+#define CSC_MEM_FITMASK		7
+#define CSC_MEM_CLEAN		0x10	/* fill allocated memory with 0 */
+#define CSC_MEM_ZERO		0x20	/* allow allocating empty memory */
 
-/* if define, fill allocated memory with 0 */
-#define CSC_MEM_CLEAN		
+#define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN | CSC_MEM_ZERO)
 
 #ifdef __cplusplus
 extern "C"
@@ -453,6 +454,7 @@ int csc_tmem_init(void *heap, size_t len);
 void *csc_tmem_alloc(void *heap, size_t n);
 int csc_tmem_free(void *heap, void *mem);
 void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*));
+int csc_tmem_attrib(void *heap, void *mem, size_t *msize);
 
 /* see csc_bmem.c */
 

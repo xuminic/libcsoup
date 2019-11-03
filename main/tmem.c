@@ -25,8 +25,16 @@
 #include "libcsoup.h"
 #include "libcsoup_debug.h"
 
+#ifdef	CFG_UNIT_TEST
+extern int csc_tmem_unittest(void);
+#endif
 int tmem_main(void *rtime, int argc, char **argv)
 {
+	(void)rtime; (void)argc; (void)argv;
+
+#ifdef	CFG_UNIT_TEST
+	csc_tmem_unittest();
+#endif
 	return 0;
 }
 

@@ -1,3 +1,10 @@
+20191104:
+	* Makefile: added CFG_UNIT_TEST for integrating unit tests.
+	* libcsoup.h: added more controls to tmem.
+	* libcsoup_debug.h: added cslog() and cclog() to replace CDB_SHOW
+	* slog_csoup.c: added cslog() and cclog() to replace CDB_SHOW
+	* csc_tmem.c: many updates.
+
 20181126: 0.11.0
 	Fixed the problem that binary incompatible of libcsoup between
 	Cygwin gcc and MinGW gcc and vice verse. The root problem was though
