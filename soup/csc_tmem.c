@@ -80,14 +80,13 @@ static int tmem_cword(int uflag, int size);
    \param[in]  hmem the memory heap for allocation.
    \param[in]  len the size of the memory heap.
 
-   \return    The free space of the memory heap in unit of int 
-              or -3 if the memory heap is too large or too small.
+   \return    The pointer to the memory heap object, or NULL if failed.
 
    \remark The given memory pool must be started at 'int' boundry.
    The minimum allocation unit is 'int'. Therefore the maximum managable 
    memory is 4GB in 32/64-bit system, or 32KB in 8/16-bit system.
 */
-int csc_tmem_init(void *hmem, size_t len)
+void *csc_tmem_init(void *hmem, size_t len)
 {
 	int	*heap = (int*) hmem;
 
@@ -97,13 +96,12 @@ int csc_tmem_init(void *hmem, size_t len)
 	/* save one unit for heap managing  */
 	len--;
 	
-	if ((tmem_config & CSC_MEM_ZERO) == 0) {
-		len--;	/* not allow allocating 0 size memory */
-	}
-
 	/* make sure the size is not out of range */
 	if ((len < 1) || (len > (UINT_MAX >> 2))) {
-		return -3;	/* memory out of range */
+		return NULL;	/* memory out of range */
+	}
+	if ((len == 1) && !(tmem_config & CSC_MEM_ZERO)) {
+		return NULL;	/* no support empty allocation */
 	}
 
 	/* create the heap management */
@@ -111,7 +109,7 @@ int csc_tmem_init(void *hmem, size_t len)
 	
 	/* create the first memory block */
 	*heap = tmem_cword(0, (int)len);
-	return (int)len;
+	return hmem;
 }
 
 
@@ -216,13 +214,11 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	if (TMEM_SIZE(*found) <= unum + n) {	
 		/* not worth to split this block */
 		*found = tmem_cword(1, *found);
-		printf("alloca %x\n", *found);
 	} else {
 		/* split this memory block */
 		next = found + unum + 1;
 		*next = tmem_cword(0, TMEM_SIZE(*found) - unum - 1);
 		*found = tmem_cword(1, unum);
-		printf("split to %x %x\n", *found, *next);
 	}
 	found++;
 	if (tmem_config & CSC_MEM_CLEAN) {
@@ -387,6 +383,9 @@ static int tmem_cword(int uflag, int size)
 
 
 #ifdef	CFG_UNIT_TEST
+
+#include "libcsoup_debug.h"
+
 static short tmem_parity16(short cw)
 {
 	unsigned short  x = (unsigned short)cw & ~0x8000;
@@ -400,98 +399,131 @@ static short tmem_parity16(short cw)
 	return (cw & ~0x8000) | (x << 15);
 }
 
+static int tmem_unittest_empty_memory(int *buf)
+{
+	int	n, *p;
+	size_t	msize;
+	
+	int memc(int *mb)
+	{
+		cslog("(%p:%d:%lu)", mb, TMEM_TEST_USED(*mb)?1:0, TMEM_BYTES(*mb));
+		return 0;
+	}
+
+	/* create a smallest heap where has only one heap control and 
+	 * one block control */
+	p = csc_tmem_init(buf, sizeof(int)*2+1);
+	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*2+1);
+	if (p == NULL) return 0;
+	
+	n = TMEM_SIZE(*buf);
+	cclog(n == 1, "TMEM_SIZE of the heap: %p %d\n", buf, n);
+	p = TMEM_NEXT(buf);
+	cclog(p == buf+2, "TMEM_NEXT of the heap: %p\n", p);
+	n = TMEM_SIZE(buf[1]);
+	cclog(n == 0, "TMEM_SIZE of the first block: %d\n", n);
+	p = TMEM_NEXT(buf+1);
+	cclog(p == TMEM_NEXT(buf), "TMEM_NEXT of the first block: %p\n", p);
+
+	p = csc_tmem_alloc(buf, 1);
+	cclog(p == NULL, "Can not allocate 1 byte from the full heap\n");
+
+	p = csc_tmem_alloc(buf, 0);
+	cclog(p != NULL, "Can allocate 0 byte from the full heap %p\n", p);
+	cclog(TMEM_SIZE(buf[1]) == 0, "TMEM_SIZE of the first block: %d\n", TMEM_SIZE(buf[1]));
+
+	n = csc_tmem_attrib(buf, buf+1, &msize);
+	cclog((n == 1) && (msize == sizeof(int)), "Attribution of the heap: %d %ld\n", n, msize);
+	n = csc_tmem_attrib(buf, p, &msize);
+	cclog((n == 1) && (msize == 0), "Attribution of the first block: %d %ld\n", n, msize);
+
+	csc_tmem_free(buf, p);
+	n = csc_tmem_attrib(buf, p, &msize);
+	cclog((n == 0) && (msize == 0), "Attribution of the freed block: %d %ld\n", n, msize);
+
+	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
+	p = csc_tmem_init(buf, sizeof(int)*4+1);
+	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*4+1);
+	if (p == NULL) return 0;
+
+	p = csc_tmem_alloc(buf, 1);
+	cclog(p == buf+2, "Allocated memory %p %x\n", p, buf[1]);
+	cclog(TMEM_NEXT(buf+1) == buf+3, "Next memory %p\n", TMEM_NEXT(buf+1));
+	cclog(TMEM_NEXT(buf+3) == TMEM_NEXT(buf), "End of the memory %p\n", TMEM_NEXT(buf+3));
+	n = csc_tmem_attrib(buf, buf+1, &msize);
+	cclog((n == 1) && (msize == sizeof(int)*3), "Attribution of the heap: %d %ld\n", n, msize);
+	n = csc_tmem_attrib(buf, p, &msize);
+	cclog((n ==1) && (msize == sizeof(int)), "Attribution of the allocated memory: %d %ld\n", n, msize);
+	n = csc_tmem_attrib(buf, buf+4, &msize);
+	cclog((n == 0) && (msize == 0), "Attribution of the free memory: %d %ld\n", n, msize);
+
+	cclog(csc_tmem_free(NULL, NULL) == -1, "Free NULL heap: %d\n", csc_tmem_free(NULL, NULL));
+	cclog(csc_tmem_free(buf, NULL) == -3, "Free NULL memory: %d\n", csc_tmem_free(buf, NULL));
+
+	csc_tmem_free(buf, p);
+	n = csc_tmem_attrib(buf, p, &msize);
+	cclog((n == 0) && (msize == sizeof(int)*2), "Attribution of the freed memory: %d %ld\n", n, msize);
+	cclog(TMEM_NEXT(buf+1) == TMEM_NEXT(buf), "The next address of the freed memory: %p\n", TMEM_NEXT(buf+1));
+
+	n = csc_tmem_alloc(buf, 0) ? 1 : 0;
+	n += csc_tmem_alloc(buf, 0) ? 1 : 0;
+	n += csc_tmem_alloc(buf, 0) ? 1 : 0;
+	cclog(n == 3, "Allocated 3 empty memories: ");
+	csc_tmem_free(buf, buf+3);
+	csc_tmem_scan(buf, memc, memc);
+	cslog("\n");
+	return 0;
+}
+
+static int tmem_unittest_nonempty_memory(int *buf)
+{
+	int	n, *p;
+	size_t	msize;
+
+	p = csc_tmem_init(buf, sizeof(int)*2+1);
+	cclog(p == NULL, "Create heap with %d bytes (%p): %d minimum.\n", 
+			sizeof(int)*2+1, p, sizeof(int)*3);
+
+	p = csc_tmem_init(buf, sizeof(int)*3+1);
+	cclog(p == buf, "Create heap with %d bytes (%p)\n", sizeof(int)*3+1, p);
+	if (p == NULL) return 0;
+
+	p = csc_tmem_alloc(buf, 0);
+	cclog(p == NULL, "Allocating 0 byte from the heap: %p\n", p);
+
+	p = csc_tmem_alloc(buf, 1);
+	cclog(p != NULL, "Allocating 1 byte from the heap: %p\n", p);
+	n = csc_tmem_attrib(buf, p, &msize);
+	cclog((n == 1) && (msize == sizeof(int)), 
+			"Verify memory %p: %s %ld bytes\n", p, n?"used":"free", msize);
+	cclog(TMEM_NEXT(buf) == TMEM_NEXT(buf+1), "Verify the end of the heap: %p\n", TMEM_NEXT(buf+1));
+	return 0;
+}
+
 int csc_tmem_unittest(void)
 {
 	int	i, buf[256];
 	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
-	char	*p;
-	size_t	msize;
-
-	int memc(int *mb)
-	{
-		printf("(%p:%d:%lu)", mb, TMEM_TEST_USED(*mb)?1:0, TMEM_BYTES(*mb));
-		return 0;
-	}
 
 	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
-		printf("ODD Parity 0x%08x: 0x%08x 0x%08x\n", plist[i], 
+		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),
+				"ODD Parity 0x%08x: 0x%08x 0x%08x\n", plist[i], 
 				tmem_parity(plist[i]),
 				tmem_parity(tmem_parity(plist[i])));
-		printf("ODD Parity16   0x%04x: 0x%04x 0x%04x\n", 
+		cclog(tmem_parity16((short) plist[i]) == tmem_parity16(tmem_parity16((short)plist[i])),
+				"ODD Parity16   0x%04x: 0x%04x 0x%04x\n", 
 				(unsigned short) plist[i], 
 				(unsigned short) tmem_parity16((short) plist[i]),
 				(unsigned short) tmem_parity16(tmem_parity16((short)plist[i])));
 	}
 
-	/* create a smallest heap where has only one heap control and 
-	 * one block control */
-	if ((i = csc_tmem_init(buf, sizeof(int)*2+1)) < 0) {
-		printf("Heap failed %d\n", i);
-		return 0;
-	}
-	printf("TMEM_SIZE of the heap: %d (1)\n", TMEM_SIZE(buf[0]));
-	printf("TMEM_NEXT of the heap: %p\n", TMEM_NEXT(buf));
-	printf("TMEM_SIZE of the first block: %d (0)\n", TMEM_SIZE(buf[1]));
-	printf("TMEM_NEXT of the first block: %p (%p)\n", TMEM_NEXT(&buf[1]), TMEM_NEXT(buf));
-
-	p = csc_tmem_alloc(buf, 1);
-	if (p == NULL) {
-		printf("Can not allocate 1 byte from the full heap\n");
-	}
-
-	p = csc_tmem_alloc(buf, 0);
-	if (p != NULL) {
-		printf("Can allocate 0 byte from the full heap %p\n", p);
-	}
-	printf("TMEM_SIZE of the first block: %d (0)\n", TMEM_SIZE(buf[1]));
-
-	i = csc_tmem_attrib(buf, &buf[1], &msize);
-	printf("Attribution of the heap: %d %ld (1 4)\n", i, msize);
-	i = csc_tmem_attrib(buf, p, &msize);
-	printf("Attribution of the first block: %d %ld (1 0)\n", i, msize);
-
-	csc_tmem_free(buf, p);
-	i = csc_tmem_attrib(buf, p, &msize);
-	printf("Attribution of the freed block: %d %ld (0 0)\n", i, msize);
-
-	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
-	if (csc_tmem_init(buf, sizeof(int)*4+1) < 0) {
-		printf("Heap failed\n");
-		return 0;
-	}
-	p = csc_tmem_alloc(buf, 1);
-	printf("Allocated memory %p (%p) %x\n", p, &buf[2], buf[1]);
-	printf("Next memory %p (%p)\n", TMEM_NEXT(&buf[1]), &buf[3]);
-	printf("End of the memory %p (%p)\n", TMEM_NEXT(&buf[3]), TMEM_NEXT(buf));
-	i = csc_tmem_attrib(buf, &buf[1], &msize);
-	printf("Attribution of the heap: %d %ld (1 12)\n", i, msize);
-	i = csc_tmem_attrib(buf, p, &msize);
-	printf("Attribution of the allocated memory: %d %ld (1 4)\n", i, msize);
-	i = csc_tmem_attrib(buf, &buf[4], &msize);
-	printf("Attribution of the free memory: %d %ld (0 0)\n", i, msize);
-
-	printf("Free NULL memory: %d %d\n", csc_tmem_free(NULL, NULL), csc_tmem_free(buf, NULL));
-	csc_tmem_free(buf, p);
-	i = csc_tmem_attrib(buf, p, &msize);
-	printf("Attribution of the freed memory: %d %ld (0 8)\n", i, msize);
-	printf("The next address of the freed memory: %p %p\n", TMEM_NEXT(&buf[1]), TMEM_NEXT(buf));
-
-	printf("Allocating 3 empty memory: %p %p %p\n", csc_tmem_alloc(buf, 0),
-			csc_tmem_alloc(buf, 0), csc_tmem_alloc(buf, 0));
-	csc_tmem_free(buf, &buf[3]);
-	csc_tmem_scan(buf, memc, memc);
-	printf("\n");
-
-	/* create a smallest heap */
-	tmem_config = CSC_MEM_FIRST_FIT;
-	if ((i = csc_tmem_init(buf, sizeof(int)*2+1)) < 0) {
-		printf("Minimum size of heap must be 3-int higher\n");
-	}
-	if ((i = csc_tmem_init(buf, sizeof(int)*3+1)) < 0) {
-		printf("Heap create failed.\n");
-		return 0;
-	}
-
+	cclog(-1, "Testing memory function supports empty allocation\n");
+	tmem_config |= CSC_MEM_ZERO;
+	tmem_unittest_empty_memory(buf);
+	
+	cclog(-1, "Testing memory function doesn't support empty allocation\n");
+	tmem_config = CSC_MEM_DEFAULT;
+	tmem_unittest_nonempty_memory(buf);
 	return 0;
 }
 #endif

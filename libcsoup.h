@@ -443,14 +443,14 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MEM_CLEAN		0x10	/* fill allocated memory with 0 */
 #define CSC_MEM_ZERO		0x20	/* allow allocating empty memory */
 
-#define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN | CSC_MEM_ZERO)
+#define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN)
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 /* see csc_tmem.c */
-int csc_tmem_init(void *heap, size_t len);
+void *csc_tmem_init(void *heap, size_t len);
 void *csc_tmem_alloc(void *heap, size_t n);
 int csc_tmem_free(void *heap, void *mem);
 void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*));
