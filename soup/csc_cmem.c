@@ -66,13 +66,15 @@ static int cmem_verify(void *heap, CMEM *cm);
 static inline void cmem_set_crc(void *mb, int len)
 {
 	register char	*p = mb;
+	p[1] = (char) CMEM_MAGIC;
 	p[0] = (char) csc_crc8(0, p+1, len-1);
 }
 
 static inline int cmem_check(void *mb, int len)
 {
 	register char	*p = mb;
-	return (p[1] == (char) CMEM_MAGIC) && (p[0] == (char) csc_crc8(0, p+1, len-1));
+	return (p[1] == (char) CMEM_MAGIC) && 
+		(p[0] == (char) csc_crc8(0, p+1, len-1));
 }
 
 
@@ -96,7 +98,6 @@ void *csc_cmem_init(void *heap, size_t len, int flags)
 	cm = (CMEM *)heap;
 	cm->prev = cm->next = NULL;
 	cm->size = len - sizeof(CMEM);
-	cm->magic[1] = (char) CMEM_MAGIC;
 	cm->magic[2] = (char) CMEM_FREE;
 	cm->magic[3] = (char) flags;
 	cmem_set_crc(cm, sizeof(CMEM));
@@ -112,7 +113,6 @@ void *csc_cmem_init(void *heap, size_t len, int flags)
 	hman->al_num  = 1;
 	hman->fr_size = cm->size;
 	hman->fr_num  = 1;
-	hman->magic[1] = (char) CMEM_MAGIC;
 	hman->magic[2] = hman->magic[3] = 0;
 	cmem_set_crc(hman, sizeof(CMHEAP));
 	return heap;
@@ -196,10 +196,14 @@ void *csc_cmem_alloc(void *heap, size_t n)
 	} else {
 		hman->al_size += found->size;
 		hman->al_num++;
-		hman->fr_size -= found->size + next->size + sizeof(CMEM);
+		hman->fr_size -= found->size + sizeof(CMEM);
 		hman->next = hman->next < next ? next : hman->next;
 	}
 	cmem_set_crc(hman, sizeof(CMHEAP));
+
+	if (config & CSC_MEM_CLEAN) {
+		memset(found + 1, 0, n);
+	}
 	return (void*)(found+1);
 }
 
@@ -215,6 +219,7 @@ int csc_cmem_free(void *heap, void *mem)
 	}
 
 	/* update the freed size */
+	cm->magic[2] = CMEM_FREE;
 	hman = (CMHEAP*)(((CMEM*)heap) + 1);
 	hman->al_size -= cm->size;
 	hman->al_num--;
@@ -226,6 +231,10 @@ int csc_cmem_free(void *heap, void *mem)
 	if (other && !CMEM_OWNED(other)) {
 		cm->size += other->size + sizeof(CMEM);
 		cm->next = other->next;
+		if (other->next) {
+			other->next->prev = cm;
+			cmem_set_crc(other->next, sizeof(CMEM));
+		}
 		hman->fr_size += sizeof(CMEM);
 		hman->fr_num--;
 		if (hman->next == other) {
@@ -233,11 +242,15 @@ int csc_cmem_free(void *heap, void *mem)
 		}
 	}
 
-	/* try yo up merge the free block */
+	/* try to up merge the free block */
 	other = cm->prev;
 	if (other && !CMEM_OWNED(other)) {
 		other->size += cm->size + sizeof(CMEM);
 		other->next = cm->next;
+		if (cm->next) {
+			cm->next->prev = other;
+			cmem_set_crc(cm->next, sizeof(CMEM));
+		}
 		hman->fr_size += sizeof(CMEM);
 		hman->fr_num--;
 		if (hman->next == cm) {
@@ -250,19 +263,22 @@ int csc_cmem_free(void *heap, void *mem)
 	return 0;
 }
 
-int csc_cmem_attrib(void *heap, void *mem, size_t *msize)
+size_t csc_cmem_attrib(void *heap, void *mem, int *state)
 {
 	CMEM	*cm;
 	int	rc;
 
 	cm = mem ? ((CMEM*)mem) -1 : NULL;
 	if ((rc = cmem_verify(heap, cm)) < 0) {
-		return rc;
+		if (state) {
+			*state = rc;
+		}
+		return (size_t)-1;
 	}
-	if (msize) {
-		*msize = cm->size - CMEM_PADDED(cm);
+	if (state) {
+		*state = CMEM_OWNED(cm) ? 1 : 0;
 	}
-	return CMEM_OWNED(cm);
+	return cm->size - CMEM_PADDED(cm);
 }
 
 /* when calling cmeme_alloc(), assume cm is valid and cm->size >= size 
@@ -284,7 +300,6 @@ static CMEM *cmeme_alloc(CMEM *cm, size_t size, int config)
 		nb->prev = cm;
 		nb->next = cm->next;
 		nb->size = nlen - sizeof(CMEM);
-		nb->magic[1] = (char) CMEM_MAGIC;
 		nb->magic[2] = (char) CMEM_FREE;
 		nb->magic[3] = 0;
 		cmem_set_crc(nb, sizeof(CMEM));
@@ -328,6 +343,8 @@ static int cmem_verify(void *heap, CMEM *mblock)
 #ifdef	CFG_UNIT_TEST
 #include "libcsoup_debug.h"
 
+#define CMEM_MDATA(n,k)	(unsigned char)(((CMEM*)(n))->magic[k])
+
 static int cmem_heap_state(void *heap, int used, int freed)
 {
 	CMHEAP	*hman = (CMHEAP*)(((CMEM*)heap) + 1);
@@ -345,7 +362,7 @@ int csc_cmem_unittest(void)
 	CMEM	*cm;
 	CMHEAP	*hman;
 	size_t	msize;
-	char	*p;
+	char	*p[8];
 
 	int used(void *cm)
 	{
@@ -357,6 +374,9 @@ int csc_cmem_unittest(void)
 		s[2]++; s[3] += ((CMEM*)cm)->size; return 0;
 	}
 
+	/********************************************************************
+	 * testing the empty heap
+	 *******************************************************************/
 	cclog(-1, "Size of Heap manager: %d; size of memory manager: %d\n", 
 			sizeof(CMHEAP), sizeof(CMEM));
 
@@ -370,8 +390,7 @@ int csc_cmem_unittest(void)
 	cclog(cm != NULL, "Emtpy allocation is enabled: %d\n", msize);
 	if (cm == NULL) return 0;
 	hman = (CMHEAP*)(cm+1);
-	cclog(cm->size == sizeof(CMHEAP) && (hman->fr_size == 0),
-			"Emtpy heap created: %p %d\n", cm, (int)hman->fr_size);
+	cclog(-1, "Emtpy heap created: %p %d\n", cm, (int)hman->fr_size);
 
 	s[0] = cmem_verify(cm, cm);
 	cclog(s[0] == 0, "Verification Heap only: %d\n", s[0]);
@@ -380,21 +399,29 @@ int csc_cmem_unittest(void)
 	s[0] = cmem_verify(cm->next, cm->next);
 	cclog(s[0] != 0, "Verification Heap error: %d\n", s[0]);
 
-	p = csc_cmem_alloc(cm, 0);
-	cclog(p!=NULL, "Allocated 0 byte from the empty heap: %p\n", p);
+	p[0] = csc_cmem_alloc(cm, 0);
+	cclog(p[0]!=NULL, "Allocated 0 byte from the empty heap: %p\n", p[0]);
 	cclog(cmem_heap_state(cm, 2, 0), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	s[0] = csc_cmem_free(cm, p[0]);
+	cclog(s[0] == 0, "Free 0 byte from the empty heap: %d\n", s[0]);
+	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
 			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
 
 	msize = sizeof(CMHEAP) + sizeof(CMEM) + sizeof(CMEM) + 1;
 	cm = csc_cmem_init(buf, msize, CSC_MEM_DEFAULT);
 	cclog(cm == NULL, "Emtpy allocation is disabled: %d\n", msize);
 
+	/********************************************************************
+	 * testing the minimum heap
+	 *******************************************************************/
 	msize = sizeof(CMHEAP) + sizeof(CMEM) + sizeof(CMEM) + sizeof(int);
 	cm = csc_cmem_init(buf, msize, CSC_MEM_DEFAULT);
 	cclog(cm != NULL, "The minimum heap is created: %d\n", msize);
 	if (cm == NULL) return 0;
 	hman = (CMHEAP*)(cm+1);
-	cclog(hman->fr_size == sizeof(int), "The minimum heap size: %d\n", (int)hman->fr_size);
+	cclog(-1, "The minimum heap size: %d\n", (int)hman->fr_size);
 
 	memset(s, 0, sizeof(s));
 	csc_cmem_scan(cm, used, loose);
@@ -402,10 +429,82 @@ int csc_cmem_unittest(void)
 	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
 			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
 
-	s[0] = csc_cmem_attrib(cm, cm+1, &msize);
+	msize = csc_cmem_attrib(cm, cm+1, s);
 	cclog(s[0]&&(msize==sizeof(CMHEAP)), "Memory attribute: Heap %s %d\n", s[0]?"used":"free", msize);
-	s[0] = csc_cmem_attrib(cm, cm->next+1, &msize);
+	msize = csc_cmem_attrib(cm, cm->next+1, s);
 	cclog(!s[0]&&(msize==sizeof(int)), "Memory attribute: Memory %s %d\n", s[0]?"used":"free", msize);
+
+	p[0] = csc_cmem_alloc(cm, 0);
+	cclog(p[0] == NULL, "Not allow to allocate empty memory: %p\n", p[0]);
+
+	p[0] = csc_cmem_alloc(cm, 1);
+	cclog(p[0] != NULL, "Try to allocate 1 byte: %p\n", p[0]);
+	msize = csc_cmem_attrib(cm, p[0], s);
+	cclog(s[0]&&(msize==1), "Memory attribute: Memory %s %d\n", s[0]?"used":"free", msize);
+
+	p[1] = p[0] - sizeof(CMEM);
+	cclog(CMEM_PADDED(p[1]) == 3, "Usage Flags and paddning size: %x\n", CMEM_MDATA(p[1], 2));
+	cclog(cmem_heap_state(cm, 2, 0), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	s[0] = csc_cmem_free(cm, p[0]);
+	cclog(s[0] == 0, "Free the 1 byte memory: %d\n", s[0]);
+	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	/********************************************************************
+	 * testing the free function in minimum heap
+	 *******************************************************************/
+	cm = csc_cmem_init(buf, sizeof(buf), CSC_MEM_DEFAULT);
+	if (cm == NULL) return 0;
+	hman = (CMHEAP*)(cm+1);
+	cclog(-1, "The test heap is created: %p %d\n", cm, (int)hman->fr_size);
+
+	/* testing down-merge the free space */
+	p[0] = csc_cmem_alloc(cm, 12);
+	cclog(p[0] != NULL, "Allocated %p: %ld\n", p[0], csc_cmem_attrib(cm, p[0], NULL));
+	p[1] = csc_cmem_alloc(cm, 24);
+	cclog(p[1] != NULL, "Allocated %p: %ld\n", p[1], csc_cmem_attrib(cm, p[1], NULL));
+	p[2] = csc_cmem_alloc(cm, 36);
+	cclog(p[2] != NULL, "Allocated %p: %ld\n", p[2], csc_cmem_attrib(cm, p[2], NULL));
+	p[3] = csc_cmem_alloc(cm, 16);
+	cclog(p[3] != NULL, "Allocated %p: %ld\n", p[3], csc_cmem_attrib(cm, p[3], NULL));
+	cclog(cmem_heap_state(cm, 5, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+
+	/* create a hole: USED FREE USED USED FREE */
+	s[0] = csc_cmem_free(cm, p[1]);
+	msize = csc_cmem_attrib(cm, p[1], &s[1]);
+	cclog(s[0] == 0 && s[1] == 0, "Freed %p: %ld (%s)\n", p[1], msize, s[1]?"used":"free");
+	cclog(cmem_heap_state(cm, 4, 2), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	/* down merge the first two memory: (FREE FREE) USED USED FREE */
+	s[0] = csc_cmem_free(cm, p[0]);
+	msize = csc_cmem_attrib(cm, p[0], &s[1]);
+	cclog(s[0] == 0 && s[1] == 0, "Down merge %p: %ld (%s)\n", p[0], msize, s[1]?"used":"free");
+	cclog(cmem_heap_state(cm, 3, 2), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	/* up merge the three memories: (FREE FREE FREE) USED FREE */
+	s[0] = csc_cmem_free(cm, p[2]);
+	msize = csc_cmem_attrib(cm, p[0], &s[1]);
+	cclog(s[0] == 0 && s[1] == 0, "Up merge %p: %ld (%s)\n", p[2], msize, s[1]?"used":"free");
+	cclog(cmem_heap_state(cm, 2, 2), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	/* run a scanner to verify the result */
+	memset(s, 0, sizeof(s));
+	csc_cmem_scan(cm, used, loose);
+	cclog(s[0]==2 && s[2]==2, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
+
+	/* tri-merge all memories: (FREE FREE FREE FREE FREE) */
+	s[0] = csc_cmem_free(cm, p[3]);
+	msize = csc_cmem_attrib(cm, p[0], &s[1]);
+	cclog(s[0] == 0 && s[1] == 0, "Tri-merge %p: %ld (%s)\n", p[0], msize, s[1]?"used":"free");
+	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
 
 	return 0;
 }

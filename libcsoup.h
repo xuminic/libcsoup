@@ -459,21 +459,21 @@ void *csc_tmem_init(void *heap, size_t len);
 void *csc_tmem_alloc(void *heap, size_t n);
 int csc_tmem_free(void *heap, void *mem);
 void *csc_tmem_scan(void *heap, int (*used)(int*), int (*loose)(int*));
-int csc_tmem_attrib(void *heap, void *mem, size_t *msize);
+size_t csc_tmem_attrib(void *heap, void *mem, int *state);
 
 /* see csc_cmem.c */
 void *csc_cmem_init(void *heap, size_t len, int flags);
 void *csc_cmem_alloc(void *heap, size_t n);
 int csc_cmem_free(void *heap, void *mem);
 void *csc_cmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
-int csc_cmem_attrib(void *heap, void *mem, size_t *msize);
+size_t csc_cmem_attrib(void *heap, void *mem, int *state);
 
 /* see csc_bmem.c */
 void *csc_bmem_init(void *heap, size_t len, int flags);
 void *csc_bmem_alloc(void *heap, size_t n);
 int csc_bmem_free(void *heap, void *mem);
 void *csc_bmem_scan(void *heap, int (*used)(int*), int (*loose)(int*));
-int csc_bmem_attrib(void *heap, void *mem, size_t *msize);
+size_t csc_bmem_attrib(void *heap, void *mem, int *state);
 
 #ifdef __cplusplus
 } // __cplusplus defined.

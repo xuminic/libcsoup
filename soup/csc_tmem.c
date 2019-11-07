@@ -299,31 +299,30 @@ int csc_tmem_free(void *heap, void *mem)
 
    \param[in]  heap the memory heap for allocation.
    \param[in]  mem the memory block.
-   \param[out] msize the size of the memory block
+   \param[out] state the state of the memory block. 0=free 1=used
+               CSC_MERR_INIT memory heap not initialized
+	       CSC_MERR_BROKEN memory block corrupted
+	       CSC_MERR_RANGE memory out of range
 
-   \return    0 free memory block
-              1 used memory block
-              -1 memory heap not initialized
-	      -2 memory block corrupted
-	      -3 memory out of range
+   \return    size of memory block without padding,
+              or (size_t)-1 when error
 */
-int csc_tmem_attrib(void *heap, void *mem, size_t *msize)
+size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 {
 	int	rc, *mb = (int*) mem;
 
 	mb -= mb ? 1 : 0;
 	if ((rc = tmem_verify(heap, mb)) < 0) {
+		if (state) {
+			*state = rc;
+		}
 		return rc;	/* memory heap not available */
 	}
 	
-	if (msize) {
-		*msize = (size_t)TMEM_BYTES(*mb);
+	if (state) {
+		*state = TMEM_TEST_USED(*mb) ? 1 : 0;
 	}
-
-	if (TMEM_TEST_USED(*mb)) {
-		return 1;	/* used memory block */
-	}
-	return 0;		/* free memory block */
+	return (size_t)TMEM_BYTES(*mb);
 }
 
 /* applying odd parity so 15 (16-bit) or 31 (32-bit) 1-bits makes MSB[1]=0,
@@ -438,13 +437,13 @@ static int tmem_unittest_empty_memory(int *buf)
 	cclog(p != NULL, "Can allocate 0 byte from the full heap %p\n", p);
 	cclog(TMEM_SIZE(buf[1]) == 0, "TMEM_SIZE of the first block: %d\n", TMEM_SIZE(buf[1]));
 
-	n = csc_tmem_attrib(buf, buf+1, &msize);
+	msize = csc_tmem_attrib(buf, buf+1, &n);
 	cclog((n == 1) && (msize == sizeof(int)), "Attribution of the heap: %d %ld\n", n, msize);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 1) && (msize == 0), "Attribution of the first block: %d %ld\n", n, msize);
 
 	csc_tmem_free(buf, p);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 0) && (msize == 0), "Attribution of the freed block: %d %ld\n", n, msize);
 
 	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
@@ -456,15 +455,15 @@ static int tmem_unittest_empty_memory(int *buf)
 	cclog(p == buf+2, "Allocated memory %p %x\n", p, buf[1]);
 	cclog(TMEM_NEXT(buf+1) == buf+3, "Next memory %p\n", TMEM_NEXT(buf+1));
 	cclog(TMEM_NEXT(buf+3) == TMEM_NEXT(buf), "End of the memory %p\n", TMEM_NEXT(buf+3));
-	n = csc_tmem_attrib(buf, buf+1, &msize);
+	msize = csc_tmem_attrib(buf, buf+1, &n);
 	cclog((n == 1) && (msize == sizeof(int)*3), "Attribution of the heap: %d %ld\n", n, msize);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n ==1) && (msize == sizeof(int)), "Attribution of the allocated memory: %d %ld\n", n, msize);
-	n = csc_tmem_attrib(buf, buf+4, &msize);
+	msize = csc_tmem_attrib(buf, buf+4, &n);
 	cclog((n == 0) && (msize == 0), "Attribution of the free memory: %d %ld\n", n, msize);
 
 	csc_tmem_free(buf, p);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 0) && (msize == sizeof(int)*2), "Attribution of the freed memory: %d %ld\n", n, msize);
 	cclog(TMEM_NEXT(buf+1) == TMEM_NEXT(buf), "The next address of the freed memory: %p\n", TMEM_NEXT(buf+1));
 
@@ -506,13 +505,13 @@ static int tmem_unittest_nonempty_memory(int *buf)
 
 	p = csc_tmem_alloc(buf, 1);
 	cclog(p != NULL, "Allocating 1 byte from the heap: %p\n", p);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 1) && (msize == sizeof(int)), 
 			"Verify memory %p: %s %ld bytes\n", p, n?"used":"free", msize);
 	cclog(TMEM_NEXT(buf) == TMEM_NEXT(buf+1), "Verify the end of the heap: %p\n", TMEM_NEXT(buf+1));
 
 	csc_tmem_free(buf, p);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 0) && (msize == 4), "Attribution of the freed block: %d %ld\n", n, msize);
 
 	/* create heap with 3 memory block: HEAP+MB0+PL0+MB1+PL1+MB2+PL2 */
@@ -528,10 +527,10 @@ static int tmem_unittest_nonempty_memory(int *buf)
 	cclog((n == 3) && !TMEM_TEST_USED(buf[3]), "Create a memory hole in the middle\n");
 
 	csc_tmem_free(buf, buf+2);
-	n = csc_tmem_attrib(buf, buf+2, &msize);
+	msize = csc_tmem_attrib(buf, buf+2, &n);
 	cclog((n == 0) && TMEM_SIZE(buf[1]) == 3, "Freed: down-merged the memory hole. [%d]\n", TMEM_SIZE(buf[1]));
 	csc_tmem_free(buf, buf+6);
-	n = csc_tmem_attrib(buf, buf+2, &msize);
+	msize = csc_tmem_attrib(buf, buf+2, &n);
 	cclog((n == 0) && TMEM_SIZE(buf[1]) == 5, "Freed: up-merged the memory hole. [%d]\n", TMEM_SIZE(buf[1]));
 
 	/* testing merging: create a hole in middle  */
@@ -542,10 +541,10 @@ static int tmem_unittest_nonempty_memory(int *buf)
 	cclog((n == 3) && !TMEM_TEST_USED(buf[3]), "Create a memory hole in the middle\n");
 
 	csc_tmem_free(buf, buf+6);
-	n = csc_tmem_attrib(buf, buf+4, &msize);
+	msize = csc_tmem_attrib(buf, buf+4, &n);
 	cclog((n == 0) && TMEM_SIZE(buf[3]) == 3, "Freed: up-merged the memory hole. [%d]\n", TMEM_SIZE(buf[3]));
 	csc_tmem_free(buf, buf+2);
-	n = csc_tmem_attrib(buf, buf+2, &msize);
+	msize = csc_tmem_attrib(buf, buf+2, &n);
 	cclog((n == 0) && TMEM_SIZE(buf[1]) == 5, "Freed: down-merged the memory hole. [%d]\n", TMEM_SIZE(buf[1]));
 
 	/* testing merging: create a hole in middle  */
@@ -557,13 +556,13 @@ static int tmem_unittest_nonempty_memory(int *buf)
 	cclog((n == 3) && TMEM_TEST_USED(buf[3]), "Create a memory island in the middle\n");
 
 	csc_tmem_free(buf, buf+4);
-	n = csc_tmem_attrib(buf, buf+2, &msize);
+	msize = csc_tmem_attrib(buf, buf+2, &n);
 	cclog((n == 0) && TMEM_SIZE(buf[1]) == 5, "Freed: tri-merged the memory hole. [%d]\n", TMEM_SIZE(buf[1]));
 
 	/* testing split unit */
 	csc_tmem_alloc(buf, 1);
 	p = csc_tmem_alloc(buf, 5);
-	n = csc_tmem_attrib(buf, p, &msize);
+	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 1) && (msize == sizeof(int)*3), "Do not split if the rest memory too small. [%ld]\n", msize);
 	return 0;
 }
