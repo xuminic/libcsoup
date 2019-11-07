@@ -43,7 +43,7 @@ int crc_main(void *rtime, int argc, char **argv)
 	c32 = csc_crc32(0, testbuf, sizeof(testbuf));
 	c16 = csc_crc16(0, testbuf, sizeof(testbuf));
 	cci = csc_crc_ccitt(0, testbuf, sizeof(testbuf));
-	c8  = csc_crc8(0, testbuf, sizeof(testbuf));
+	c8  = csc_crc8(-1, testbuf, sizeof(testbuf));
 	CDB_SHOW(("RUN1: CRC32=%X  CRC16=%X  CRC-CCITT=%X  CRC8=%X\n", 
 			c32, c16, cci, c8));
 

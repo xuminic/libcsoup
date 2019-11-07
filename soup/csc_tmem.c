@@ -90,6 +90,10 @@ void *csc_tmem_init(void *hmem, size_t len)
 {
 	int	*heap = (int*) hmem;
 
+	if (hmem == NULL) {
+		return hmem;	/* CSC_MERR_INIT */
+	}
+
 	/* change size unit to per-int; the remains will be cut off  */
 	len /= sizeof(int);	
 
@@ -100,10 +104,10 @@ void *csc_tmem_init(void *hmem, size_t len)
 	/* Though CSC_MEM_ZERO is practically useless, supporting CSC_MEM_ZERO
 	 * in program is for the integrity of the memory logic */
 	if ((len < 1) || (len > (UINT_MAX >> 2))) {
-		return NULL;	/* memory out of range */
+		return NULL;	/* CSC_MERR_RANGE */
 	}
 	if ((len == 1) && !(tmem_config & CSC_MEM_ZERO)) {
-		return NULL;	/* no support empty allocation */
+		return NULL;	/* CSC_MERR_RANGE: no support empty allocation */
 	}
 
 	/* create the heap management */
@@ -119,7 +123,7 @@ void *csc_tmem_init(void *hmem, size_t len)
 
    \param[in]  heap the memory heap for allocation.
    \param[in]  used the callback function when find a piece of used memory
-   \param[in]  fresh the callback function when find a piece of free memory
+   \param[in]  loose the callback function when find a piece of free memory
 
    \return     NULL if successfully scanned the memory chain. If the memory
                chain is corrupted, it returns a pointer to the broken point.
@@ -127,7 +131,7 @@ void *csc_tmem_init(void *hmem, size_t len)
    \remark The prototype of the callback functions are: int func(int *)
            The scan process can be broken if func() returns non-zero.
 */
-void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*))
+void *csc_tmem_scan(void *heap, int (*used)(int*), int (*loose)(int*))
 {
 	int	*mb;
 
@@ -143,7 +147,7 @@ void *csc_tmem_scan(void *heap, int (*used)(int*), int (*fresh)(int*))
 				break;
 			}
 		} else {
-			if (fresh && fresh(mb)) {
+			if (loose && loose(mb)) {
 				break;
 			}
 		}
@@ -169,7 +173,7 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	int	 *found, *next;
 	int	unum = (int)((n + sizeof(int) - 1) / sizeof(int));
 	
-	int fresh(int *mb)
+	int loose(int *mb)
 	{
 		if (TMEM_SIZE(*mb) >= unum) {
 			if (found == NULL) {
@@ -194,22 +198,22 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	}
 
 	if (tmem_verify(heap, heap) < 0) {
-		return NULL;	/* memory heap not available */
+		return NULL;	/* CSC_MERR_INIT: memory heap not available */
 	}
 
 	/* make sure the request is NOT out of size */
 	if (unum > TMEM_SIZE(*((int*)heap))) {
-		return NULL;	/* request out of size */
+		return NULL;	/* CSC_MERR_LOWMEM */
 	} else if (!unum && !(tmem_config & CSC_MEM_ZERO)) {
-		return NULL;	/* not support empty allocation */
+		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
 	found = next = NULL;
-	if (csc_tmem_scan(heap, NULL, fresh)) {
-		return NULL;	/* chain broken */
+	if (csc_tmem_scan(heap, NULL, loose)) {
+		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
 	if (found == NULL) {
-		return NULL;	/* out of memory */
+		return NULL;	/* CSC_MERR_LOWMEM: out of memory */
 	}
 
 	n = tmem_config & CSC_MEM_ZERO ? 0 : 1;	/* reuse the 'n' for size test */
@@ -263,7 +267,7 @@ int csc_tmem_free(void *heap, void *mem)
 		}
 		return 0;
 	}
-	int fresh(int *mb)
+	int loose(int *mb)
 	{
 		last = mb; return 0;
 	}
@@ -275,13 +279,13 @@ int csc_tmem_free(void *heap, void *mem)
 	}
 
 	last = found = NULL;
-	if (csc_tmem_scan(heap, used, fresh)) {
-		return -2;	/* memory chain broken */
+	if (csc_tmem_scan(heap, used, loose)) {
+		return CSC_MERR_BROKEN;	/* memory chain broken */
 	}
 
 	if (found == NULL) {
 		/* BE WARE: To free a free memory returns -3 "not found" */
-		return -3;	/* memory not found */
+		return CSC_MERR_RANGE;	/* memory not found */
 	}
 
 	/* try to up-merge the previous memory block */
@@ -359,16 +363,16 @@ static int tmem_parity(int cw)
 static int tmem_verify(void *heap, int *mb)
 {
 	if (heap == NULL) {
-		return -1;
+		return CSC_MERR_INIT;
 	}
 	if (*((int*)heap) != tmem_parity(*((int*)heap))) {
-		return -1;	/* memory heap not available */
+		return CSC_MERR_INIT;	/* memory heap not available */
 	}
 	if (((void*)mb < heap) || (mb >= TMEM_NEXT(heap))) {
-		return -3;	/* memory out of range */
+		return CSC_MERR_RANGE;	/* memory out of range */
 	}
 	if (*mb != tmem_parity(*mb)) {
-		return -2;	/* memory block corrupted */
+		return CSC_MERR_BROKEN;	/* memory block corrupted */
 	}
 	return 0;
 }
@@ -573,12 +577,12 @@ static int tmem_unittest_memory_pattern(int *buf, int *rc)
 		u = (u << 4) | TMEM_SIZE(*mb); return 0;
 	}
 
-	int fresh(int *mb)
+	int loose(int *mb)
 	{
 		f = (f << 4) | TMEM_SIZE(*mb); return 0;
 	}
 
-	csc_tmem_scan(buf, used, fresh);
+	csc_tmem_scan(buf, used, loose);
 	if (rc) {
 		*rc = u;
 	}
@@ -621,9 +625,9 @@ static int tmem_unittest_misc_memory(int *buf)
 	if (p == NULL) return 0;
 
 	n = csc_tmem_free(NULL, NULL);
-	cclog(n == -1, "Free NULL heap: %d\n", n);
+	cclog(n == CSC_MERR_INIT, "Free NULL heap: %d\n", n);
 	n = csc_tmem_free(buf, NULL);
-	cclog(n == -3, "Free NULL memory: %d\n", n);
+	cclog(n == CSC_MERR_RANGE, "Free NULL memory: %d\n", n);
 
 	/* test the memory initial clean function */
 	tmem_config |= CSC_MEM_CLEAN;
@@ -634,7 +638,7 @@ static int tmem_unittest_misc_memory(int *buf)
 	/* double free test */
 	n = csc_tmem_free(buf, p);
 	k = csc_tmem_free(buf, p);
-	cclog(n == 0 && k == -3, "Memory is double freed. [%d]\n", k);
+	cclog(n == 0 && k == CSC_MERR_RANGE, "Memory is double freed. [%d]\n", k);
 
 	/* test the memory initial non-clean function */
 	tmem_config &= ~CSC_MEM_CLEAN;
@@ -694,5 +698,5 @@ int csc_tmem_unittest(void)
 	tmem_unittest_misc_memory(buf);
 	return 0;
 }
-#endif
+#endif	/* CFG_UNIT_TEST */
 
