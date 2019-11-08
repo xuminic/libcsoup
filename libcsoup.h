@@ -436,13 +436,27 @@ void *csc_pack_hex_index(void *pachex);
  * See csc_?mem.c: a group of memory management functions.
  * Definitions and functions for the memory management.
  ****************************************************************************/
+/* Bit 0-3: general settings */
 #define CSC_MEM_FIRST_FIT	0
 #define CSC_MEM_BEST_FIT	1
 #define CSC_MEM_WORST_FIT	2
 #define CSC_MEM_FITMASK		3
-#define CSC_MEM_CLEAN		0x10	/* fill allocated memory with 0 */
-#define CSC_MEM_ZERO		0x20	/* allow allocating empty memory */
+#define CSC_MEM_CLEAN		4	/* fill allocated memory with 0 */
+#define CSC_MEM_ZERO		8	/* allow allocating empty memory */
 #define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN)
+
+/* Bit 4-7: page size for bitmap management */
+#define CSC_MEM_PAGEMASK	0xf0
+#define CSC_MEM_PAGESIZE	64	/* Between 32 to 64k */
+
+/* Bit 8-11: extra memory for tracing allocation */
+/* The memory size is multiplied by pages size in Bit 4-7. */
+#define CSC_MEM_EXTRMASK	0xf00
+
+/* Bit 12-15: guarding area for debugging memory violation */
+/* The memory size is multiplied by pages size in Bit 4-7. */
+#define CSC_MEM_GURDMASK	0xf000
+
 
 #define CSC_MERR_LOWMEM		-1
 #define CSC_MERR_INIT		-2

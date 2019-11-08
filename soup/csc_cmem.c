@@ -1,5 +1,5 @@
 
-/*!\file       csc_tmem.c
+/*!\file       csc_cmem.c
    \brief      chained memory allocation plan
 
    The file supports a set of dynamic memory management in doubly linked list. 
@@ -42,14 +42,14 @@
 #define CMEM_PADDED(n)	((((CMEM*)(n))->magic[2]) & CMEM_PAD_MASK)
 
 typedef	struct	_CMEM	{
-	char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + CONFIG */
+	char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + CONFIG1 */
 	struct	_CMEM	*prev;
 	struct	_CMEM	*next;
 	size_t	size;		/* size of the payload in bytes */
 } CMEM;
 
 typedef	struct	_CMHEAP	{
-	char	magic[4];	/* CRC8 + MAGIC + RSV + RSV */
+	char	magic[4];	/* CRC8 + MAGIC + RSV + CONFIG2 */
 	struct	_CMEM	*prev;	/* point to the first memory block */
 	struct	_CMEM	*next;	/* point to the last memory block */
 	size_t	al_size;	/* total allocated size */
@@ -506,6 +506,65 @@ int csc_cmem_unittest(void)
 	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
 			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
 
+	/* maximum test */
+	msize = hman->fr_size + 1;
+	p[0] = csc_cmem_alloc(cm, msize);
+	cclog(p[0] == NULL, "Allocating %d: %p\n", msize, p[0]);
+	msize = hman->fr_size;
+	p[0] = csc_cmem_alloc(cm, msize);
+	cclog(p[0] != NULL, "Allocating %d: %p\n", msize, p[0]);
+	s[0] = csc_cmem_free(cm, p[0]);
+	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n",
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	/* general allocating and freeing */
+	p[0] = csc_cmem_alloc(cm, 12);
+	cclog(p[0] != NULL, "Allocated %p: %ld\n", p[0], csc_cmem_attrib(cm, p[0], NULL));
+	p[1] = csc_cmem_alloc(cm, 24);
+	cclog(p[1] != NULL, "Allocated %p: %ld\n", p[1], csc_cmem_attrib(cm, p[1], NULL));
+	p[2] = csc_cmem_alloc(cm, 36);
+	cclog(p[2] != NULL, "Allocated %p: %ld\n", p[2], csc_cmem_attrib(cm, p[2], NULL));
+	p[3] = csc_cmem_alloc(cm, 16);
+	cclog(p[3] != NULL, "Allocated %p: %ld\n", p[3], csc_cmem_attrib(cm, p[3], NULL));
+	p[4] = csc_cmem_alloc(cm, 12);
+	cclog(p[4] != NULL, "Allocated %p: %ld\n", p[4], csc_cmem_attrib(cm, p[4], NULL));
+	p[5] = csc_cmem_alloc(cm, 24);
+	cclog(p[5] != NULL, "Allocated %p: %ld\n", p[5], csc_cmem_attrib(cm, p[5], NULL));
+	p[6] = csc_cmem_alloc(cm, 36);
+	cclog(p[6] != NULL, "Allocated %p: %ld\n", p[6], csc_cmem_attrib(cm, p[6], NULL));
+	p[7] = csc_cmem_alloc(cm, 16);
+	cclog(p[7] != NULL, "Allocated %p: %ld\n", p[7], csc_cmem_attrib(cm, p[7], NULL));
+
+	/* run a scanner to verify the result */
+	memset(s, 0, sizeof(s));
+	csc_cmem_scan(cm, used, loose);
+	cclog(s[0]==9 && s[2]==1, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
+
+	/* free half of them */
+	s[0] = csc_cmem_free(cm, p[0]);
+	s[0] += csc_cmem_free(cm, p[2]);
+	s[0] += csc_cmem_free(cm, p[4]);
+	s[0] += csc_cmem_free(cm, p[6]);
+	cclog(s[0] == 0, "Free half of them\n");
+
+	/* run a scanner to verify the result */
+	memset(s, 0, sizeof(s));
+	csc_cmem_scan(cm, used, loose);
+	cclog(s[0]==5 && s[2]==5, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
+
+	/* free rest of them */
+	s[0] = csc_cmem_free(cm, p[1]);
+	s[0] += csc_cmem_free(cm, p[3]);
+	s[0] += csc_cmem_free(cm, p[5]);
+	s[0] += csc_cmem_free(cm, p[7]);
+	cclog(s[0] == 0, "Free rest of them\n");
+	cclog(cmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n",
+			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+
+	/* run a scanner to verify the result */
+	memset(s, 0, sizeof(s));
+	csc_cmem_scan(cm, used, loose);
+	cclog(s[0]==1 && s[2]==1, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
 	return 0;
 }
 
