@@ -28,6 +28,7 @@
 #ifdef	CFG_UNIT_TEST
 extern int csc_tmem_unittest(void);
 extern int csc_cmem_unittest(void);
+extern int csc_bmem_unittest(void);
 #endif
 
 int tmem_main(void *rtime, int argc, char **argv)
@@ -50,13 +51,28 @@ int cmem_main(void *rtime, int argc, char **argv)
 	return 0;
 }
 
+int bmem_main(void *rtime, int argc, char **argv)
+{
+	(void)rtime; (void)argc; (void)argv;
+
+#ifdef	CFG_UNIT_TEST
+	csc_bmem_unittest();
+#endif
+	return 0;
+}
+
 struct	clicmd	tmem_cmd = {
-	"tmem", tmem_main, NULL, "Testing the tiny memory management functions"
+	"tmem", tmem_main, NULL, "Testing the tiny memory management"
 };
 
 struct	clicmd	cmem_cmd = {
-	"cmem", cmem_main, NULL, "Testing the doubly linked memory management functions"
+	"cmem", cmem_main, NULL, "Testing the doubly linked memory management"
+};
+
+struct	clicmd	bmem_cmd = {
+	"bmem", bmem_main, NULL, "Testing the bitmap memory management"
 };
 
 extern  struct  clicmd  tmem_cmd;
 extern  struct  clicmd  cmem_cmd;
+extern  struct  clicmd  bmem_cmd;

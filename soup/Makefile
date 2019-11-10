@@ -2,7 +2,8 @@
 CFLAGS	+= -I..
 
 #SRCS	:= $(shell echo *.c)
-SRCS	:= csc_cdll.c		\
+SRCS	:= csc_bmem.c		\
+	   csc_cdll.c		\
 	   csc_cmem.c		\
 	   csc_cmp_file_extargs.c \
 	   csc_cmp_file_extlist.c \
