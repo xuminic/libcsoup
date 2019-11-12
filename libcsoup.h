@@ -486,7 +486,7 @@ size_t csc_cmem_attrib(void *heap, void *mem, int *state);
 void *csc_bmem_init(void *heap, size_t len, int flags);
 void *csc_bmem_alloc(void *heap, size_t n);
 int csc_bmem_free(void *heap, void *mem);
-void *csc_bmem_scan(void *heap, int (*used)(int*), int (*loose)(int*));
+void *csc_bmem_scan(void *heap, int (*used)(void*, int), int (*loose)(void*, int));
 size_t csc_bmem_attrib(void *heap, void *mem, int *state);
 
 #ifdef __cplusplus
