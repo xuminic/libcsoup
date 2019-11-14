@@ -445,17 +445,13 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MEM_ZERO		8	/* allow allocating empty memory */
 #define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN)
 
-/* Bit 4-7: page size for bitmap management */
-#define CSC_MEM_PAGEMASK	0xf0
-#define CSC_MEM_PAGESIZE	64	/* Between 32 to 64k */
-
-/* Bit 8-11: extra memory for tracing allocation */
-/* The memory size is multiplied by pages size in Bit 4-7. */
-#define CSC_MEM_EXTRMASK	0xf00
-
-/* Bit 12-15: guarding area for debugging memory violation */
-/* The memory size is multiplied by pages size in Bit 4-7. */
-#define CSC_MEM_GURDMASK	0xf000
+/* Bit 4-7: page size for bitmap management
+ * Bit 8-11: extra memory for tracing allocation
+ *   The memory size is multiplied by pages size in Bit 4-7.
+ * Bit 12-15: guarding area for debugging memory violation
+ *   The memory size is multiplied by pages size in Bit 4-7. */
+#define CSC_MEM_XCFG(page,extra,guard)	\
+	((((page)&15)<<4) | (((extra)&15)<<8) | (((guard)&15)<<12))
 
 
 #define CSC_MERR_LOWMEM		-1
@@ -488,6 +484,7 @@ void *csc_bmem_alloc(void *heap, size_t n);
 int csc_bmem_free(void *heap, void *mem);
 void *csc_bmem_scan(void *heap, int (*used)(void*, int), int (*loose)(void*, int));
 size_t csc_bmem_attrib(void *heap, void *mem, int *state);
+void *csc_bmem_extra(void *heap, void *mem, int *xsize);
 
 #ifdef __cplusplus
 } // __cplusplus defined.

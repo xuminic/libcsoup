@@ -148,9 +148,7 @@ void *csc_cmem_alloc(void *heap, size_t n)
 	int loose(void *mman)
 	{
 		if (((CMEM*)mman)->size >= n) {
-			if (found == NULL) {
-				found = mman;
-			}
+			found = (found == NULL) ? mman : found;
 			switch (config & CSC_MEM_FITMASK) {
 			case CSC_MEM_BEST_FIT:
 				if (found->size > ((CMEM*)mman)->size) {
