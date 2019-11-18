@@ -389,6 +389,27 @@ void *csc_bmem_extra(void *heap, void *mem, int *xsize)
 	return bmem_find_extradata(bmc, bmem_find_control(bmc, mem), xsize);
 }
 
+void *csc_bmem_front_guard(void *heap, void *mem, int *xsize)
+{
+	BMMCB	*bmc = heap;
+
+	if (bmem_verify(bmc, mem) < 0) {
+		return NULL;	/* invalided memory management */
+	}
+	return bmem_find_front_guard(bmc, bmem_find_control(bmc, mem), xsize);
+}
+
+void *csc_bmem_back_guard(void *heap, void *mem, int *xsize)
+{
+	BMMCB	*bmc = heap;
+
+	if (bmem_verify(bmc, mem) < 0) {
+		return NULL;	/* invalided memory management */
+	}
+	return bmem_find_back_guard(bmc, bmem_find_control(bmc, mem), xsize);
+}
+
+
 static int bmem_verify(BMMCB *bmc, void *mem)
 {
 	int	idx;
@@ -659,6 +680,34 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 	
 	(void) blen;
 
+	/* create the minimum heap: bmc=1 mpc=1 extra=0 guard=0 */
+	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG(1,0,0);
+	bmc = csc_bmem_init(buf, 2*(32<<BMEM_CFG_PAGE(config)), config);
+	cclog(!bmc, "Create heap with empty allocation disabled: 2 pages\n");
+
+	config |= CSC_MEM_ZERO;
+	bmc = csc_bmem_init(buf, 2*(32<<BMEM_CFG_PAGE(config)), config);
+	cclog(!!bmc, "Create heap with empty allocation enabled: 2 pages\n");
+	if (!bmc) return;
+	cclog(-1, "Created Heap(0,0): bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",
+			bmc->pages, bmc->total, bmc->avail, bmc->bitmap[0],
+			bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	p[0] = csc_bmem_alloc(bmc, 1);
+	cclog(!p[0], "Failed to allocate from empty heap. [%02x]\n", bmc->bitmap[0]);
+
+	p[0] = csc_bmem_alloc(bmc, 0);
+	cclog(!!p[0], "Allocated an empty memory block. [%02x]\n", bmc->bitmap[0]); 
+	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
+	cclog(!rc[1], "Memory attribution: size=%d state=%d pad=%d\n", rc[1], rc[0],
+			bmem_pad_get(bmem_find_control(bmc, p[0])));
+
+	rc[0] = csc_bmem_free(bmc, p[0]);
+	cclog(rc[0] >= 0, "Freed the empty memory block. [%02x]\n", bmc->bitmap[0]);
+	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
+	cclog(rc[1] == (int)bmem_page_to_size(bmc, 1), "Memory destroied: pages=%d %d\n", 
+			bmem_find_control(bmc, p[0])->pages, rc[1]);
+
 	/* create the minimum heap: bmc=1 mpc=1 extra=1 guard=1x2 */
 	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG(1,1,1);
 	bmc = csc_bmem_init(buf, 5*(32<<BMEM_CFG_PAGE(config)), config);
@@ -668,7 +717,7 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 	bmc = csc_bmem_init(buf, 5*(32<<BMEM_CFG_PAGE(config)), config);
 	cclog(!!bmc, "Create heap with empty allocation enabled: 5 pages\n");
 	if (!bmc) return;
-	cclog(-1, "Created Heap: bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",
+	cclog(-1, "Created Heap(1,1): bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",
 			bmc->pages, bmc->total, bmc->avail, bmc->bitmap[0],
 			bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
@@ -690,5 +739,4 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 }
 
 #endif
-
 
