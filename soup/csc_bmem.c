@@ -36,6 +36,8 @@
   [BMMPC+frontpad][extra pages][guards][page1][page2]...[pageN+backpad][guards]
   - backpad is always part of guards; 
   - frontpad is always part of extra page
+ In [BMMCB], page has 12 setting: 32/64/128/256/512/1k/2k/4k/8k/16k/32k/64k
+   so that the padding size can be limited in 64k 
 */
 
 #include <stdio.h>
@@ -44,13 +46,8 @@
 
 #include "libcsoup.h"
 
-
-/* page has 12 setting: 32/64/128/256/512/1k/2k/4k/8k/16k/32k/64k
- * so that the padding size can be limited in 64k */
-
-#define BMEM_GUARD		0	/* 0: Miniman GUARD; 1: 1 PAGE OF GUARD */
 #define BMEM_MAGIC		0xAC
-
+#define BMEM_MAGPIE		0xCA
 
 static	unsigned char	bmtab[8] = { 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80 };
 #define BM_CK_PAGE(bm, idx)	((bm)[(idx)/8] & bmtab[(idx)&7])
@@ -58,11 +55,6 @@ static	unsigned char	bmtab[8] = { 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80 };
 #define BM_CLR_PAGE(bm, idx)	((bm)[(idx)/8] &= ~bmtab[(idx)&7])
 
 #define BMEM_SPAN(f,t)		((size_t)((char*)(f) - (char*)(t)))
-#define BMEM_CFG_PAGE(n)	((((n)>>4)&0xf)%12)
-#define BMEM_CFG_EXTRA(n)	(((n)>>8)&0xf)
-#define BMEM_CFG_GUARD(n)	(((n)>>12)&0xf)
-
-
 
 
 /* Bitmap Memory Manager Page Controller */
@@ -83,8 +75,6 @@ typedef	struct	_BMMCB	{
 	unsigned char	bitmap[1];
 } BMMCB;
 
-typedef int (*BMap_F)(BMMPC *mpc, int index, int pages);
-
 
 static int bmem_verify(BMMCB *bmc, void *mem);
 static int bmem_guard_setup(BMMCB *bmc, BMMPC *mpc);
@@ -95,7 +85,6 @@ static size_t bmem_page_to_size(BMMCB *bmc, int page);
 static int bmem_size_to_page(BMMCB *bmc, size_t size);
 static int bmem_size_to_index(BMMCB *bmc, size_t size);
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize);
-static void *bmem_find_extradata(BMMCB *bmc, BMMPC *mpc, int *osize);
 static void *bmem_find_front_guard(BMMCB *bmc, BMMPC *mpc, int *osize);
 static void *bmem_find_back_guard(BMMCB *bmc, BMMPC *mpc, int *osize);
 static BMMPC *bmem_find_control(BMMCB *bmc, void *mem);
@@ -130,7 +119,7 @@ static inline int bmem_service_pages(BMMCB *bmc)
 	register int	config = (int)((bmc->magic[3] << 8) | bmc->magic[2]);
 
 	/* head + extra pages + front and back guards */
-	return 1 + BMEM_CFG_EXTRA(config) + BMEM_CFG_GUARD(config) + BMEM_CFG_GUARD(config);
+	return 1 + CSC_MEM_XCFG_EXTRA(config) + CSC_MEM_XCFG_GUARD(config) + CSC_MEM_XCFG_GUARD(config);
 }
 
 static inline void bmem_pad_set(BMMPC *mpc, int padding)
@@ -191,24 +180,26 @@ void *csc_bmem_alloc(void *heap, size_t size)
 	int	pages, config, padding;
 	int	fnd_idx, fnd_pages = -1;
 
-	int loose(void *mem, int freepages)
+	int loose(void *mem)
 	{
+		mpc = mem;
+
 		/* when it's been called, the "pages" should've been set */
-		if (freepages >= pages) {
+		if (mpc->pages >= pages) {
 			if (fnd_pages == -1) {
-				fnd_pages = freepages;
+				fnd_pages = mpc->pages;
 				fnd_idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
 			}
 			switch (config & CSC_MEM_FITMASK) {
 			case CSC_MEM_BEST_FIT:
-				if (fnd_pages > freepages) {
-					fnd_pages = freepages;
+				if (fnd_pages > mpc->pages) {
+					fnd_pages = mpc->pages;
 					fnd_idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
 				}
 				break;
 			case CSC_MEM_WORST_FIT:
-				if (fnd_pages < freepages) {
-					fnd_pages = freepages;
+				if (fnd_pages < mpc->pages) {
+					fnd_pages = mpc->pages;
 					fnd_idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
 				}
 				break;
@@ -289,17 +280,29 @@ int csc_bmem_free(void *heap, void *mem)
 	/* set free of these pages */
 	idx = bmem_size_to_index(bmc, BMEM_SPAN(mpc, bmc->trunk));
 	bmem_page_free(bmc, idx, mpc->pages);
-	mpc->magic[0] = 0;	/* destroy the page controller */
+	mpc->magic[1] = BMEM_MAGPIE;	/* set free of the page controller */
+	bmem_set_crc(mpc, sizeof(BMMPC));
+
 	bmc->avail += mpc->pages;
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return 0;
 }
 
-void *csc_bmem_scan(void *heap, int (*used)(void*, int), int (*loose)(void*, int))
+void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
 	BMMCB	*bmc = heap;
 	BMMPC	*mpc;
 	int	i, last_free;
+
+	/* setup a BMMPC structure for the free pages */
+	BMMPC *make_free_mpc(int idx, int pages)
+	{
+		BMMPC *mpc = (BMMPC *)(bmc->trunk + bmem_page_to_size(bmc, idx));
+		memset(mpc, 0, sizeof(BMMPC));
+		mpc->pages = pages;
+		bmem_set_crc(mpc, sizeof(BMMPC));
+		return mpc;
+	}
 
 	if (bmem_verify(bmc, (void*)-1) < 0) {
 		return bmc;	/* invalided memory management */
@@ -316,8 +319,7 @@ void *csc_bmem_scan(void *heap, int (*used)(void*, int), int (*loose)(void*, int
 
 		/* for inspecting the freed pages */
 		if (last_free != (int)-1) {
-			mpc = (BMMPC *)(bmc->trunk + bmem_page_to_size(bmc, last_free));
-			if (loose && loose(mpc, i - last_free)) {
+			if (loose && loose(make_free_mpc(last_free, i - last_free))) {
 				return NULL;
 			}
 			last_free = (int) -1;
@@ -329,20 +331,22 @@ void *csc_bmem_scan(void *heap, int (*used)(void*, int), int (*loose)(void*, int
 			return mpc;
 		}
 
-		if (used && used(mpc, mpc->pages)) {
+		if (used && used(mpc)) {
 			return NULL;
 		}
 		i += mpc->pages - 1; /* skip the allocated pages */
 	}
 
 	/* if rest pages are free */
-	if (last_free != (int)-1) {
-		if (loose) {
-			mpc = (BMMPC *)(bmc->trunk + bmem_page_to_size(bmc, last_free));
-			loose(mpc, i - last_free);
-		}
+	if ((last_free != (int)-1) && loose) {
+		loose(make_free_mpc(last_free, i - last_free));
 	}
 	return NULL;
+}
+
+void *csc_bmem_scan_mapper(void *heap, void *smem)
+{
+	return bmem_find_client(heap, smem, NULL);
 }
 
 size_t csc_bmem_attrib(void *heap, void *mem, int *state)
@@ -351,7 +355,24 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 	BMMPC	*mpc;
 	int	i, idx;
 
-	if (bmem_verify(bmc, mem) < 0) {
+	i = bmem_verify(bmc, mem);
+	if (i == CSC_MERR_BROKEN) {
+		idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
+		/* search for free pages */
+		for (i = idx; i < bmc->total; i++) {
+			if (BM_CK_PAGE(bmc->bitmap, i)) {
+				break;
+			}
+		}
+		if (i == idx) {		/* not found free pages */
+			return (size_t) -1;	/* memory block corrupted */
+		}
+		if (state) {
+			*state = 0;
+		}
+		return bmem_page_to_size(bmc, i - idx);
+	}
+	if (i < 0) {
 		return (size_t) -1;	/* invalided memory management */
 	}
 
@@ -367,16 +388,10 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 		return bmem_page_to_size(bmc, idx) - bmem_pad_get(mpc);
 	}
 
-	/* search for free pages */
-	for (i = idx; i < bmc->total; i++) {
-		if (BM_CK_PAGE(bmc->bitmap, i)) {
-			break;
-		}
-	}
 	if (state) {
 		*state = 0;
 	}
-	return bmem_page_to_size(bmc, i - idx);
+	return bmem_page_to_size(bmc, mpc->pages);
 }
 
 void *csc_bmem_extra(void *heap, void *mem, int *xsize)
@@ -386,7 +401,13 @@ void *csc_bmem_extra(void *heap, void *mem, int *xsize)
 	if (bmem_verify(bmc, mem) < 0) {
 		return NULL;	/* invalided memory management */
 	}
-	return bmem_find_extradata(bmc, bmem_find_control(bmc, mem), xsize);
+
+	if (xsize) {
+		int pages, config = bmem_config_get(bmc);
+		pages = 1 + CSC_MEM_XCFG_EXTRA(config);	/* head and extra */
+		*xsize = (int)(bmem_page_to_size(bmc, pages) - sizeof(BMMPC));
+	}
+	return bmem_find_control(bmc, mem) + 1;
 }
 
 void *csc_bmem_front_guard(void *heap, void *mem, int *xsize)
@@ -412,8 +433,6 @@ void *csc_bmem_back_guard(void *heap, void *mem, int *xsize)
 
 static int bmem_verify(BMMCB *bmc, void *mem)
 {
-	int	idx;
-
 	if (bmc == NULL) {
 		return CSC_MERR_INIT;	/* heap not created */
 	}
@@ -421,6 +440,8 @@ static int bmem_verify(BMMCB *bmc, void *mem)
 		return CSC_MERR_BROKEN;
 	}
 
+	/* Only verify the BMMCB. 
+	 * Not using NULL because NULL can be a to-be-verified pointer */
 	if (mem == (void*) -1) {
 		return 0;
 	}
@@ -429,12 +450,9 @@ static int bmem_verify(BMMCB *bmc, void *mem)
 		return CSC_MERR_RANGE;	/* memory out of range */
 	}
 
-	mem = bmem_find_control(bmc, mem);
-	idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
-	if (!BM_CK_PAGE(bmc->bitmap, idx)) {
-		return 0;	/* free page: no need to verify */
-	}
-
+	/* Note that bmem_verify() only verify the memory blocks which have
+	 * a BMMPC structure. Uninitialized will be treated as broken */
+	mem = bmem_find_control(bmc, mem);	/* mem become mpc */
 	if (!bmem_check(mem, sizeof(BMMPC))) {
 		return CSC_MERR_BROKEN; /* broken memory controller */
 	}
@@ -503,22 +521,20 @@ static void bmem_page_free(BMMCB *bmc, int idx, int pages)
 static size_t bmem_page_to_size(BMMCB *bmc, int page)
 {
 	/* no more than 64KB per page */
-	int n = BMEM_CFG_PAGE(bmem_config_get(bmc));
-	return (size_t)page * (32<<n);
+	return (size_t)page * CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
 }
 
 static int bmem_size_to_page(BMMCB *bmc, size_t size)
 {
 	/* no more than 64KB per page */
-	int n = 32 << BMEM_CFG_PAGE(bmem_config_get(bmc));
+	int n = CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
 	return (int)((size + n - 1) / n);
 }
 
 static int bmem_size_to_index(BMMCB *bmc, size_t size)
 {
 	/* no more than 64KB per page */
-	int n = 32 << BMEM_CFG_PAGE(bmem_config_get(bmc));
-	return (int)(size / n);
+	return (int)(size / CSC_MEM_XCFG_PAGE(bmem_config_get(bmc)));
 }
 
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize)
@@ -526,34 +542,24 @@ static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize)
 	int	idx, pages, config = bmem_config_get(bmc);
 
 	/* service pages are head, extra pages and front guards */
-	idx = 1 + BMEM_CFG_EXTRA(config) + BMEM_CFG_GUARD(config);
+	idx = 1 + CSC_MEM_XCFG_EXTRA(config) + CSC_MEM_XCFG_GUARD(config);
 	if (osize) {
-		pages = mpc->pages - idx - BMEM_CFG_GUARD(config);	/* back guard */
+		pages = mpc->pages - idx - CSC_MEM_XCFG_GUARD(config);	/* back guard */
 		*osize = bmem_page_to_size(bmc, pages) - bmem_pad_get(mpc); 
 	}
 	return (char*)mpc + bmem_page_to_size(bmc, idx);
 }
 
-static void *bmem_find_extradata(BMMCB *bmc, BMMPC *mpc, int *osize)
-{
-	int	pages, config = bmem_config_get(bmc);
-
-	if (osize) {
-		pages = 1 + BMEM_CFG_EXTRA(config);	/* head and extra */
-		*osize = (int)(bmem_page_to_size(bmc, pages) - sizeof(BMMPC));
-	}
-	return mpc + 1;
-}
 
 static void *bmem_find_front_guard(BMMCB *bmc, BMMPC *mpc, int *osize)
 {
 	int	guard, config = bmem_config_get(bmc);
 
-	if ((guard = BMEM_CFG_GUARD(config)) > 0) {
+	if ((guard = CSC_MEM_XCFG_GUARD(config)) > 0) {
 		if (osize) {
 			*osize = (int)bmem_page_to_size(bmc, guard);
 		}
-		guard = 1 + BMEM_CFG_EXTRA(config);	/* head and extra */
+		guard = 1 + CSC_MEM_XCFG_EXTRA(config);	/* head and extra */
 		return (char*)mpc + bmem_page_to_size(bmc, guard);
 	}
 	return NULL;
@@ -563,12 +569,15 @@ static void *bmem_find_back_guard(BMMCB *bmc, BMMPC *mpc, int *osize)
 {
 	int	pages, config = bmem_config_get(bmc);
 
-	pages = BMEM_CFG_GUARD(config);
-	if (osize) {
-		*osize = (int)bmem_page_to_size(bmc, pages) + bmem_pad_get(mpc);
+	pages = CSC_MEM_XCFG_GUARD(config);	/* get the pages of memory guards */
+	config = (int)bmem_page_to_size(bmc, pages) + bmem_pad_get(mpc);
+	if (config <= 0) {
+		return NULL;
 	}
-	pages = mpc->pages - pages;
-	return (char*)mpc + bmem_page_to_size(bmc, pages) - bmem_pad_get(mpc);
+	if (osize) {
+		*osize = config;
+	}
+	return (char*)mpc + bmem_page_to_size(bmc, mpc->pages) - config;
 }
 
 static BMMPC *bmem_find_control(BMMCB *bmc, void *mem)
@@ -576,7 +585,7 @@ static BMMPC *bmem_find_control(BMMCB *bmc, void *mem)
 	int	pages, config = bmem_config_get(bmc);
 
 	/* find head, extra pages and front guards */
-	pages = 1 + BMEM_CFG_EXTRA(config) + BMEM_CFG_GUARD(config);
+	pages = 1 + CSC_MEM_XCFG_EXTRA(config) + CSC_MEM_XCFG_GUARD(config);
 	return (BMMPC*)((char*)mem - bmem_page_to_size(bmc, pages));
 }
 
@@ -606,7 +615,7 @@ static void csc_bmem_function_test(char *buf, int blen)
 
 	return;
 
-	/* function tests */
+	/* function tests: bmem_config_set() and bmem_config_get() */
 	cclog(-1, "Testing internal functions.\n");
 	bmc = (BMMCB*) buf;
 	memset(bmc, 0, sizeof(BMMCB));
@@ -616,11 +625,14 @@ static void csc_bmem_function_test(char *buf, int blen)
 			bmc->magic[0], bmc->magic[1], bmc->magic[2], bmc->magic[3]);
 	msize = (size_t)bmem_config_get(bmc);
 	cclog(msize == 0xc3c4, "bmem_config_get: %x\n", (int)msize);
+
+	/* bmem_set_crc() and bmem_check() */
 	bmem_set_crc(bmc, sizeof(BMMCB));
 	cclog(bmc->magic[0] == 0x67, "bmem_set_crc: %x %x\n", bmc->magic[0], bmc->magic[1]);
 	cclog(bmem_check(bmc, sizeof(BMMCB)), "bmem_check: %d %x\n", 
 			bmc->magic[0], bmem_check(bmc, sizeof(BMMCB)));
 
+	/* bmem_pad_set() and bmem_pad_get() */
 	mpc = (BMMPC*)buf;
 	memset(mpc, 0, sizeof(BMMPC));
 	bmem_pad_set(mpc, 0xf1f2f3f4);
@@ -630,6 +642,7 @@ static void csc_bmem_function_test(char *buf, int blen)
 	msize = (size_t)bmem_pad_get(mpc);
 	cclog(msize==0xf3f4, "bmem_pad_get: %x\n", (int)msize);
 
+	/* page size test: bmem_page_to_size() and bmem_size_to_page() */
 	for (i = 0; i < 16; i++) {
 		bmem_config_set(bmc, i << 4);
 		msize = bmem_page_to_size(bmc, 1);
@@ -638,7 +651,9 @@ static void csc_bmem_function_test(char *buf, int blen)
 				"bmem_page_to_size: %d -> %d %d pages\n", i, msize, mpage);
 	}
 
-	/* testing the bmem_find_xxx() function */
+	/* bmem_find_xxx() family: bmem_find_client(), bmem_find_control(), 
+	 * bmem_find_front_guard(), bmem_find_back_guard(), csc_bmem_extra() 
+	 * and bmem_service_pages() */
 	cclog(-1, "Testing bmem_find_xxx():\n");
 	bmc = (BMMCB*)(buf + blen - sizeof(BMMCB));
 	memset(bmc, 0, sizeof(BMMCB));
@@ -653,7 +668,7 @@ static void csc_bmem_function_test(char *buf, int blen)
 			p = bmem_find_client(bmc, mpc, &msize);
 			cclog(!!p, "PSize=64 Extra=%d Guard=%d - Client=+%ld:%ld ", 
 					k, i, BMEM_SPAN(p, mpc), msize);
-			p = bmem_find_extradata(bmc, mpc, &len);
+			p = csc_bmem_extra(bmc, bmem_find_client(bmc, mpc, NULL), &len);
 			cslog("Extra=+%ld:%d ", BMEM_SPAN(p, mpc), len);
 			p = bmem_find_front_guard(bmc, mpc, &len);
 			if (p == NULL) p = (char*)mpc, len = 0;
@@ -667,6 +682,8 @@ static void csc_bmem_function_test(char *buf, int blen)
 			cslog("BMMPC=+%ld:%ld\n", BMEM_SPAN(p, mpc), msize);
 		}
 	}
+
+	/* testing how to find the page index in the bitmap */
 	tmp = buf + bmem_page_to_size(bmc, 10) + 12;
 	msize = (size_t) bmem_size_to_index(bmc, BMEM_SPAN(tmp, bmc->trunk));
 	cclog(msize==10, "Found page index %ld at +%ld\n", msize, BMEM_SPAN(tmp, bmc->trunk));
@@ -680,28 +697,42 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 	
 	(void) blen;
 
-	/* create the minimum heap: bmc=1 mpc=1 extra=0 guard=0 */
-	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG(1,0,0);
-	bmc = csc_bmem_init(buf, 2*(32<<BMEM_CFG_PAGE(config)), config);
+	/* failed to create the minimum heap: bmc=1 mpc=1 extra=0 guard=0 */
+	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,0,0);
+	bmc = csc_bmem_init(buf, 2*CSC_MEM_XCFG_PAGE(config), config);
 	cclog(!bmc, "Create heap with empty allocation disabled: 2 pages\n");
 
+	/* successful to create the minimum heap: bmc=1 mpc=1 extra=0 guard=0 */
 	config |= CSC_MEM_ZERO;
-	bmc = csc_bmem_init(buf, 2*(32<<BMEM_CFG_PAGE(config)), config);
+	bmc = csc_bmem_init(buf, 2*CSC_MEM_XCFG_PAGE(config), config);
 	cclog(!!bmc, "Create heap with empty allocation enabled: 2 pages\n");
 	if (!bmc) return;
 	cclog(-1, "Created Heap(0,0): bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",
 			bmc->pages, bmc->total, bmc->avail, bmc->bitmap[0],
 			bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
+	/* failed to allocate 1 byte from the empty heap */
 	p[0] = csc_bmem_alloc(bmc, 1);
 	cclog(!p[0], "Failed to allocate from empty heap. [%02x]\n", bmc->bitmap[0]);
 
+	/* succeeded to allocate 0 byte from the empty heap */
 	p[0] = csc_bmem_alloc(bmc, 0);
 	cclog(!!p[0], "Allocated an empty memory block. [%02x]\n", bmc->bitmap[0]); 
 	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
 	cclog(!rc[1], "Memory attribution: size=%d state=%d pad=%d\n", rc[1], rc[0],
 			bmem_pad_get(bmem_find_control(bmc, p[0])));
 
+	/* succeeded to find the extra data in the empty memory block */
+	p[1] = csc_bmem_extra(bmc, p[0], rc);
+	cclog(!!p[1], "The extra data: offset=+%d size=%d\n",
+			BMEM_SPAN(p[1], bmem_find_control(bmc, p[0])), rc[0]);
+
+	/* failed to find the memory guards */
+	p[1] = csc_bmem_front_guard(bmc, p[0], NULL);
+	p[2] = csc_bmem_back_guard(bmc, p[0], NULL);
+	cclog(!p[1]&&!p[2], "Memory guards were not allocated. %p/%p\n", p[1], p[2]);
+
+	/* free the empty memory block */
 	rc[0] = csc_bmem_free(bmc, p[0]);
 	cclog(rc[0] >= 0, "Freed the empty memory block. [%02x]\n", bmc->bitmap[0]);
 	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
@@ -709,12 +740,12 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 			bmem_find_control(bmc, p[0])->pages, rc[1]);
 
 	/* create the minimum heap: bmc=1 mpc=1 extra=1 guard=1x2 */
-	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG(1,1,1);
-	bmc = csc_bmem_init(buf, 5*(32<<BMEM_CFG_PAGE(config)), config);
+	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,1,1);
+	bmc = csc_bmem_init(buf, 5*CSC_MEM_XCFG_PAGE(config), config);
 	cclog(!bmc, "Create heap with empty allocation disabled: 5 pages\n");
 
 	config |= CSC_MEM_ZERO;
-	bmc = csc_bmem_init(buf, 5*(32<<BMEM_CFG_PAGE(config)), config);
+	bmc = csc_bmem_init(buf, 5*CSC_MEM_XCFG_PAGE(config), config);
 	cclog(!!bmc, "Create heap with empty allocation enabled: 5 pages\n");
 	if (!bmc) return;
 	cclog(-1, "Created Heap(1,1): bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",

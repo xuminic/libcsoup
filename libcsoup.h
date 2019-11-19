@@ -450,8 +450,12 @@ void *csc_pack_hex_index(void *pachex);
  *   The memory size is multiplied by pages size in Bit 4-7.
  * Bit 12-15: guarding area for debugging memory violation
  *   The memory size is multiplied by pages size in Bit 4-7. */
-#define CSC_MEM_XCFG(page,extra,guard)	\
+#define CSC_MEM_XCFG_SET(page,extra,guard)	\
 	((((page)&15)<<4) | (((extra)&15)<<8) | (((guard)&15)<<12))
+
+#define CSC_MEM_XCFG_PAGE(n)	(32<<((((n)>>4)&0xf)%12))
+#define CSC_MEM_XCFG_EXTRA(n)	(((n)>>8)&0xf)
+#define CSC_MEM_XCFG_GUARD(n)	(((n)>>12)&0xf)
 
 
 #define CSC_MERR_LOWMEM		-1
@@ -482,9 +486,12 @@ size_t csc_cmem_attrib(void *heap, void *mem, int *state);
 void *csc_bmem_init(void *heap, size_t len, int flags);
 void *csc_bmem_alloc(void *heap, size_t n);
 int csc_bmem_free(void *heap, void *mem);
-void *csc_bmem_scan(void *heap, int (*used)(void*, int), int (*loose)(void*, int));
+void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
+void *csc_bmem_scan_mapper(void *heap, void *smem);
 size_t csc_bmem_attrib(void *heap, void *mem, int *state);
 void *csc_bmem_extra(void *heap, void *mem, int *xsize);
+void *csc_bmem_front_guard(void *heap, void *mem, int *xsize);
+void *csc_bmem_back_guard(void *heap, void *mem, int *xsize);
 
 #ifdef __cplusplus
 } // __cplusplus defined.
