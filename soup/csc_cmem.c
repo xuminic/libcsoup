@@ -38,18 +38,17 @@
 #define CMEM_PAD_MASK	0x7f
 
 #define CMEM_OWNED(n)	((((CMEM*)(n))->magic[2]) & CMEM_USED)
-#define CMEM_CONFIG(n)	(((CMEM*)(n))->magic[3])
 #define CMEM_PADDED(n)	((((CMEM*)(n))->magic[2]) & CMEM_PAD_MASK)
 
 typedef	struct	_CMEM	{
-	char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + CONFIG1 */
+	char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + RSV */
 	struct	_CMEM	*prev;
 	struct	_CMEM	*next;
 	size_t	size;		/* size of the payload in bytes */
 } CMEM;
 
 typedef	struct	_CMHEAP	{
-	char	magic[4];	/* CRC8 + MAGIC + RSV + CONFIG2 */
+	char	magic[4];	/* CRC8 + MAGIC + CONFIG1 + CONFIG2 */
 	struct	_CMEM	*prev;	/* point to the first memory block */
 	struct	_CMEM	*next;	/* point to the last memory block */
 	size_t	al_size;	/* total allocated size */
@@ -77,6 +76,17 @@ static inline int cmem_check(void *mb, int len)
 		(p[0] == (char) csc_crc8(0, p+1, len-1));
 }
 
+static inline void cmem_config_set(CMHEAP *hman, int config)
+{
+	hman->magic[2] = (unsigned char)(config & 0xff);
+	hman->magic[3] = (unsigned char)((config >> 8) & 0xff);
+}
+
+static inline int cmem_config_get(CMHEAP *hman)
+{
+	return (int)((hman->magic[3] << 8) | hman->magic[2]);
+}
+
 
 
 void *csc_cmem_init(void *heap, size_t len, int flags)
@@ -99,7 +109,7 @@ void *csc_cmem_init(void *heap, size_t len, int flags)
 	cm->prev = cm->next = NULL;
 	cm->size = len - sizeof(CMEM);
 	cm->magic[2] = (char) CMEM_FREE;
-	cm->magic[3] = (char) flags;
+	cm->magic[3] = 0;
 	cmem_set_crc(cm, sizeof(CMEM));
 	/* allocate the hman management structure */
 	hman = (CMHEAP*)(cm + 1);
@@ -113,7 +123,7 @@ void *csc_cmem_init(void *heap, size_t len, int flags)
 	hman->al_num  = 1;
 	hman->fr_size = cm->size;
 	hman->fr_num  = 1;
-	hman->magic[2] = hman->magic[3] = 0;
+	cmem_config_set(hman, flags);
 	cmem_set_crc(hman, sizeof(CMHEAP));
 	return heap;
 }
@@ -143,7 +153,7 @@ void *csc_cmem_alloc(void *heap, size_t n)
 {
 	CMHEAP	*hman;
 	CMEM	*found, *next;
-	int	config = (int)CMEM_CONFIG(heap);
+	int	config;
 
 	int loose(void *mman)
 	{
@@ -172,6 +182,7 @@ void *csc_cmem_alloc(void *heap, size_t n)
 	}
 
 	hman = (CMHEAP*)(((CMEM*)heap) + 1);
+	config = cmem_config_get(hman);
 	if (n > hman->fr_size) {
 		return NULL;	/* CSC_MERR_LOWMEM */
 	} else if ((n == 0) && !(config & CSC_MEM_ZERO)) {

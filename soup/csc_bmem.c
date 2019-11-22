@@ -204,21 +204,21 @@ void *csc_bmem_alloc(void *heap, size_t size)
 				}
 				break;
 			default:	/* CSC_MEM_FIRST_FIT */
+				/*printf("goose: now=%d prev=%d\n",  mpc->pages, pages);*/
 				return 1;
 			}
+			/*printf("loose: now=%d prev=%d found=%d\n", mpc->pages, pages, fnd_pages);*/
 		}
 		return 0;
 	}
 
 	if (bmem_verify(bmc, (void*)-1) < 0) {
-		puts("1");
 		return NULL;
 	}
 	config = (int)bmem_config_get(bmc);
 
 	pages = bmem_size_to_page(bmc, size);
 	if (!pages && !(config & CSC_MEM_ZERO)) {
-		puts("2");
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -228,18 +228,15 @@ void *csc_bmem_alloc(void *heap, size_t size)
 	/* add up the service pages: the BMMPC, extra page, front and back guards */
 	pages += bmem_service_pages(bmc);
 	if (pages > bmc->avail) {
-		puts("3");
 		return NULL;	/* CSC_MERR_RANGE */
 	}
 
 	/* find a group of free pages where meets the requirement */
 	fnd_pages = -1;
 	if (csc_bmem_scan(heap, NULL, loose)) {
-		puts("4");
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
 	if (fnd_pages == -1) {
-		puts("5");
 		return NULL;	/* CSC_MERR_LOWMEM */
 	}
 
@@ -368,7 +365,7 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 			return (size_t) -1;	/* memory block corrupted */
 		}
 		if (state) {
-			*state = 0;
+			*state = -1;	/* uninitialized */
 		}
 		return bmem_page_to_size(bmc, i - idx);
 	}
@@ -595,6 +592,7 @@ static BMMPC *bmem_find_control(BMMCB *bmc, void *mem)
 
 static void csc_bmem_function_test(char *buf, int blen);
 static void csc_bmem_minimum_test(char *buf, int blen);
+static void csc_bmem_fitness_test(char *buf, int blen);
 
 int csc_bmem_unittest(void)
 {
@@ -602,6 +600,7 @@ int csc_bmem_unittest(void)
 
 	csc_bmem_function_test(buf, sizeof(buf));
 	csc_bmem_minimum_test(buf, sizeof(buf));
+	csc_bmem_fitness_test(buf, sizeof(buf));
 	return 0;
 }
 
@@ -612,8 +611,6 @@ static void csc_bmem_function_test(char *buf, int blen)
 	int	i, k, len;
 	char	*p, *tmp;
 	size_t	msize, mpage;
-
-	return;
 
 	/* function tests: bmem_config_set() and bmem_config_get() */
 	cclog(-1, "Testing internal functions.\n");
@@ -700,20 +697,20 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 	/* failed to create the minimum heap: bmc=1 mpc=1 extra=0 guard=0 */
 	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,0,0);
 	bmc = csc_bmem_init(buf, 2*CSC_MEM_XCFG_PAGE(config), config);
-	cclog(!bmc, "Create heap with empty allocation disabled: 2 pages\n");
+	cclog(!bmc, "Create heap with empty allocation disabled: null 2 pages\n");
 
 	/* successful to create the minimum heap: bmc=1 mpc=1 extra=0 guard=0 */
 	config |= CSC_MEM_ZERO;
 	bmc = csc_bmem_init(buf, 2*CSC_MEM_XCFG_PAGE(config), config);
-	cclog(!!bmc, "Create heap with empty allocation enabled: 2 pages\n");
 	if (!bmc) return;
-	cclog(-1, "Created Heap(0,0): bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",
-			bmc->pages, bmc->total, bmc->avail, bmc->bitmap[0],
-			bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+	cclog(-1, "Created Heap(%d,%d,%d) with empty allocation enabled: bmc=%d free=%d map=%02x%02x%02x%02x\n",
+			CSC_MEM_XCFG_PAGE(config), CSC_MEM_XCFG_EXTRA(config), 
+			CSC_MEM_XCFG_GUARD(config), bmc->pages, bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
 	/* failed to allocate 1 byte from the empty heap */
 	p[0] = csc_bmem_alloc(bmc, 1);
-	cclog(!p[0], "Failed to allocate from empty heap. [%02x]\n", bmc->bitmap[0]);
+	cclog(!p[0], "Failed to allocate 1 byte from empty heap. [%02x]\n", bmc->bitmap[0]);
 
 	/* succeeded to allocate 0 byte from the empty heap */
 	p[0] = csc_bmem_alloc(bmc, 0);
@@ -742,31 +739,153 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 	/* create the minimum heap: bmc=1 mpc=1 extra=1 guard=1x2 */
 	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,1,1);
 	bmc = csc_bmem_init(buf, 5*CSC_MEM_XCFG_PAGE(config), config);
-	cclog(!bmc, "Create heap with empty allocation disabled: 5 pages\n");
+	cclog(!bmc, "Create heap with empty allocation disabled: null 5 pages\n");
 
 	config |= CSC_MEM_ZERO;
 	bmc = csc_bmem_init(buf, 5*CSC_MEM_XCFG_PAGE(config), config);
-	cclog(!!bmc, "Create heap with empty allocation enabled: 5 pages\n");
 	if (!bmc) return;
-	cclog(-1, "Created Heap(1,1): bmc=%d pages=%d free=%d map=%02x%02x%02x%02x\n",
-			bmc->pages, bmc->total, bmc->avail, bmc->bitmap[0],
-			bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+	cclog(-1, "Created Heap(%d,%d,%d): bmc=%d free=%d map=%02x%02x%02x%02x\n",
+			CSC_MEM_XCFG_PAGE(config), CSC_MEM_XCFG_EXTRA(config), 
+			CSC_MEM_XCFG_GUARD(config), bmc->pages, bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
+	/* failed to allocate 1 byte from the empty heap */
 	p[0] = csc_bmem_alloc(bmc, 1);
-	cclog(!p[0], "Failed to allocate from empty heap. [%02x]\n", bmc->bitmap[0]);
+	cclog(!p[0], "Failed to allocate 1 byte from empty heap. [%02x]\n", bmc->bitmap[0]);
 
+	/* allocated an empty memory block from the empty heap */
 	p[0] = csc_bmem_alloc(bmc, 0);
 	cclog(!!p[0], "Allocated an empty memory block. [%02x]\n", bmc->bitmap[0]); 
 	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
 	cclog(!rc[1], "Memory attribution: size=%d state=%d pad=%d\n", rc[1], rc[0],
 			bmem_pad_get(bmem_find_control(bmc, p[0])));
 
+	/* free the empty memory block */
 	rc[0] = csc_bmem_free(bmc, p[0]);
 	cclog(rc[0] >= 0, "Freed the empty memory block. [%02x]\n", bmc->bitmap[0]);
 	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
 	cclog(rc[1] == (int)bmem_page_to_size(bmc, 4), "Memory destroied: pages=%d %d\n", 
 			bmem_find_control(bmc, p[0])->pages, rc[1]);
 
+	/* create the small heap: bmc=1 mpc=1 extra=0 guard=0 */
+	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,0,0);
+	bmc = csc_bmem_init(buf, 12*CSC_MEM_XCFG_PAGE(config), config);
+	if (!bmc) return;
+	cclog(-1, "Created Heap(%d,%d,%d): bmc=%d free=%d map=%02x%02x%02x%02x\n",
+			CSC_MEM_XCFG_PAGE(config), CSC_MEM_XCFG_EXTRA(config), 
+			CSC_MEM_XCFG_GUARD(config), bmc->pages, bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	/* allocating test */
+	p[0] = csc_bmem_alloc(bmc, 1);
+	p[1] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config) + 2);
+	p[2] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config)*2 + 3);
+	cclog(p[0]&&p[1]&&p[2], "Allocated 3 memory blocks: free=%d map=%02x%02x%02x%02x\n",
+			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
+	cclog(rc[0], "Memory attribution: off=+%d size=%d state=%d pad=%d\n", 
+			BMEM_SPAN(p[0], bmc->trunk), rc[1], rc[0],
+			bmem_pad_get(bmem_find_control(bmc, p[0])));
+	rc[1] = (int)csc_bmem_attrib(bmc, p[1], rc);
+	cclog(rc[0], "Memory attribution: off=+%d size=%d state=%d pad=%d\n",
+			BMEM_SPAN(p[1], bmc->trunk), rc[1], rc[0],
+			bmem_pad_get(bmem_find_control(bmc, p[1])));
+	rc[1] = (int)csc_bmem_attrib(bmc, p[2], rc);
+	cclog(rc[0], "Memory attribution: off=+%d size=%d state=%d pad=%d\n",
+			BMEM_SPAN(p[2], bmc->trunk), rc[1], rc[0],
+			bmem_pad_get(bmem_find_control(bmc, p[2])));
+
+	/* free memory test */
+	rc[0] = csc_bmem_free(bmc, p[1]);
+	cclog(rc[0] >= 0, "Freed the memory block in middle: free=%d map=%02x%02x%02x%02x\n", 
+			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+	rc[1] = (int)csc_bmem_attrib(bmc, p[1], rc);
+	cclog(!rc[0], "Memory destroied: pages=%d %d\n", 
+			bmem_find_control(bmc, p[1])->pages, rc[1]);
+}
+
+static void csc_bmem_fitness_test(char *buf, int blen)
+{
+	BMMCB	*bmc;
+	int	config, rc[4];
+	char	*p[8];
+	
+	(void) blen;
+
+	/* successful to create the minimum heap: bmc=2 page=32 extra=0 guard=0 */
+	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(0,0,0);
+	bmc = csc_bmem_init(buf, 30*CSC_MEM_XCFG_PAGE(config), config);
+	if (!bmc) return;
+	cclog(-1, "Created Heap(%d,%d,%d): bmc=%d free=%d map=%02x%02x%02x%02x\n",
+			CSC_MEM_XCFG_PAGE(config), CSC_MEM_XCFG_EXTRA(config), 
+			CSC_MEM_XCFG_GUARD(config), bmc->pages, bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	/* create memory pattern: P2+P8+P2+P4+P2+P10 */
+	p[0] = csc_bmem_alloc(bmc, 1);
+	p[1] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config)*7);
+	p[2] = csc_bmem_alloc(bmc, 1);
+	p[3] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config)*3);
+	p[4] = csc_bmem_alloc(bmc, 1);
+	cclog(p[1]&&p[3], "Allocated 5 memory blocks: free=%d map=%02x%02x%02x%02x\n",
+			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	/* create memory holes */
+	csc_bmem_free(bmc, p[1]);
+	csc_bmem_free(bmc, p[3]);
+
+	/* list all candidators */
+	rc[1] = (int)csc_bmem_attrib(bmc, p[1], rc);
+	cclog(!rc[0], "Candidator 1: off=+%d size=%d state=%d\n", BMEM_SPAN(p[1], bmc->trunk), rc[1], rc[0]);
+	rc[1] = (int)csc_bmem_attrib(bmc, p[3], rc);
+	cclog(!rc[0], "Candidator 2: off=+%d size=%d state=%d\n", BMEM_SPAN(p[3], bmc->trunk), rc[1], rc[0]);
+	/* manully set the next candidator because it's inside untouched area */
+	p[5] = p[4] + CSC_MEM_XCFG_PAGE(config);	
+	rc[1] = (int)csc_bmem_attrib(bmc, p[5], rc);
+	p[5] += CSC_MEM_XCFG_PAGE(config);
+	cclog(rc[0]<0, "Candidator 3: off=+%d size=%d state=%d\n", BMEM_SPAN(p[5], bmc->trunk), rc[1], rc[0]);
+	cclog(bmc->avail==22, "Created 3 memory holes: free=%d map=%02x%02x%02x%02x\n",
+			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	/* testing first fit */
+	p[6] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config)*3);
+	if (!p[6]) return;
+	rc[1] = (int)csc_bmem_attrib(bmc, p[6], rc);
+	cclog(p[6]==p[1], "First Fit: off=+%d size=%d -- free=%d map=%02x%02x%02x%02x\n", 
+			BMEM_SPAN(p[6], bmc->trunk), rc[1], bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	/* testing best fit */
+	csc_bmem_free(bmc, p[6]);
+	cclog(bmc->avail==22, "Created 3 memory holes: free=%d map=%02x%02x%02x%02x\n",
+			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	config = (config & ~CSC_MEM_FITMASK) | CSC_MEM_BEST_FIT;
+	bmem_config_set(bmc, config);
+	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
+
+	p[6] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config)*3);
+	if (!p[6]) return;
+	rc[1] = (int)csc_bmem_attrib(bmc, p[6], rc);
+	cclog(p[6]==p[3], "Best Fit: off=+%d size=%d -- free=%d map=%02x%02x%02x%02x\n", 
+			BMEM_SPAN(p[6], bmc->trunk), rc[1], bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	/* testing worst fit */
+	csc_bmem_free(bmc, p[6]);
+	cclog(bmc->avail==22, "Created 3 memory holes: free=%d map=%02x%02x%02x%02x\n",
+			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
+
+	config = (config & ~CSC_MEM_FITMASK) | CSC_MEM_WORST_FIT;
+	bmem_config_set(bmc, config);
+	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
+
+	p[6] = csc_bmem_alloc(bmc, CSC_MEM_XCFG_PAGE(config)*3);
+	if (!p[6]) return;
+	rc[1] = (int)csc_bmem_attrib(bmc, p[6], rc);
+	cclog(p[6]==p[5], "Worst Fit: off=+%d size=%d -- free=%d map=%02x%02x%02x%02x\n", 
+			BMEM_SPAN(p[6], bmc->trunk), rc[1], bmc->avail, 
+			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 }
 
 #endif
