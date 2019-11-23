@@ -55,11 +55,11 @@ static int make_arguments(void)
 	int	i, k, argc;
 
 	for (i = 0; argpool[i]; i++) {
-		CDB_SHOW(("INPUT: %s\n", argpool[i]));
+		cslog("INPUT: %s\n", argpool[i]);
 		s = csc_strcpy_alloc(argpool[i], 0);
 		argc = csc_cli_mkargv(s, argv, 32);
 		for (k = 0; k < argc; k++) {
-			CDB_SHOW(("[%2d]: %s\n", k, argv[k]));
+			cslog("[%2d]: %s\n", k, argv[k]);
 		}
 		free(s);
 	}
@@ -87,7 +87,7 @@ static int generate_options(struct cliopt *clist)
 	int	i;
 
 	csc_cli_make_list(clist, oplst, sizeof(oplst));
-	CDB_SHOW(("OPTS: \"%s\"\n", oplst));
+	cslog("OPTS: \"%s\"\n", oplst);
 
 	csc_cli_make_table(clist, optbl, 64);
 	for (i = 0; optbl[i].name; i++) {
@@ -97,8 +97,8 @@ static int generate_options(struct cliopt *clist)
 			sprintf(tmp, "\\%d", optbl[i].val);
 		}
 		csc_strfill(tmp, 4, ' ');
-		CDB_SHOW(("[%2d]: %s %d %s\n", i, tmp, 
-				optbl[i].has_arg, optbl[i].name));
+		cslog("[%2d]: %s %d %s\n", i, tmp, 
+				optbl[i].has_arg, optbl[i].name);
 	}
 	return 0;
 }
@@ -130,16 +130,16 @@ int csc_cli_main(void *rtime, int argc, char **argv)
 			generate_options(mixed_list);
 			break;
 		case '1':
-			CDB_SHOW(("One ARG: %s\n", optarg));
+			cslog("One ARG: %s\n", optarg);
 			break;
 		case 'o':
-			CDB_SHOW(("Optional ARG: %s\n", optarg));
+			cslog("Optional ARG: %s\n", optarg);
 			break;
 		case 2:
 			csc_cli_print(mixed_list, NULL);
 			break;
 		default:
-			CDB_SHOW(("Unknown: %c %c\n", c, optopt));
+			cslog("Unknown: %c %c\n", c, optopt);
 			break;
 		}
 	}
@@ -174,25 +174,25 @@ int csc_cli_main2(void *rtime, int argc, char **argv)
 			generate_options(mixed_list);
 			break;
 		case '1':
-			CDB_SHOW(("One ARG: %s\n", csc_cli_qopt_optarg(argp)));
+			cslog("One ARG: %s\n", csc_cli_qopt_optarg(argp));
 			break;
 		case 'o':
-			CDB_SHOW(("Optional ARG: %s\n", 
-					csc_cli_qopt_optarg(argp)));
+			cslog("Optional ARG: %s\n", 
+					csc_cli_qopt_optarg(argp));
 			break;
 		case 2:
 			csc_cli_print(mixed_list, NULL);
 			break;
 		default:
-			CDB_SHOW(("Unknown: %c %c\n", 
-					c, csc_cli_qopt_optopt(argp)));
+			cslog("Unknown: %c %c\n", 
+					c, csc_cli_qopt_optopt(argp));
 			break;
 		}
 	}
 	c = csc_cli_qopt_optind(argp);
 	csc_cli_qopt_close(argp);
 
-	CDB_SHOW(("REST: %d %s\n", c, argv[c]));
+	cslog("REST: %d %s\n", c, argv[c]);
 	return 0;
 }
 

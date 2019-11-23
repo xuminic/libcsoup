@@ -1,13 +1,16 @@
 
 /*!\file       csc_tmem.c
-   \brief      Tiny memory allocation agent
+   \brief      The tiny dynamic memory management based on single link list
 
    The file supports a set of extreme light weight dynamic memory management.
-   It would be quite easy to use with a small memory pool in stack.
-   The overhead is the smallest as far as I know, only one standard integer,
+   It would be quite easy to use within a small memory pool in stack.
+   The minimum allocation unit is 'int'. Therefore the maximum managable 
+   memory is 4GB in 32/64-bit system, or 32KB in 8/16-bit system.
+
+   The memory overhead is the smallest as far as I know, only one standard integer,
    which can be 4 bytes in 32-bit system or 2 byte in 8-bit system.
-   It uses single chain list so not so good for high frequent allocating 
-   and freeing; please use it wisely.
+   It uses single link list so the speed is not as good as doubly link list.
+   Do not use it in high frequency of allocating and freeing scenario.
 
    \author     "Andy Xuming" <xuming@users.sourceforge.net>
    \date       2013-2014
@@ -36,16 +39,21 @@
 
 #include "libcsoup.h"
 
-/* Control Word for managing block:
- *   MSB+0: parity bit
- *   MSB+1: magic bit (always 1=used)
- *   MSB+2...n: whole memory minus the Control Word for managing block
- * Control Word for memory block:
- *   MSB+0: parity bit
- *   MSB+1: usable bit (0=free 1=used)
- *   MSB+2...n: block size 
- * Memory Sight:
+/* Memory Sight:
  *   [Managing Block][Memory Block][Memory Block]...
+ * [Managing Block]
+ *   char    magic[4]: 
+ *     CRC8 + MAGIC + CONFIG1 + CONFIG2
+ *   Control Word for the Heap:
+ *     MSB+0: parity bit
+ *     MSB+1: usable bit (always 1=used)
+ *     MSB+2...n: heap size (excluding the managing block)
+ * [Memory Block]
+ *   Control Word for the memory block:
+ *     MSB+0: parity bit
+ *     MSB+1: usable bit (0=free 1=used)
+ *     MSB+2...n: block size 
+ *   int Memory[block size]
  */
 #if	(UINT_MAX == 0xFFFFFFFFU)
 #define TMEM_MASK_PARITY	0x80000000U
@@ -64,16 +72,20 @@
 #define	TMEM_CLR_USED(n)	((n) & ~TMEM_MASK_USED)
 #define	TMEM_TEST_USED(n)	((n) & TMEM_MASK_USED)
 
-#ifdef	CFG_UNIT_TEST
-static		int	tmem_config = CSC_MEM_DEFAULT;
-#else
-static	const	int	tmem_config = CSC_MEM_DEFAULT;
-#endif
-
 static int tmem_parity(int cw);
 static int tmem_verify(void *heap, int *mb);
 static int tmem_cword(int uflag, int size);
 
+static inline void tmem_config_set(unsigned char *heap, int config)
+{
+	heap[2] = (unsigned char)(config & 0xff);
+	heap[3] = (unsigned char)((config >> 8) & 0xff);
+}
+
+static inline int tmem_config_get(unsigned char *heap)
+{
+	return (int)((heap[3] << 8) | heap[2]);
+}
 
 /*!\brief Initialize the memory heap to be allocable.
 
@@ -86,7 +98,7 @@ static int tmem_cword(int uflag, int size);
    The minimum allocation unit is 'int'. Therefore the maximum managable 
    memory is 4GB in 32/64-bit system, or 32KB in 8/16-bit system.
 */
-void *csc_tmem_init(void *hmem, size_t len)
+void *csc_tmem_init(void *hmem, size_t len, int flags)
 {
 	int	*heap = (int*) hmem;
 
@@ -94,19 +106,19 @@ void *csc_tmem_init(void *hmem, size_t len)
 		return hmem;	/* CSC_MERR_INIT */
 	}
 
+	/* save 4 bytes and one int for heap managing  */
+	len -= sizeof(int) + 4;
+	
 	/* change size unit to per-int; the remains will be cut off  */
 	len /= sizeof(int);	
 
-	/* save one unit for heap managing  */
-	len--;
-	
 	/* make sure the size is not out of range */
 	/* Though CSC_MEM_ZERO is practically useless, supporting CSC_MEM_ZERO
 	 * in program is for the integrity of the memory logic */
 	if ((len < 1) || (len > (UINT_MAX >> 2))) {
 		return NULL;	/* CSC_MERR_RANGE */
 	}
-	if ((len == 1) && !(tmem_config & CSC_MEM_ZERO)) {
+	if ((len == 1) && !(flags & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: no support empty allocation */
 	}
 
@@ -131,7 +143,7 @@ void *csc_tmem_init(void *hmem, size_t len)
    \remark The prototype of the callback functions are: int func(int *)
            The scan process can be broken if func() returns non-zero.
 */
-void *csc_tmem_scan(void *heap, int (*used)(int*), int (*loose)(int*))
+void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
 	int	*mb;
 
@@ -155,6 +167,11 @@ void *csc_tmem_scan(void *heap, int (*used)(int*), int (*loose)(int*))
 	return NULL;
 }
 
+void *csc_tmem_scan_mapper(void *heap, void *smem)
+{
+	return NULL;
+}
+
 /*!\brief allocate a piece of dynamic memory block inside the specified 
    memory heap.
 
@@ -170,16 +187,18 @@ void *csc_tmem_scan(void *heap, int (*used)(int*), int (*loose)(int*))
 */
 void *csc_tmem_alloc(void *heap, size_t n)
 {
-	int	 *found, *next;
+	int	 *found, *next, config;
 	int	unum = (int)((n + sizeof(int) - 1) / sizeof(int));
 	
-	int loose(int *mb)
+	int loose(void *mem)
 	{
+		int	*mb = mem;
+
 		if (TMEM_SIZE(*mb) >= unum) {
 			if (found == NULL) {
 				found = mb;
 			}
-			switch (tmem_config & CSC_MEM_FITMASK) {
+			switch (config & CSC_MEM_FITMASK) {
 			case CSC_MEM_BEST_FIT:
 				if (TMEM_SIZE(*found) > TMEM_SIZE(*mb)) {
 					found = mb;
@@ -200,11 +219,12 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	if (tmem_verify(heap, heap) < 0) {
 		return NULL;	/* CSC_MERR_INIT: memory heap not available */
 	}
+	config = tmem_config_get(heap);
 
 	/* make sure the request is NOT out of size */
 	if (unum > TMEM_SIZE(*((int*)heap))) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if (!unum && !(tmem_config & CSC_MEM_ZERO)) {
+	} else if (!unum && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -216,7 +236,7 @@ void *csc_tmem_alloc(void *heap, size_t n)
 		return NULL;	/* CSC_MERR_LOWMEM: out of memory */
 	}
 
-	n = tmem_config & CSC_MEM_ZERO ? 0 : 1;	/* reuse the 'n' for size test */
+	n = config & CSC_MEM_ZERO ? 0 : 1;	/* reuse the 'n' for size test */
 	if (TMEM_SIZE(*found) <= unum + n) {	
 		/* not worth to split this block */
 		*found = tmem_cword(1, *found);
@@ -227,7 +247,7 @@ void *csc_tmem_alloc(void *heap, size_t n)
 		*found = tmem_cword(1, unum);
 	}
 	found++;
-	if (tmem_config & CSC_MEM_CLEAN) {
+	if (config & CSC_MEM_CLEAN) {
 		memset(found, 0, TMEM_BYTES(*(found-1)));
 	}
 	return (void*)found;
@@ -249,8 +269,10 @@ int csc_tmem_free(void *heap, void *mem)
 {
 	int	*last, *found, rc;
 
-	int used(int *mb)
+	int used(void *fmem)
 	{
+		int	*mb = fmem;
+
 		if ((void*)(mb+1) == mem) {
 			found = mb;
 			*found = tmem_cword(0, *found);	/* free itself */
@@ -267,7 +289,7 @@ int csc_tmem_free(void *heap, void *mem)
 		}
 		return 0;
 	}
-	int loose(int *mb)
+	int loose(void *mb)
 	{
 		last = mb; return 0;
 	}
@@ -324,6 +346,22 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 	}
 	return (size_t)TMEM_BYTES(*mb);
 }
+
+void *csc_tmem_extra(void *heap, void *mem, int *xsize)
+{
+	return NULL;
+}
+
+void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
+{
+	return NULL;
+}
+
+void *csc_tmem_back_guard(void *heap, void *mem, int *xsize)
+{
+	return NULL;
+}
+
 
 /* applying odd parity so 15 (16-bit) or 31 (32-bit) 1-bits makes MSB[1]=0,
  * which can easily sorting out -1 as an illegal word. */
@@ -409,15 +447,16 @@ static int tmem_unittest_empty_memory(int *buf)
 	int	n, *p;
 	size_t	msize;
 	
-	int memc(int *mb)
+	int memc(void *mem)
 	{
+		int	*mb = mem;
 		cslog("(%p:%d:%lu)", mb, TMEM_TEST_USED(*mb)?1:0, TMEM_BYTES(*mb));
 		return 0;
 	}
 
 	/* create a smallest heap where has only one heap control and 
 	 * one block control */
-	p = csc_tmem_init(buf, sizeof(int)*2+1);
+	p = csc_tmem_init(buf, sizeof(int)*2+1, 0);
 	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*2+1);
 	if (p == NULL) return 0;
 	
@@ -447,7 +486,7 @@ static int tmem_unittest_empty_memory(int *buf)
 	cclog((n == 0) && (msize == 0), "Attribution of the freed block: %d %ld\n", n, msize);
 
 	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
-	p = csc_tmem_init(buf, sizeof(int)*4+1);
+	p = csc_tmem_init(buf, sizeof(int)*4+1, 0);
 	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*4+1);
 	if (p == NULL) return 0;
 
@@ -482,12 +521,12 @@ static int tmem_unittest_nonempty_memory(int *buf)
 	int	n, *p;
 	size_t	msize;
 
-	p = csc_tmem_init(buf, sizeof(int)*2+1);
+	p = csc_tmem_init(buf, sizeof(int)*2+1, 0);
 	cclog(p == NULL, "Create heap with %d bytes (%p): %d minimum.\n", 
 			sizeof(int)*2+1, p, sizeof(int)*3);
 
 	/* create heap with 1 memory block: HEAP+MB0+PL0 */
-	p = csc_tmem_init(buf, sizeof(int)*3+1);
+	p = csc_tmem_init(buf, sizeof(int)*3+1, 0);
 	cclog(p == buf, "Create heap with %d bytes (%p)\n", sizeof(int)*3+1, p);
 	if (p == NULL) return 0;
 
@@ -515,7 +554,7 @@ static int tmem_unittest_nonempty_memory(int *buf)
 	cclog((n == 0) && (msize == 4), "Attribution of the freed block: %d %ld\n", n, msize);
 
 	/* create heap with 3 memory block: HEAP+MB0+PL0+MB1+PL1+MB2+PL2 */
-	p = csc_tmem_init(buf, sizeof(int)*7+1);
+	p = csc_tmem_init(buf, sizeof(int)*7+1, 0);
 	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*7+1);
 	if (p == NULL) return 0;
 
@@ -571,14 +610,14 @@ static int tmem_unittest_memory_pattern(int *buf, int *rc)
 {
 	int	u = 0, f = 0;
 
-	int used(int *mb)
+	int used(void *mb)
 	{
-		u = (u << 4) | TMEM_SIZE(*mb); return 0;
+		u = (u << 4) | TMEM_SIZE(*((int*)mb)); return 0;
 	}
 
-	int loose(int *mb)
+	int loose(void *mb)
 	{
-		f = (f << 4) | TMEM_SIZE(*mb); return 0;
+		f = (f << 4) | TMEM_SIZE(*((int*)mb)); return 0;
 	}
 
 	csc_tmem_scan(buf, used, loose);
@@ -592,7 +631,7 @@ static void *tmem_unittest_memory_model(int *buf)
 {
 	int	*p[4], u, f;
 
-	if (csc_tmem_init(buf, sizeof(int)*26) == NULL) {
+	if (csc_tmem_init(buf, sizeof(int)*26, 0) == NULL) {
 		return NULL;
 	}
 
@@ -615,11 +654,11 @@ static void *tmem_unittest_memory_model(int *buf)
 
 static int tmem_unittest_misc_memory(int *buf)
 {
-	int	n, k, *p;
+	int	n, k, *p, config = 0;
 	size_t	msize;
 
 	msize = sizeof(int)*20;
-	p = csc_tmem_init(buf, msize);
+	p = csc_tmem_init(buf, msize, config);
 	cclog(p == buf, "Create heap with %d bytes\n", msize);
 	if (p == NULL) return 0;
 
@@ -629,7 +668,8 @@ static int tmem_unittest_misc_memory(int *buf)
 	cclog(n == CSC_MERR_RANGE, "Free NULL memory: %d\n", n);
 
 	/* test the memory initial clean function */
-	tmem_config |= CSC_MEM_CLEAN;
+	config |= CSC_MEM_CLEAN;
+	tmem_config_set((unsigned char*)buf, config);
 	buf[2] = -1;
 	p = csc_tmem_alloc(buf, 1);
 	cclog(buf[2] == 0, "Memory is initialized to %x\n", *p);
@@ -640,28 +680,32 @@ static int tmem_unittest_misc_memory(int *buf)
 	cclog(n == 0 && k == CSC_MERR_RANGE, "Memory is double freed. [%d]\n", k);
 
 	/* test the memory initial non-clean function */
-	tmem_config &= ~CSC_MEM_CLEAN;
+	config &= ~CSC_MEM_CLEAN;
+	tmem_config_set((unsigned char*)buf, config);
 	buf[2] = -1;
 	p = csc_tmem_alloc(buf, sizeof(int));
 	cclog(*p == -1, "Memory is not initialized. [%x]\n", *p);
 
 	tmem_unittest_memory_model(buf);
-	tmem_config &= ~CSC_MEM_FITMASK;
-	tmem_config |= CSC_MEM_FIRST_FIT;
+	config &= ~CSC_MEM_FITMASK;
+	config |= CSC_MEM_FIRST_FIT;
+	tmem_config_set((unsigned char*)buf, config);
 	p = csc_tmem_alloc(buf, sizeof(int)*2);
 	n = tmem_unittest_memory_pattern(buf, &k);
 	cclog(k == 0x1211 && n == 0x1128, "Allocated 2 words by First Fit method [%x %x]\n", k, n);
 
 	csc_tmem_free(buf, p);
-	tmem_config &= ~CSC_MEM_FITMASK;
-	tmem_config |= CSC_MEM_BEST_FIT;
+	config &= ~CSC_MEM_FITMASK;
+	config |= CSC_MEM_BEST_FIT;
+	tmem_config_set((unsigned char*)buf, config);
 	p = csc_tmem_alloc(buf, sizeof(int)*2);
 	n = tmem_unittest_memory_pattern(buf, &k);
 	cclog(k == 0x1121 && n == 0x148, "Allocated 2 words by Best Fit method [%x %x]\n", k, n);
 
 	csc_tmem_free(buf, p);
-	tmem_config &= ~CSC_MEM_FITMASK;
-	tmem_config |= CSC_MEM_WORST_FIT;
+	config &= ~CSC_MEM_FITMASK;
+	config |= CSC_MEM_WORST_FIT;
+	tmem_config_set((unsigned char*)buf, config);
 	p = csc_tmem_alloc(buf, sizeof(int)*2);
 	n = tmem_unittest_memory_pattern(buf, &k);
 	cclog(k == 0x1112 && n == 0x1425, "Allocated 2 words by Worst Fit method [%x %x]\n", k, n);
@@ -686,11 +730,13 @@ int csc_tmem_unittest(void)
 	}
 
 	cclog(-1, "Testing memory function supports empty allocation\n");
-	tmem_config |= CSC_MEM_ZERO;
+	config |= CSC_MEM_ZERO;
+	tmem_config_set((unsigned char*)buf, config);
 	tmem_unittest_empty_memory(buf);
 	
 	cclog(-1, "Testing memory function doesn't support empty allocation\n");
-	tmem_config = CSC_MEM_DEFAULT;
+	config = CSC_MEM_DEFAULT;
+	tmem_config_set((unsigned char*)buf, config);
 	tmem_unittest_nonempty_memory(buf);
 
 	cclog(-1, "Testing other memory functions\n");

@@ -37,8 +37,8 @@ int packhex_main(void *rtime, int argc, char **argv)
 	int pack_hex_counter(void *frame, char *fname, void *data, long dlen)
 	{
 		s = data;
-		CDB_SHOW(("%p(%6ld): %s [%d][%d][%d][%d]\n", frame, dlen, 
-					fname, s[0], s[1], s[2], s[3]));
+		cslog("%p(%6ld): %s [%d][%d][%d][%d]\n", frame, dlen, 
+					fname, s[0], s[1], s[2], s[3]);
 		return 0;
 	}
 
@@ -51,14 +51,14 @@ int packhex_main(void *rtime, int argc, char **argv)
 	}
 
 	if ((s = csc_pack_hex_load((void*)packed_hex, argv[1], &dlen)) != NULL) {
-		CDB_SHOW(("Found %s (%ld): [%d][%d][%d][%d]\n", argv[1], dlen,
-					s[0], s[1], s[2], s[3]));
+		cslog("Found %s (%ld): [%d][%d][%d][%d]\n", argv[1], dlen,
+					s[0], s[1], s[2], s[3]);
 	} else if ((idx = csc_pack_hex_index((void*)packed_hex)) != NULL) {
 		for (i = 0; idx[i].fname; i++) {
 			s = idx[i].data;
-			CDB_SHOW(("%2d: %s (%ld): [%d][%d][%d][%d]\n", i, 
+			cslog("%2d: %s (%ld): [%d][%d][%d][%d]\n", i, 
 						idx[i].fname, idx[i].dlen,
-						s[0], s[1], s[2], s[3]));
+						s[0], s[1], s[2], s[3]);
 		}
 		free(idx);
 	}

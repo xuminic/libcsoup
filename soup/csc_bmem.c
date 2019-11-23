@@ -1,7 +1,8 @@
 /*!\file       csc_bmem.c
-   \brief      bitmap memory allocation plan
+   \brief      dynamic memory management based on bitmaps
 
-   The file supports a set of dynamic memory managed by bitmap
+   The file supports a group of functions of dynamic memory 
+   management based on bitmaps.
 
    \author     "Andy Xuming" <xuming@users.sourceforge.net>
    \date       2019
@@ -31,7 +32,7 @@
  Allocated:
   [BMMPC*][PAGES]----[BMMPC*][PAGES]-------------------------------[BMMCB***]
  [BMMCB***]:
-  [BMMCB+bitmp][bitmap][bitmap]...
+  [BMMCB+bitmap][bitmap][bitmap]...
  [BMMPC*][PAGES]:
   [BMMPC+frontpad][extra pages][guards][page1][page2]...[pageN+backpad][guards]
   - backpad is always part of guards; 
@@ -46,7 +47,6 @@
 
 #include "libcsoup.h"
 
-#define BMEM_MAGIC		0xAC
 #define BMEM_MAGPIE		0xCA
 
 static	unsigned char	bmtab[8] = { 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80 };
@@ -92,14 +92,14 @@ static BMMPC *bmem_find_control(BMMCB *bmc, void *mem);
 static inline void bmem_set_crc(void *mb, int len)
 {
 	register char   *p = mb;
-	p[1] = (char) BMEM_MAGIC;
+	p[1] = (char) CSC_MEM_MAGIC_BITMAP;
 	p[0] = (char) csc_crc8(0, p+1, len-1);
 }
 
 static inline int bmem_check(void *mb, int len)
 {
 	register char   *p = mb;
-	return (p[1] == (char) BMEM_MAGIC) &&
+	return (p[1] == (char) CSC_MEM_MAGIC_BITMAP) &&
 		(p[0] == (char) csc_crc8(0, p+1, len-1));
 }
 
@@ -277,7 +277,7 @@ int csc_bmem_free(void *heap, void *mem)
 	/* set free of these pages */
 	idx = bmem_size_to_index(bmc, BMEM_SPAN(mpc, bmc->trunk));
 	bmem_page_free(bmc, idx, mpc->pages);
-	mpc->magic[1] = BMEM_MAGPIE;	/* set free of the page controller */
+	mpc->magic[1] = (unsigned char) ~CSC_MEM_MAGIC_BITMAP;	/* set free of the page controller */
 	bmem_set_crc(mpc, sizeof(BMMPC));
 
 	bmc->avail += mpc->pages;
@@ -466,10 +466,10 @@ static int bmem_guard_setup(BMMCB *bmc, BMMPC *mpc)
 	int	len;
 
 	if ((p = bmem_find_front_guard(bmc, mpc, &len)) != NULL) {
-		memset(p, ~BMEM_MAGIC, len);
+		memset(p, BMEM_MAGPIE, len);
 	}
 	if ((p = bmem_find_back_guard(bmc, mpc, &len)) != NULL) {
-		memset(p, ~BMEM_MAGIC, len);
+		memset(p, BMEM_MAGPIE, len);
 	}
 	return 0;
 }
@@ -481,14 +481,14 @@ static void *bmem_guard_verify(BMMCB *bmc, BMMPC *mpc)
 
 	if ((p = bmem_find_front_guard(bmc, mpc, &len)) != NULL) {
 		for ( ; len > 0; len--, p++) {
-			if (*p != (char) ~BMEM_MAGIC) {
+			if (*p != (char) BMEM_MAGPIE) {
 				return p;
 			}
 		}
 	}
 	if ((p = bmem_find_back_guard(bmc, mpc, &len)) != NULL) {
 		for ( ; len > 0; len--, p++) {
-			if (*p != (char) ~BMEM_MAGIC) {
+			if (*p != (char) BMEM_MAGPIE) {
 				return p;
 			}
 		}

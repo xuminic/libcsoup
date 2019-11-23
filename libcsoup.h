@@ -457,6 +457,9 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MEM_XCFG_EXTRA(n)	(((n)>>8)&0xf)
 #define CSC_MEM_XCFG_GUARD(n)	(((n)>>12)&0xf)
 
+#define CSC_MEM_MAGIC_BITMAP	0xAC
+#define CSC_MEM_MAGIC_DLINK	0xA6
+#define CSC_MEM_MAGIC_TINY	0xA5
 
 #define CSC_MERR_LOWMEM		-1
 #define CSC_MERR_INIT		-2
@@ -469,18 +472,26 @@ extern "C"
 {
 #endif
 /* see csc_tmem.c */
-void *csc_tmem_init(void *heap, size_t len);
+void *csc_tmem_init(void *heap, size_t len, int flags);
 void *csc_tmem_alloc(void *heap, size_t n);
 int csc_tmem_free(void *heap, void *mem);
-void *csc_tmem_scan(void *heap, int (*used)(int*), int (*loose)(int*));
+void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
+void *csc_tmem_scan_mapper(void *heap, void *smem);
 size_t csc_tmem_attrib(void *heap, void *mem, int *state);
+void *csc_tmem_extra(void *heap, void *mem, int *xsize);
+void *csc_tmem_front_guard(void *heap, void *mem, int *xsize);
+void *csc_tmem_back_guard(void *heap, void *mem, int *xsize);
 
-/* see csc_cmem.c */
-void *csc_cmem_init(void *heap, size_t len, int flags);
-void *csc_cmem_alloc(void *heap, size_t n);
-int csc_cmem_free(void *heap, void *mem);
-void *csc_cmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
-size_t csc_cmem_attrib(void *heap, void *mem, int *state);
+/* see csc_dmem.c */
+void *csc_dmem_init(void *heap, size_t len, int flags);
+void *csc_dmem_alloc(void *heap, size_t n);
+int csc_dmem_free(void *heap, void *mem);
+void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
+void *csc_dmem_scan_mapper(void *heap, void *smem);
+size_t csc_dmem_attrib(void *heap, void *mem, int *state);
+void *csc_dmem_extra(void *heap, void *mem, int *xsize);
+void *csc_dmem_front_guard(void *heap, void *mem, int *xsize);
+void *csc_dmem_back_guard(void *heap, void *mem, int *xsize);
 
 /* see csc_bmem.c */
 void *csc_bmem_init(void *heap, size_t len, int flags);
