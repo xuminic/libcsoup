@@ -28,15 +28,14 @@
  Blank memory:
   |-------------------------------------------------------------------------|
  After initialized:
-  |----------------------------------------------------------------[BMMCB***]
+  [BMMCB***]----------------------------------------------------------------|
  Allocated:
-  [BMMPC*][PAGES]----[BMMPC*][PAGES]-------------------------------[BMMCB***]
+  [BMMCB***][BMMPC*][PAGES]----[BMMPC*][PAGES]------------------------------|
  [BMMCB***]:
   [BMMCB+bitmap][bitmap][bitmap]...
  [BMMPC*][PAGES]:
-  [BMMPC+frontpad][extra pages][guards][page1][page2]...[pageN+backpad][guards]
-  - backpad is always part of guards; 
-  - frontpad is always part of extra page
+  [BMMPC+frontpad][guards][page1][page2]...[pageN+backpad][guards]
+  - frontpad and backpad are always part of guards; 
  In [BMMCB], page has 12 setting: 32/64/128/256/512/1k/2k/4k/8k/16k/32k/64k
    so that the padding size can be limited in 64k 
 */
@@ -68,7 +67,7 @@ typedef	struct	_BMMCB	{
 	unsigned char	magic[4];	/* CRC8 + MAGIC + CONFIG1 + CONFIG2 */
 	int	pages;		/* control block used pages, inc. BMMCB and bitmap */
 
-	char	*trunk;		/* point to the head of the page array */
+	//char	*trunk;		/* point to the head of the page array */
 	int	total;		/* number of allocable pages */
 	int	avail;		/* number of available pages */
 
@@ -118,8 +117,13 @@ static inline int bmem_service_pages(BMMCB *bmc)
 {
 	register int	config = (int)((bmc->magic[3] << 8) | bmc->magic[2]);
 
-	/* head + extra pages + front and back guards */
-	return 1 + CSC_MEM_XCFG_EXTRA(config) + CSC_MEM_XCFG_GUARD(config) + CSC_MEM_XCFG_GUARD(config);
+	/* head + front and back guards */
+	return 1 + CSC_MEM_XCFG_GUARD(config) + CSC_MEM_XCFG_GUARD(config);
+}
+
+static inline void *bmem_pool(BMMCB *bmc)
+{
+	return (char*)bmc + bmem_page_to_size(bmc, bmc->pages);
 }
 
 static inline void bmem_pad_set(BMMPC *mpc, int padding)
@@ -162,12 +166,10 @@ void *csc_bmem_init(void *mem, size_t mlen, int flags)
 		return NULL;	/* CSC_MERR_LOWMEM */
 	}
 
-	/* set up the control block in the end of the memory block in page boundry */
-	bmc = (BMMCB*) ((char*)mem + bmem_page_to_size(mem, pages));
+	/* set up the control block */
 	memset((void*)bmc, 0, bmem_page_to_size(mem, bmlen));
 	bmem_config_set(bmc, flags);
 	bmc->pages = bmlen;
-	bmc->trunk = mem;
 	bmc->total = bmc->avail = pages;
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return bmc;
@@ -225,7 +227,7 @@ void *csc_bmem_alloc(void *heap, size_t size)
 	/* find the size of the tail padding */
 	padding = bmem_page_to_size(bmc, pages) - size;
 
-	/* add up the service pages: the BMMPC, extra page, front and back guards */
+	/* add up the service pages: the BMMPC, front and back guards */
 	pages += bmem_service_pages(bmc);
 	if (pages > bmc->avail) {
 		return NULL;	/* CSC_MERR_RANGE */
@@ -353,7 +355,7 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 	int	i, idx;
 
 	i = bmem_verify(bmc, mem);
-	if (i == CSC_MERR_BROKEN) {
+	if (i == CSC_MERR_BROKEN) {	/* probably in the uninitially free area */
 		idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
 		/* search for free pages */
 		for (i = idx; i < bmc->total; i++) {

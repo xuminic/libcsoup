@@ -446,16 +446,12 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN)
 
 /* Bit 4-7: page size for bitmap management
- * Bit 8-11: extra memory for tracing allocation
- *   The memory size is multiplied by pages size in Bit 4-7.
- * Bit 12-15: guarding area for debugging memory violation
+ * Bit 8-11: guarding area for debugging memory violation
  *   The memory size is multiplied by pages size in Bit 4-7. */
-#define CSC_MEM_XCFG_SET(page,extra,guard)	\
-	((((page)&15)<<4) | (((extra)&15)<<8) | (((guard)&15)<<12))
+#define CSC_MEM_XCFG_SET(page,guard)	((((page)&15)<<4) | (((guard)&15)<<8))
 
 #define CSC_MEM_XCFG_PAGE(n)	(32<<((((n)>>4)&0xf)%12))
-#define CSC_MEM_XCFG_EXTRA(n)	(((n)>>8)&0xf)
-#define CSC_MEM_XCFG_GUARD(n)	(((n)>>12)&0xf)
+#define CSC_MEM_XCFG_GUARD(n)	(((n)>>8)&0xf)
 
 #define CSC_MEM_MAGIC_BITMAP	0xAC
 #define CSC_MEM_MAGIC_DLINK	0xA6
@@ -478,7 +474,6 @@ int csc_tmem_free(void *heap, void *mem);
 void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
 void *csc_tmem_scan_mapper(void *heap, void *smem);
 size_t csc_tmem_attrib(void *heap, void *mem, int *state);
-void *csc_tmem_extra(void *heap, void *mem, int *xsize);
 void *csc_tmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_tmem_back_guard(void *heap, void *mem, int *xsize);
 
@@ -489,7 +484,6 @@ int csc_dmem_free(void *heap, void *mem);
 void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
 void *csc_dmem_scan_mapper(void *heap, void *smem);
 size_t csc_dmem_attrib(void *heap, void *mem, int *state);
-void *csc_dmem_extra(void *heap, void *mem, int *xsize);
 void *csc_dmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_dmem_back_guard(void *heap, void *mem, int *xsize);
 
@@ -500,7 +494,6 @@ int csc_bmem_free(void *heap, void *mem);
 void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
 void *csc_bmem_scan_mapper(void *heap, void *smem);
 size_t csc_bmem_attrib(void *heap, void *mem, int *state);
-void *csc_bmem_extra(void *heap, void *mem, int *xsize);
 void *csc_bmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_bmem_back_guard(void *heap, void *mem, int *xsize);
 

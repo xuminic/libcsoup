@@ -52,7 +52,7 @@
  *   Control Word for the memory block:
  *     MSB+0: parity bit
  *     MSB+1: usable bit (0=free 1=used)
- *     MSB+2...n: block size 
+ *     MSB+2...n: block size (excluding the control word)
  *   int Memory[block size]
  */
 #if	(UINT_MAX == 0xFFFFFFFFU)
@@ -87,6 +87,11 @@ static inline int tmem_config_get(unsigned char *heap)
 	return (int)((heap[3] << 8) | heap[2]);
 }
 
+static inline int *tmem_heap(void *heap)
+{
+	return (int*)(((char*)heap)+4);
+}
+
 /*!\brief Initialize the memory heap to be allocable.
 
    \param[in]  hmem the memory heap for allocation.
@@ -100,7 +105,7 @@ static inline int tmem_config_get(unsigned char *heap)
 */
 void *csc_tmem_init(void *hmem, size_t len, int flags)
 {
-	int	*heap = (int*) hmem;
+	int	*heap, guard;
 
 	if (hmem == NULL) {
 		return hmem;	/* CSC_MERR_INIT */
@@ -112,17 +117,26 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 	/* change size unit to per-int; the remains will be cut off  */
 	len /= sizeof(int);	
 
+	/* find the size of the guarding area */
+	guard = (CSC_MEM_XCFG_GUARD(flags) + CSC_MEM_XCFG_GUARD(flags)) *
+			CSC_MEM_XCFG_PAGE(flags) / sizeof(int);
+
 	/* make sure the size is not out of range */
 	/* Though CSC_MEM_ZERO is practically useless, supporting CSC_MEM_ZERO
 	 * in program is for the integrity of the memory logic */
-	if ((len < 1) || (len > (UINT_MAX >> 2))) {
+	if ((len <= guard) || (len > (UINT_MAX >> 2))) {
 		return NULL;	/* CSC_MERR_RANGE */
 	}
-	if ((len == 1) && !(flags & CSC_MEM_ZERO)) {
+	if ((len == guard + 1) && !(flags & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: no support empty allocation */
 	}
 
 	/* create the heap management */
+	((char*)hmem)[0] = (char)CSC_MEM_MAGIC_TINY;
+	((char*)hmem)[1] = (char)CSC_MEM_MAGIC_TINY;
+	tmem_config_set(hmem, flags);
+
+	heap = tmem_heap(hmem);
 	*heap++ = tmem_cword(1, (int)len--);
 	
 	/* create the first memory block */
@@ -147,10 +161,10 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
 	int	*mb;
 
-	if (tmem_verify(heap, heap) < 0) {
+	if (tmem_verify(heap, (int*)-1) < 0) {
 		return heap;	/* memory heap not available */
 	}
-	for (mb = ((int*)heap)+1; mb < TMEM_NEXT(heap); mb = TMEM_NEXT(mb)) {
+	for (mb = tmem_heap(heap) + 1; mb < TMEM_NEXT(tmem_heap(heap)); mb = TMEM_NEXT(mb)) {
 		if (tmem_verify(heap, mb) < 0) {
 			return (void*)mb;	/* chain broken */
 		}
@@ -216,13 +230,13 @@ void *csc_tmem_alloc(void *heap, size_t n)
 		return 0;
 	}
 
-	if (tmem_verify(heap, heap) < 0) {
+	if (tmem_verify(heap, (int*)-1) < 0) {
 		return NULL;	/* CSC_MERR_INIT: memory heap not available */
 	}
 	config = tmem_config_get(heap);
 
 	/* make sure the request is NOT out of size */
-	if (unum > TMEM_SIZE(*((int*)heap))) {
+	if (unum > TMEM_SIZE(*tmem_heap(heap))) {
 		return NULL;	/* CSC_MERR_LOWMEM */
 	} else if (!unum && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
@@ -399,12 +413,25 @@ static int tmem_parity(int cw)
 
 static int tmem_verify(void *heap, int *mb)
 {
+	int	*cwp;
+
 	if (heap == NULL) {
 		return CSC_MERR_INIT;
 	}
-	if (*((int*)heap) != tmem_parity(*((int*)heap))) {
-		return CSC_MERR_INIT;	/* memory heap not available */
+	if (((char*)heap)[1] != CSC_MEM_MAGIC_TINY) {
+		return CSC_MERR_INIT;	/* memory block corrupted */
 	}
+
+	cwp = (int*)(((char*)heap) + 4);
+	if (*cwp != tmem_parity(*cwp)) {
+		return CSC_MERR_BROKEN;	/* memory heap not available */
+	}
+
+	/* Only verify the heap; not using NULL because NULL is valid */
+	if (mb == (int*) -1) {
+		return 0;
+	}
+
 	if (((void*)mb < heap) || (mb >= TMEM_NEXT(heap))) {
 		return CSC_MERR_RANGE;	/* memory out of range */
 	}
@@ -423,6 +450,18 @@ static int tmem_cword(int uflag, int size)
 	}
 	return tmem_parity(size);
 }
+
+static void *tmem_find_client(void *heap, int *mb, size_t *osize)
+{
+	int	config = tmem_config_get(heap);
+
+	pages = CSC_MEM_XCFG_GUARD(config) * CSC_MEM_XCFG_PAGE(config);
+	if (osize) {
+		*osize = TMEM_BYTES(*mb) - pages - pages;
+	}
+	return mb + pages/sizeof(int) + 1;
+}
+
 
 
 #ifdef	CFG_UNIT_TEST
