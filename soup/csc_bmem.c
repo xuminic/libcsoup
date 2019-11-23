@@ -117,13 +117,8 @@ static inline int bmem_service_pages(BMMCB *bmc)
 {
 	register int	config = (int)((bmc->magic[3] << 8) | bmc->magic[2]);
 
-	/* head + front and back guards */
+	/* MemCB + front and back guards */
 	return 1 + CSC_MEM_XCFG_GUARD(config) + CSC_MEM_XCFG_GUARD(config);
-}
-
-static inline void *bmem_pool(BMMCB *bmc)
-{
-	return (char*)bmc + bmem_page_to_size(bmc, bmc->pages);
 }
 
 static inline void bmem_pad_set(BMMPC *mpc, int padding)
@@ -140,37 +135,37 @@ static inline int bmem_pad_get(BMMPC *mpc)
 void *csc_bmem_init(void *mem, size_t mlen, int flags)
 {
 	BMMCB	*bmc;
-	int	bmlen, pages;
+	int	bmpage, allpage, minpage;
 
-	if (mem == NULL) {
+	if ((bmc = mem) == NULL) {
 		return NULL;	/* CSC_MERR_INIT */
 	}
 
-	bmc = (BMMCB*) mem;
-	bmem_config_set(bmc, flags);
+	/* estimate how many page are there in total */
+	allpage = (int)(mlen / CSC_MEM_XCFG_PAGE(flags));
 
-	/* estimate how many page are there */
-	pages = bmem_size_to_index(bmc, mlen);
+	/* based on page numbers calculate the pages of the heap control block */
+	bmpage = (int)(sizeof(BMMCB) + allpage / 8) / CSC_MEM_XCFG_PAGE(flags);
 
-	/* based on page numbers calculate the pages of the control block */
-	bmlen = bmem_size_to_page(bmc, sizeof(BMMCB) + pages / 8);
+	/* minimum required pages: HeapCB + MemCB + FrontGUARD + BackGUARD */
+	minpage = bmpage + 1 + CSC_MEM_XCFG_GUARD(flags) + CSC_MEM_XCFG_GUARD(flags);
 
 	/* minimum pool size depends on the minimum pages can be allocated */
-	if (pages < bmlen + bmem_service_pages(bmc)) {
+	if (allpage < minpage) {
+		return NULL;	/* CSC_MERR_LOWMEM */
+	}
+	if ((allpage == minpage) && ((flags & CSC_MEM_ZERO) == 0)) {
 		return NULL;	/* CSC_MERR_LOWMEM */
 	}
 
-	/* reduce the page numbers to fit in the control block */
-	pages -= bmlen;
-	if ((pages == bmem_service_pages(bmc)) && ((flags & CSC_MEM_ZERO) == 0)) {
-		return NULL;	/* CSC_MERR_LOWMEM */
-	}
-
-	/* set up the control block */
-	memset((void*)bmc, 0, bmem_page_to_size(mem, bmlen));
+	/* set up the control block.  Note that the control block is also part of 
+	 * the memory scheme so it will take some bits in the bitmap. */
+	memset((void*)bmc, 0, bmpage * CSC_MEM_XCFG_PAGE(flags));
 	bmem_config_set(bmc, flags);
-	bmc->pages = bmlen;
-	bmc->total = bmc->avail = pages;
+	bmc->pages = bmpage;
+	bmc->total = allpage;
+	bmc->avail = allpage - bmpage;
+	bmem_page_take(bmc, 0, bmpage);		/* set the bitmap */	
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return bmc;
 }
