@@ -82,7 +82,8 @@ static void bmem_page_take(BMMCB *bmc, int idx, int pages);
 static void bmem_page_free(BMMCB *bmc, int idx, int pages);
 static size_t bmem_page_to_size(BMMCB *bmc, int page);
 static int bmem_size_to_page(BMMCB *bmc, size_t size);
-static int bmem_size_to_index(BMMCB *bmc, size_t size);
+static int bmem_addr_to_index(BMMCB *bmc, void *mem);
+static void *bmem_index_to_addr(BMMCB *bmc, int idx);
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize);
 static void *bmem_find_front_guard(BMMCB *bmc, BMMPC *mpc, int *osize);
 static void *bmem_find_back_guard(BMMCB *bmc, BMMPC *mpc, int *osize);
@@ -185,19 +186,19 @@ void *csc_bmem_alloc(void *heap, size_t size)
 		if (mpc->pages >= pages) {
 			if (fnd_pages == -1) {
 				fnd_pages = mpc->pages;
-				fnd_idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
+				fnd_idx = bmem_addr_to_index(bmc, mem);
 			}
 			switch (config & CSC_MEM_FITMASK) {
 			case CSC_MEM_BEST_FIT:
 				if (fnd_pages > mpc->pages) {
 					fnd_pages = mpc->pages;
-					fnd_idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
+					fnd_idx = bmem_addr_to_index(bmc, mem);
 				}
 				break;
 			case CSC_MEM_WORST_FIT:
 				if (fnd_pages < mpc->pages) {
 					fnd_pages = mpc->pages;
-					fnd_idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
+					fnd_idx = bmem_addr_to_index(bmc, mem);
 				}
 				break;
 			default:	/* CSC_MEM_FIRST_FIT */
@@ -243,7 +244,7 @@ void *csc_bmem_alloc(void *heap, size_t size)
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	
 	/* setup the Bitmap Memory Manager Page Controller */
-	mpc = (BMMPC*)(bmc->trunk + bmem_page_to_size(bmc, fnd_idx));
+	mpc = (BMMPC*)bmem_index_to_addr(bmc, fnd_idx);
 	memset(mpc, 0, sizeof(BMMPC));
 	mpc->pages = pages;
 	bmem_pad_set(mpc, padding);
@@ -272,7 +273,7 @@ int csc_bmem_free(void *heap, void *mem)
 	mpc = bmem_find_control(bmc, mem);
 
 	/* set free of these pages */
-	idx = bmem_size_to_index(bmc, BMEM_SPAN(mpc, bmc->trunk));
+	idx = bmem_addr_to_index(bmc, mpc);
 	bmem_page_free(bmc, idx, mpc->pages);
 	mpc->magic[1] = (unsigned char) ~CSC_MEM_MAGIC_BITMAP;	/* set free of the page controller */
 	bmem_set_crc(mpc, sizeof(BMMPC));
@@ -291,7 +292,7 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 	/* setup a BMMPC structure for the free pages */
 	BMMPC *make_free_mpc(int idx, int pages)
 	{
-		BMMPC *mpc = (BMMPC *)(bmc->trunk + bmem_page_to_size(bmc, idx));
+		BMMPC *mpc = (BMMPC *) bmem_index_to_addr(bmc, idx);
 		memset(mpc, 0, sizeof(BMMPC));
 		mpc->pages = pages;
 		bmem_set_crc(mpc, sizeof(BMMPC));
@@ -320,7 +321,7 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 		}
 
 		/* found an allocated memory block */
-		mpc = (BMMPC *)(bmc->trunk + bmem_page_to_size(bmc, i));
+		mpc = (BMMPC *) bmem_index_to_addr(bmc, i);
 		if (bmem_verify(bmc, bmem_find_client(bmc, mpc, NULL)) < 0) {
 			return mpc;
 		}
@@ -351,7 +352,7 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 
 	i = bmem_verify(bmc, mem);
 	if (i == CSC_MERR_BROKEN) {	/* probably in the uninitially free area */
-		idx = bmem_size_to_index(bmc, BMEM_SPAN(mem, bmc->trunk));
+		idx = bmem_addr_to_index(bmc, mem);
 		/* search for free pages */
 		for (i = idx; i < bmc->total; i++) {
 			if (BM_CK_PAGE(bmc->bitmap, i)) {
@@ -371,7 +372,7 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 	}
 
 	mpc = bmem_find_control(bmc, mem);
-	idx = bmem_size_to_index(bmc, BMEM_SPAN(mpc, bmc->trunk));
+	idx = bmem_addr_to_index(bmc, mpc);
 
 	if (BM_CK_PAGE(bmc->bitmap, idx)) {
 		if (state) {
@@ -439,8 +440,8 @@ static int bmem_verify(BMMCB *bmc, void *mem)
 	if (mem == (void*) -1) {
 		return 0;
 	}
-	if (((char*)mem < bmc->trunk) || ((char*)mem > bmc->trunk + 
-				bmem_page_to_size(bmc, bmc->total))) {
+	if (((char*)mem < (char*)bmc) || ((char*)mem > (char*) 
+				bmem_index_to_addr(bmc, bmc->total))) {
 		return CSC_MERR_RANGE;	/* memory out of range */
 	}
 
@@ -525,10 +526,16 @@ static int bmem_size_to_page(BMMCB *bmc, size_t size)
 	return (int)((size + n - 1) / n);
 }
 
-static int bmem_size_to_index(BMMCB *bmc, size_t size)
+static int bmem_addr_to_index(BMMCB *bmc, void *mem)
 {
 	/* no more than 64KB per page */
-	return (int)(size / CSC_MEM_XCFG_PAGE(bmem_config_get(bmc)));
+	return (int)(((char*)mem - (char*)bmc) / 
+			CSC_MEM_XCFG_PAGE(bmem_config_get(bmc)));
+}
+
+static void *bmem_index_to_addr(BMMCB *bmc, int idx)
+{
+	return (char*)bmc + idx * CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
 }
 
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize)
@@ -649,10 +656,9 @@ static void csc_bmem_function_test(char *buf, int blen)
 	 * bmem_find_front_guard(), bmem_find_back_guard(), csc_bmem_extra() 
 	 * and bmem_service_pages() */
 	cclog(-1, "Testing bmem_find_xxx():\n");
-	bmc = (BMMCB*)(buf + blen - sizeof(BMMCB));
+	bmc = (BMMCB*)buf;
 	memset(bmc, 0, sizeof(BMMCB));
-	bmc->trunk = buf;
-	mpc = (BMMPC*)bmc->trunk;
+	mpc = (BMMPC*)(bmc+1);
 	memset(mpc, 0, sizeof(BMMPC));
 	bmem_pad_set(mpc, 260);
 	mpc->pages = 24;
@@ -679,8 +685,8 @@ static void csc_bmem_function_test(char *buf, int blen)
 
 	/* testing how to find the page index in the bitmap */
 	tmp = buf + bmem_page_to_size(bmc, 10) + 12;
-	msize = (size_t) bmem_size_to_index(bmc, BMEM_SPAN(tmp, bmc->trunk));
-	cclog(msize==10, "Found page index %ld at +%ld\n", msize, BMEM_SPAN(tmp, bmc->trunk));
+	msize = (size_t) bmem_addr_to_index(bmc, tmp);
+	cclog(msize==10, "Found page index %ld at +%ld\n", msize, BMEM_SPAN(tmp, bmc));
 }
 
 static void csc_bmem_minimum_test(char *buf, int blen)
@@ -781,15 +787,15 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
 	cclog(rc[0], "Memory attribution: off=+%d size=%d state=%d pad=%d\n", 
-			BMEM_SPAN(p[0], bmc->trunk), rc[1], rc[0],
+			BMEM_SPAN(p[0], bmc), rc[1], rc[0],
 			bmem_pad_get(bmem_find_control(bmc, p[0])));
 	rc[1] = (int)csc_bmem_attrib(bmc, p[1], rc);
 	cclog(rc[0], "Memory attribution: off=+%d size=%d state=%d pad=%d\n",
-			BMEM_SPAN(p[1], bmc->trunk), rc[1], rc[0],
+			BMEM_SPAN(p[1], bmc), rc[1], rc[0],
 			bmem_pad_get(bmem_find_control(bmc, p[1])));
 	rc[1] = (int)csc_bmem_attrib(bmc, p[2], rc);
 	cclog(rc[0], "Memory attribution: off=+%d size=%d state=%d pad=%d\n",
-			BMEM_SPAN(p[2], bmc->trunk), rc[1], rc[0],
+			BMEM_SPAN(p[2], bmc), rc[1], rc[0],
 			bmem_pad_get(bmem_find_control(bmc, p[2])));
 
 	/* free memory test */
@@ -833,14 +839,14 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 
 	/* list all candidators */
 	rc[1] = (int)csc_bmem_attrib(bmc, p[1], rc);
-	cclog(!rc[0], "Candidator 1: off=+%d size=%d state=%d\n", BMEM_SPAN(p[1], bmc->trunk), rc[1], rc[0]);
+	cclog(!rc[0], "Candidator 1: off=+%d size=%d state=%d\n", BMEM_SPAN(p[1], bmc), rc[1], rc[0]);
 	rc[1] = (int)csc_bmem_attrib(bmc, p[3], rc);
-	cclog(!rc[0], "Candidator 2: off=+%d size=%d state=%d\n", BMEM_SPAN(p[3], bmc->trunk), rc[1], rc[0]);
+	cclog(!rc[0], "Candidator 2: off=+%d size=%d state=%d\n", BMEM_SPAN(p[3], bmc), rc[1], rc[0]);
 	/* manully set the next candidator because it's inside untouched area */
 	p[5] = p[4] + CSC_MEM_XCFG_PAGE(config);	
 	rc[1] = (int)csc_bmem_attrib(bmc, p[5], rc);
 	p[5] += CSC_MEM_XCFG_PAGE(config);
-	cclog(rc[0]<0, "Candidator 3: off=+%d size=%d state=%d\n", BMEM_SPAN(p[5], bmc->trunk), rc[1], rc[0]);
+	cclog(rc[0]<0, "Candidator 3: off=+%d size=%d state=%d\n", BMEM_SPAN(p[5], bmc), rc[1], rc[0]);
 	cclog(bmc->avail==22, "Created 3 memory holes: free=%d map=%02x%02x%02x%02x\n",
 			bmc->avail, bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
@@ -849,7 +855,7 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 	if (!p[6]) return;
 	rc[1] = (int)csc_bmem_attrib(bmc, p[6], rc);
 	cclog(p[6]==p[1], "First Fit: off=+%d size=%d -- free=%d map=%02x%02x%02x%02x\n", 
-			BMEM_SPAN(p[6], bmc->trunk), rc[1], bmc->avail, 
+			BMEM_SPAN(p[6], bmc), rc[1], bmc->avail, 
 			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
 	/* testing best fit */
@@ -865,7 +871,7 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 	if (!p[6]) return;
 	rc[1] = (int)csc_bmem_attrib(bmc, p[6], rc);
 	cclog(p[6]==p[3], "Best Fit: off=+%d size=%d -- free=%d map=%02x%02x%02x%02x\n", 
-			BMEM_SPAN(p[6], bmc->trunk), rc[1], bmc->avail, 
+			BMEM_SPAN(p[6], bmc), rc[1], bmc->avail, 
 			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 
 	/* testing worst fit */
@@ -881,7 +887,7 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 	if (!p[6]) return;
 	rc[1] = (int)csc_bmem_attrib(bmc, p[6], rc);
 	cclog(p[6]==p[5], "Worst Fit: off=+%d size=%d -- free=%d map=%02x%02x%02x%02x\n", 
-			BMEM_SPAN(p[6], bmc->trunk), rc[1], bmc->avail, 
+			BMEM_SPAN(p[6], bmc), rc[1], bmc->avail, 
 			bmc->bitmap[0], bmc->bitmap[1], bmc->bitmap[2], bmc->bitmap[3]);
 }
 
