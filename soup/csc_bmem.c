@@ -76,14 +76,8 @@ typedef	struct	_BMMCB	{
 
 
 static int bmem_verify(BMMCB *bmc, void *mem);
-static int bmem_guard_setup(BMMCB *bmc, BMMPC *mpc);
-static void *bmem_guard_verify(BMMCB *bmc, BMMPC *mpc);
 static void bmem_page_take(BMMCB *bmc, int idx, int pages);
 static void bmem_page_free(BMMCB *bmc, int idx, int pages);
-static size_t bmem_page_to_size(BMMCB *bmc, int page);
-static int bmem_size_to_page(BMMCB *bmc, size_t size);
-static int bmem_addr_to_index(BMMCB *bmc, void *mem);
-static void *bmem_index_to_addr(BMMCB *bmc, int idx);
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize);
 static void *bmem_find_front_guard(BMMCB *bmc, BMMPC *mpc, int *osize);
 static void *bmem_find_back_guard(BMMCB *bmc, BMMPC *mpc, int *osize);
@@ -116,7 +110,7 @@ static inline int bmem_config_get(BMMCB *bmc)
 
 static inline int bmem_service_pages(BMMCB *bmc)
 {
-	register int	config = (int)((bmc->magic[3] << 8) | bmc->magic[2]);
+	register int	config = bmem_config_get(bmc);
 
 	/* MemCB + front and back guards */
 	return 1 + CSC_MEM_XCFG_GUARD(config) + CSC_MEM_XCFG_GUARD(config);
@@ -131,6 +125,31 @@ static inline void bmem_pad_set(BMMPC *mpc, int padding)
 static inline int bmem_pad_get(BMMPC *mpc)
 {
 	return (int)((mpc->magic[3] << 8) | mpc->magic[2]);
+}
+
+static inline size_t bmem_page_to_size(BMMCB *bmc, int page)
+{
+	/* no more than 64KB per page */
+	return (size_t)page * CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
+}
+
+static inline int bmem_size_to_page(BMMCB *bmc, size_t size)
+{
+	/* no more than 64KB per page */
+	register int n = CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
+	return (int)((size + n - 1) / n);
+}
+
+static inline int bmem_addr_to_index(BMMCB *bmc, void *mem)
+{
+	/* no more than 64KB per page */
+	return (int)(((char*)mem - (char*)bmc) / 
+			CSC_MEM_XCFG_PAGE(bmem_config_get(bmc)));
+}
+
+static inline void *bmem_index_to_addr(BMMCB *bmc, int idx)
+{
+	return (char*)bmc + idx * CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
 }
 
 void *csc_bmem_init(void *mem, size_t mlen, int flags)
@@ -248,7 +267,6 @@ void *csc_bmem_alloc(void *heap, size_t size)
 	memset(mpc, 0, sizeof(BMMPC));
 	mpc->pages = pages;
 	bmem_pad_set(mpc, padding);
-	bmem_guard_setup(bmc, mpc);
 	bmem_set_crc(mpc, sizeof(BMMPC));
 
 	/* initial the memory */
@@ -304,7 +322,7 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 	}
 
 	last_free = (int) -1;
-	for (i = 0; i < bmc->total; i++) {
+	for (i = bmc->pages; i < bmc->total; i++) {
 		if (!BM_CK_PAGE(bmc->bitmap, i)) {
 			if (last_free == (int)-1) {
 				last_free = i;
@@ -440,8 +458,10 @@ static int bmem_verify(BMMCB *bmc, void *mem)
 	if (mem == (void*) -1) {
 		return 0;
 	}
-	if (((char*)mem < (char*)bmc) || ((char*)mem > (char*) 
-				bmem_index_to_addr(bmc, bmc->total))) {
+
+	/* make sure the client memory is in range */
+	if ((mem < bmem_index_to_addr(bmc, bmc->pages)) ||
+			(mem > bmem_index_to_addr(bmc, bmc->total))) {
 		return CSC_MERR_RANGE;	/* memory out of range */
 	}
 
@@ -451,47 +471,7 @@ static int bmem_verify(BMMCB *bmc, void *mem)
 	if (!bmem_check(mem, sizeof(BMMPC))) {
 		return CSC_MERR_BROKEN; /* broken memory controller */
 	}
-
-	if (bmem_guard_verify(bmc, (BMMPC *)mem) != NULL) {
-		return 1;	/* a warning that memory may be violated */
-	}
 	return 0;
-}
-
-static int bmem_guard_setup(BMMCB *bmc, BMMPC *mpc)
-{
-	char	*p;
-	int	len;
-
-	if ((p = bmem_find_front_guard(bmc, mpc, &len)) != NULL) {
-		memset(p, BMEM_MAGPIE, len);
-	}
-	if ((p = bmem_find_back_guard(bmc, mpc, &len)) != NULL) {
-		memset(p, BMEM_MAGPIE, len);
-	}
-	return 0;
-}
-
-static void *bmem_guard_verify(BMMCB *bmc, BMMPC *mpc)
-{
-	char	*p;
-	int	len;
-
-	if ((p = bmem_find_front_guard(bmc, mpc, &len)) != NULL) {
-		for ( ; len > 0; len--, p++) {
-			if (*p != (char) BMEM_MAGPIE) {
-				return p;
-			}
-		}
-	}
-	if ((p = bmem_find_back_guard(bmc, mpc, &len)) != NULL) {
-		for ( ; len > 0; len--, p++) {
-			if (*p != (char) BMEM_MAGPIE) {
-				return p;
-			}
-		}
-	}
-	return NULL;
 }
 
 static void bmem_page_take(BMMCB *bmc, int idx, int pages)
@@ -511,31 +491,6 @@ static void bmem_page_free(BMMCB *bmc, int idx, int pages)
 	for (i = 0; i < pages; i++) {
 		BM_CLR_PAGE(bmc->bitmap, idx + i);
 	}
-}
-
-static size_t bmem_page_to_size(BMMCB *bmc, int page)
-{
-	/* no more than 64KB per page */
-	return (size_t)page * CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
-}
-
-static int bmem_size_to_page(BMMCB *bmc, size_t size)
-{
-	/* no more than 64KB per page */
-	int n = CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
-	return (int)((size + n - 1) / n);
-}
-
-static int bmem_addr_to_index(BMMCB *bmc, void *mem)
-{
-	/* no more than 64KB per page */
-	return (int)(((char*)mem - (char*)bmc) / 
-			CSC_MEM_XCFG_PAGE(bmem_config_get(bmc)));
-}
-
-static void *bmem_index_to_addr(BMMCB *bmc, int idx)
-{
-	return (char*)bmc + idx * CSC_MEM_XCFG_PAGE(bmem_config_get(bmc));
 }
 
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize)
@@ -893,3 +848,40 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 
 #endif
 
+#if 0
+static int bmem_guard_setup(BMMCB *bmc, BMMPC *mpc)
+{
+	char	*p;
+	int	len;
+
+	if ((p = bmem_find_front_guard(bmc, mpc, &len)) != NULL) {
+		memset(p, BMEM_MAGPIE, len);
+	}
+	if ((p = bmem_find_back_guard(bmc, mpc, &len)) != NULL) {
+		memset(p, BMEM_MAGPIE, len);
+	}
+	return 0;
+}
+
+static void *bmem_guard_verify(BMMCB *bmc, BMMPC *mpc)
+{
+	char	*p;
+	int	len;
+
+	if ((p = bmem_find_front_guard(bmc, mpc, &len)) != NULL) {
+		for ( ; len > 0; len--, p++) {
+			if (*p != (char) BMEM_MAGPIE) {
+				return p;
+			}
+		}
+	}
+	if ((p = bmem_find_back_guard(bmc, mpc, &len)) != NULL) {
+		for ( ; len > 0; len--, p++) {
+			if (*p != (char) BMEM_MAGPIE) {
+				return p;
+			}
+		}
+	}
+	return NULL;
+}
+#endif
