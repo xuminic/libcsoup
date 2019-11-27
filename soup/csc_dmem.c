@@ -148,11 +148,6 @@ void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 	return NULL;
 }
 
-void *csc_dmem_scan_mapper(void *heap, void *smem)
-{
-	return NULL;
-}
-
 void *csc_dmem_alloc(void *heap, size_t n)
 {
 	DMHEAP	*hman;
@@ -294,11 +289,6 @@ size_t csc_dmem_attrib(void *heap, void *mem, int *state)
 	return cm->size - DMEM_PADDED(cm);
 }
 
-
-void *csc_dmem_extra(void *heap, void *mem, int *xsize)
-{
-	return NULL;
-}
 
 void *csc_dmem_front_guard(void *heap, void *mem, int *xsize)
 {

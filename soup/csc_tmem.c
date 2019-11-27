@@ -124,10 +124,10 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 	/* make sure the size is not out of range */
 	/* Though CSC_MEM_ZERO is practically useless, supporting CSC_MEM_ZERO
 	 * in program is for the integrity of the memory logic */
-	if ((len <= guard) || (len > (UINT_MAX >> 2))) {
+	if ((len <= (size_t)guard) || (len > (UINT_MAX >> 2))) {
 		return NULL;	/* CSC_MERR_RANGE */
 	}
-	if ((len == guard + 1) && !(flags & CSC_MEM_ZERO)) {
+	if ((len == (size_t)guard + 1) && !(flags & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: no support empty allocation */
 	}
 
@@ -178,11 +178,6 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 			}
 		}
 	}
-	return NULL;
-}
-
-void *csc_tmem_scan_mapper(void *heap, void *smem)
-{
 	return NULL;
 }
 
@@ -361,10 +356,6 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 	return (size_t)TMEM_BYTES(*mb);
 }
 
-void *csc_tmem_extra(void *heap, void *mem, int *xsize)
-{
-	return NULL;
-}
 
 void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
 {
@@ -453,7 +444,7 @@ static int tmem_cword(int uflag, int size)
 
 static void *tmem_find_client(void *heap, int *mb, size_t *osize)
 {
-	int	config = tmem_config_get(heap);
+	int	pages, config = tmem_config_get(heap);
 
 	pages = CSC_MEM_XCFG_GUARD(config) * CSC_MEM_XCFG_PAGE(config);
 	if (osize) {
@@ -755,6 +746,7 @@ int csc_tmem_unittest(void)
 {
 	int	i, buf[256];
 	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
+	int	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(0,0);
 
 	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
 		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),

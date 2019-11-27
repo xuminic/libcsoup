@@ -47,9 +47,7 @@ static void *(*csc_mem_init)(void *heap, size_t len, int flags);
 static void *(*csc_mem_alloc)(void *heap, size_t n);
 static int (*csc_mem_free)(void *heap, void *mem);
 static void *(*csc_mem_scan)(void *heap, int (*used)(void*), int (*loose)(void*));
-static void *(*csc_mem_scan_mapper)(void *heap, void *smem);
 static size_t (*csc_mem_attrib)(void *heap, void *mem, int *state);
-static void *(*csc_mem_extra)(void *heap, void *mem, int *xsize);
 static void *(*csc_mem_front_guard)(void *heap, void *mem, int *xsize);
 static void *(*csc_mem_back_guard)(void *heap, void *mem, int *xsize);
 #ifdef	CFG_UNIT_TEST
@@ -60,7 +58,6 @@ static int (*csc_mem_unittest)(void);
 int mem_main(void *rtime, int argc, char **argv)
 {
 	int	c;
-	char	*sdir = NULL;
 
 	if (argc < 2) {
 		csc_cli_print(clist, NULL);
@@ -70,6 +67,18 @@ int mem_main(void *rtime, int argc, char **argv)
 	if ((rtime = csc_cli_qopt_open(argc, argv)) == NULL) {
 		return -1;
 	}
+
+	/* set the default method */
+	csc_mem_init = csc_bmem_init;
+	csc_mem_alloc = csc_bmem_alloc;
+	csc_mem_free = csc_bmem_free;
+	csc_mem_scan = csc_bmem_scan;
+	csc_mem_attrib = csc_bmem_attrib;
+	csc_mem_front_guard = csc_bmem_front_guard;
+	csc_mem_back_guard = csc_bmem_back_guard;
+#ifdef	CFG_UNIT_TEST
+	csc_mem_unittest = csc_bmem_unittest;
+#endif
 	
 	while ((c = csc_cli_qopt(rtime, clist)) >= 0) {
 		switch (c) {
@@ -82,9 +91,7 @@ int mem_main(void *rtime, int argc, char **argv)
 			csc_mem_alloc = csc_bmem_alloc;
 			csc_mem_free = csc_bmem_free;
 			csc_mem_scan = csc_bmem_scan;
-			csc_mem_scan_mapper = csc_bmem_scan_mapper;
 			csc_mem_attrib = csc_bmem_attrib;
-			csc_mem_extra = csc_bmem_extra;
 			csc_mem_front_guard = csc_bmem_front_guard;
 			csc_mem_back_guard = csc_bmem_back_guard;
 #ifdef	CFG_UNIT_TEST
@@ -97,9 +104,7 @@ int mem_main(void *rtime, int argc, char **argv)
 			csc_mem_alloc = csc_dmem_alloc;
 			csc_mem_free = csc_dmem_free;
 			csc_mem_scan = csc_dmem_scan;
-			csc_mem_scan_mapper = csc_dmem_scan_mapper;
 			csc_mem_attrib = csc_dmem_attrib;
-			csc_mem_extra = csc_dmem_extra;
 			csc_mem_front_guard = csc_dmem_front_guard;
 			csc_mem_back_guard = csc_dmem_back_guard;
 #ifdef	CFG_UNIT_TEST
@@ -112,9 +117,7 @@ int mem_main(void *rtime, int argc, char **argv)
 			csc_mem_alloc = csc_tmem_alloc;
 			csc_mem_free = csc_tmem_free;
 			csc_mem_scan = csc_tmem_scan;
-			csc_mem_scan_mapper = csc_tmem_scan_mapper;
 			csc_mem_attrib = csc_tmem_attrib;
-			csc_mem_extra = csc_tmem_extra;
 			csc_mem_front_guard = csc_tmem_front_guard;
 			csc_mem_back_guard = csc_tmem_back_guard;
 #ifdef	CFG_UNIT_TEST
