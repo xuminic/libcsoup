@@ -155,12 +155,22 @@ static inline void *bmem_index_to_addr(BMMCB *bmc, int idx)
 
    \param[in]  mem the memory heap for allocation.
    \param[in]  mlen the size of the memory heap.
+   \param[in]  flags the bit combination of a group of settings.
+   Bit0-1: memory allocation strategy. 0=first fit; 1=best fit; 2=worst fit
+   Bit2: clean memory. 0=do nothing; 1=fill allocated memory with 0
+   Bit3: empty allocation. 0=do not allow allocating 0 byte; 1=allow allocationg 0 byte
+         so it will allocate a memory management unit only
+   Bit4-7: page size for the bitmap management and for the guarding area.
+         0=32; 1=64; 2=128; 3=256; ...; 11=65536; (only support to 11)
+   Bit8-11: guarding pages. It defines the size of the guarding area.
+         The guarding area includes the front guard and back guard, where locates before
+	 and after the client area. 0=no guardings 1-15=number of pages, page size defined in Bit4-7.
+	 For example: Bit8-11=3 Bit4-7=2, so both the frond and the back guarding area is 3*128=384 bytes
 
    \return    The pointer to the memory heap object, or NULL if failed.
 
-   \remark The given memory pool must be started at 'int' boundry.
-   The minimum allocation unit is 'int'. Therefore the maximum managable 
-   memory is 4GB in 32/64-bit system, or 32KB in 8/16-bit system.
+   \remark The minimum allocation unit is 'page' which size is defined in Bit4-7 of the flags.
+   The detail settings of flags maybe find in libcsoup.h
 */
 void *csc_bmem_init(void *mem, size_t mlen, int flags)
 {
@@ -200,6 +210,19 @@ void *csc_bmem_init(void *mem, size_t mlen, int flags)
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return bmc;
 }
+
+/*!\brief allocate a piece of dynamic memory block inside the specified 
+    memory heap.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  size the size of the expecting allocated memory block.
+
+   \return    point to the allocated memory block in the memory heap. 
+              or NULL if not enough space for allocating.
+
+   \remark The strategy of allocation is defined by CSC_MEM_FITNESS field
+           in csc_bmem_init()
+*/
 
 void *csc_bmem_alloc(void *heap, size_t size)
 {
@@ -282,12 +305,20 @@ void *csc_bmem_alloc(void *heap, size_t size)
 
 	/* initial the memory */
 	heap = bmem_find_client(bmc, mpc, NULL);	/* find client area */
-	if (config & CSC_MEM_CLEAN) {
+ 	if (config & CSC_MEM_CLEAN) {
 		memset(heap, 0, size);
 	}
 	return heap;
 }
 
+/*!\brief free the allocated memory block.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  mem the memory block.
+
+   \return    0 if freed successfully, or error code smaller than 0
+   \remark    If freeing a freed memory block, it returns 0.
+*/
 int csc_bmem_free(void *heap, void *mem)
 {
 	BMMCB	*bmc = heap;
@@ -304,12 +335,26 @@ int csc_bmem_free(void *heap, void *mem)
 	bmem_page_free(bmc, idx, mpc->pages);
 	mpc->magic[1] = (unsigned char) ~CSC_MEM_MAGIC_BITMAP;	/* set free of the page controller */
 	bmem_set_crc(mpc, sizeof(BMMPC));
-
+y
 	bmc->avail += mpc->pages;
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return 0;
 }
 
+/*!\brief scan and inspecting the heap.
+
+   \param[in]  heap the memory heap.
+   \param[in]  used the callback function when scanned an allocated memory block.
+   \param[in]  loose  the callback function when scanned a freed memory block.
+
+   \return    NULL if successfully scanned to the end of heap, or break the scan 
+   by the callback functions. Otherwise it returns the pointer to the faulty memory block.
+   
+   \remark    The scan function will scan the heap from the first memory block to the last.
+   When it found an allocated memory block, it will call the used() function with the address
+   of the allocated memory block. When it found a freed memory block, it will call the loose() 
+   function with the address of the freed memory block.
+*/
 void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
 	BMMCB	*bmc = heap;
@@ -718,7 +763,9 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 
 	/* free the empty memory block */
 	rc[0] = csc_bmem_free(bmc, p[0]);
-	cclog(rc[0] >= 0, "Freed the empty memory block. [%02x]\n", bmc->bitmap[0]);
+	cclog(rc[0] == 0, "Freed the empty memory block. [%02x]\n", bmc->bitmap[0]);
+	rc[0] = csc_bmem_free(bmc, p[0]);
+	cclog(rc[0] == 0, "Freed twice the empty memory block. [%02x]\n", bmc->bitmap[0]);
 	rc[1] = (int)csc_bmem_attrib(bmc, p[0], rc);
 	cclog(rc[1] == (int)bmem_page_to_size(bmc, 1), "Memory destroied: pages=%d %d\n", 
 			bmem_find_control(bmc, p[0])->pages, rc[1]);

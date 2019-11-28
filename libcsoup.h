@@ -446,7 +446,7 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN)
 
 /* Bit 4-7: page size for bitmap management
- * Bit 8-11: guarding area for debugging memory violation
+ * Bit 8-11: guarding pages for debugging memory violation
  *   The memory size is multiplied by pages size in Bit 4-7. */
 #define CSC_MEM_XCFG_SET(page,guard)	((((page)&15)<<4) | (((guard)&15)<<8))
 
