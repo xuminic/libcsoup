@@ -72,6 +72,9 @@
 #define	TMEM_CLR_USED(n)	((n) & ~TMEM_MASK_USED)
 #define	TMEM_TEST_USED(n)	((n) & TMEM_MASK_USED)
 
+#define TMEM_GUARD(c)		(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2/sizeof(int))
+
+
 static int tmem_parity(int cw);
 static int tmem_verify(void *heap, int *mb);
 static int tmem_cword(int uflag, int size);
@@ -85,6 +88,11 @@ static inline void tmem_config_set(unsigned char *heap, int config)
 static inline int tmem_config_get(unsigned char *heap)
 {
 	return (int)((heap[3] << 8) | heap[2]);
+}
+
+static inline int tmem_guarding_words(void *heap)
+{
+	return TMEM_GUARD(tmem_config_get(heap));
 }
 
 static inline int *tmem_heap(void *heap)
@@ -105,7 +113,7 @@ static inline int *tmem_heap(void *heap)
 */
 void *csc_tmem_init(void *hmem, size_t len, int flags)
 {
-	int	*heap, guard;
+	int	*heap;
 
 	if (hmem == NULL) {
 		return hmem;	/* CSC_MERR_INIT */
@@ -117,17 +125,13 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 	/* change size unit to per-int; the remains will be cut off  */
 	len /= sizeof(int);	
 
-	/* find the size of the guarding area */
-	guard = (CSC_MEM_XCFG_GUARD(flags) + CSC_MEM_XCFG_GUARD(flags)) *
-			CSC_MEM_XCFG_PAGE(flags) / sizeof(int);
-
 	/* make sure the size is not out of range */
 	/* Though CSC_MEM_ZERO is practically useless, supporting CSC_MEM_ZERO
 	 * in program is for the integrity of the memory logic */
-	if ((len <= (size_t)guard) || (len > (UINT_MAX >> 2))) {
+	if ((len <= (size_t)TMEM_GUARD(flags)) || (len > (UINT_MAX >> 2))) {
 		return NULL;	/* CSC_MERR_RANGE */
 	}
-	if ((len == (size_t)guard + 1) && !(flags & CSC_MEM_ZERO)) {
+	if ((len == (size_t)TMEM_GUARD(flags) + 1) && !(flags & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: no support empty allocation */
 	}
 
@@ -453,7 +457,12 @@ static void *tmem_find_client(void *heap, int *mb, size_t *osize)
 	return mb + pages/sizeof(int) + 1;
 }
 
+static int *tmem_find_control(void *heap, void *mem)
+{
+	int 	 config = tmem_config_get(heap);
 
+
+}
 
 #ifdef	CFG_UNIT_TEST
 

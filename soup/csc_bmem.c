@@ -335,7 +335,7 @@ int csc_bmem_free(void *heap, void *mem)
 	bmem_page_free(bmc, idx, mpc->pages);
 	mpc->magic[1] = (unsigned char) ~CSC_MEM_MAGIC_BITMAP;	/* set free of the page controller */
 	bmem_set_crc(mpc, sizeof(BMMPC));
-y
+
 	bmc->avail += mpc->pages;
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return 0;
@@ -405,12 +405,22 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 	return NULL;
 }
 
-/* To avoid ambiguous of the memory block, the csc_bmem_attrib() won't
- * accept the uninitialized block. For example:
- * [memblock/4-page][memblock/0-page][A:free pages to end]
- * csc_bmem_attrib(heap, A, state) will return [memblock/0-page] or
- * [A:free pages to end]? 
- * So the best practice is not to accept the [A:free pages to end] */
+/*!\brief find the attribution of the memory block.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the memory block.
+   \param[out] state the state of the memory block. 0=free; 1=allocated
+               if state<0, then state returns the error code.
+
+   \return    the size of the memory block when succeed, or (size_t) -1 in error.
+              the error code returns in 'state'.
+
+   \remark  To avoid ambiguous of the memory block, the csc_bmem_attrib() don't
+   accept the uninitialized block. 
+   For example: [memblock/4-page][memblock/0-page][A:free pages to end]
+   What should csc_bmem_attrib(heap, A, state) return, the [memblock/0-page] or
+   [A:free pages to end]? So the best practice is not to accept the [A:free pages to end] 
+*/
 size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 {
 	BMMCB	*bmc = heap;
@@ -445,6 +455,25 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
 	return bmem_page_to_size(bmc, i - idx);
 }
 
+/*!\brief find the front guard area.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] xsize the size of the front guard area, or 0=freed memory, 
+               or the error code when failed
+
+   \return    the pointer to the front guard area, or NULL if failed.
+
+   \remark    the guarding area is a piece of memories in front of the client area
+   and in the end of the client area. It can be used to buffer a possible memory overflow
+   while debugging, or store extra information about the memory user. The size of the
+   guarding area was defined in the 'flags' parameter in csc_bmem_init(), while bit 4-7,
+   the page size multiply the bit 8-11, the guarding pages.
+
+   \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
+   because the pad area in the memory management block was defined as a part of the front guard,
+   and the pad area in the allocated memory block was defined as a part of the back guard.
+*/
 void *csc_bmem_front_guard(void *heap, void *mem, int *xsize)
 {
 	BMMCB	*bmc = heap;
@@ -455,6 +484,15 @@ void *csc_bmem_front_guard(void *heap, void *mem, int *xsize)
 		return NULL;	/* invalided memory management */
 	}
 
+	/* make sure the memory block was allocated. pointless to guard a free block */
+	pages = bmem_addr_to_index(bmc, mpc);
+	if (!BM_CK_PAGE(bmc->bitmap, pages)) {
+		if (xsize) {
+			*xsize = 0;	/* free memory block */
+		}
+		return NULL;
+	}
+
 	if (xsize) {
 		pages = 1 + CSC_MEM_XCFG_GUARD(bmem_config_get(bmc));
 		*xsize = (int)(bmem_page_to_size(bmc, pages) - sizeof(BMMPC));
@@ -462,6 +500,25 @@ void *csc_bmem_front_guard(void *heap, void *mem, int *xsize)
 	return (char*)(mpc+1);
 }
 
+/*!\brief find the back guard area.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] xsize the size of the back guard area, or 0=freed memory, 
+               or the error code when failed
+
+   \return    the pointer to the back guard area, or NULL if failed.
+
+   \remark    the guarding area is a piece of memories in front of the client area
+   and in the end of the client area. It can be used to buffer a possible memory overflow
+   while debugging, or store extra information about the memory user. The size of the
+   guarding area was defined in the 'flags' parameter in csc_bmem_init(), while bit 4-7,
+   the page size multiply the bit 8-11, the guarding pages.
+
+   \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
+   because the pad area in the memory management block was defined as a part of the front guard,
+   and the pad area in the allocated memory block was defined as a part of the back guard.
+*/
 void *csc_bmem_back_guard(void *heap, void *mem, int *xsize)
 {
 	BMMCB	*bmc = heap;
@@ -470,6 +527,15 @@ void *csc_bmem_back_guard(void *heap, void *mem, int *xsize)
 
 	if ((mpc = bmem_verify(bmc, mem, xsize)) == NULL) {
 		return NULL;	/* invalided memory management */
+	}
+
+	/* make sure the memory block was allocated. pointless to guard a free block */
+	glen = bmem_addr_to_index(bmc, mpc);
+	if (!BM_CK_PAGE(bmc->bitmap, glen)) {
+		if (xsize) {
+			*xsize = 0;	/* free memory block */
+		}
+		return NULL;
 	}
 
 	glen = CSC_MEM_XCFG_GUARD(bmem_config_get(bmc));
