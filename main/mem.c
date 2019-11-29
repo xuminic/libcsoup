@@ -53,6 +53,7 @@ static void *(*csc_mem_back_guard)(void *heap, void *mem, int *xsize);
 #ifdef	CFG_UNIT_TEST
 static int (*csc_mem_unittest)(void);
 #endif
+static void mem_set_default(int sw);
 
 
 int mem_main(void *rtime, int argc, char **argv)
@@ -69,17 +70,7 @@ int mem_main(void *rtime, int argc, char **argv)
 	}
 
 	/* set the default method */
-	csc_mem_init = csc_bmem_init;
-	csc_mem_alloc = csc_bmem_alloc;
-	csc_mem_free = csc_bmem_free;
-	csc_mem_scan = csc_bmem_scan;
-	csc_mem_attrib = csc_bmem_attrib;
-	csc_mem_front_guard = csc_bmem_front_guard;
-	csc_mem_back_guard = csc_bmem_back_guard;
-#ifdef	CFG_UNIT_TEST
-	csc_mem_unittest = csc_bmem_unittest;
-#endif
-	
+	mem_set_default('b');
 	while ((c = csc_cli_qopt(rtime, clist)) >= 0) {
 		switch (c) {
 		case 'h':
@@ -87,42 +78,9 @@ int mem_main(void *rtime, int argc, char **argv)
 			break;
 
 		case 'b':
-			csc_mem_init = csc_bmem_init;
-			csc_mem_alloc = csc_bmem_alloc;
-			csc_mem_free = csc_bmem_free;
-			csc_mem_scan = csc_bmem_scan;
-			csc_mem_attrib = csc_bmem_attrib;
-			csc_mem_front_guard = csc_bmem_front_guard;
-			csc_mem_back_guard = csc_bmem_back_guard;
-#ifdef	CFG_UNIT_TEST
-			csc_mem_unittest = csc_bmem_unittest;
-#endif
-			break;
-
 		case 'd':
-			csc_mem_init = csc_dmem_init;
-			csc_mem_alloc = csc_dmem_alloc;
-			csc_mem_free = csc_dmem_free;
-			csc_mem_scan = csc_dmem_scan;
-			csc_mem_attrib = csc_dmem_attrib;
-			csc_mem_front_guard = csc_dmem_front_guard;
-			csc_mem_back_guard = csc_dmem_back_guard;
-#ifdef	CFG_UNIT_TEST
-			csc_mem_unittest = csc_dmem_unittest;
-#endif
-			break;
-
 		case 't':
-			csc_mem_init = csc_tmem_init;
-			csc_mem_alloc = csc_tmem_alloc;
-			csc_mem_free = csc_tmem_free;
-			csc_mem_scan = csc_tmem_scan;
-			csc_mem_attrib = csc_tmem_attrib;
-			csc_mem_front_guard = csc_tmem_front_guard;
-			csc_mem_back_guard = csc_tmem_back_guard;
-#ifdef	CFG_UNIT_TEST
-			csc_mem_unittest = csc_tmem_unittest;
-#endif
+			mem_set_default(c);
 			break;
 
 #ifdef	CFG_UNIT_TEST
@@ -143,6 +101,50 @@ int mem_main(void *rtime, int argc, char **argv)
 		}
 	}
 	return 0;
+}
+
+static void mem_set_default(int sw)
+{
+	switch (sw) {
+	case 'b':
+		csc_mem_init = csc_bmem_init;
+		csc_mem_alloc = csc_bmem_alloc;
+		csc_mem_free = csc_bmem_free;
+		csc_mem_scan = csc_bmem_scan;
+		csc_mem_attrib = csc_bmem_attrib;
+		csc_mem_front_guard = csc_bmem_front_guard;
+		csc_mem_back_guard = csc_bmem_back_guard;
+#ifdef	CFG_UNIT_TEST
+		csc_mem_unittest = csc_bmem_unittest;
+#endif
+		break;
+
+	case 'd':
+		csc_mem_init = csc_dmem_init;
+		csc_mem_alloc = csc_dmem_alloc;
+		csc_mem_free = csc_dmem_free;
+		csc_mem_scan = csc_dmem_scan;
+		csc_mem_attrib = csc_dmem_attrib;
+		csc_mem_front_guard = csc_dmem_front_guard;
+		csc_mem_back_guard = csc_dmem_back_guard;
+#ifdef	CFG_UNIT_TEST
+		csc_mem_unittest = csc_dmem_unittest;
+#endif
+		break;
+
+	default:	/* 't' */
+		csc_mem_init = csc_tmem_init;
+		csc_mem_alloc = csc_tmem_alloc;
+		csc_mem_free = csc_tmem_free;
+		csc_mem_scan = csc_tmem_scan;
+		csc_mem_attrib = csc_tmem_attrib;
+		csc_mem_front_guard = csc_tmem_front_guard;
+		csc_mem_back_guard = csc_tmem_back_guard;
+#ifdef	CFG_UNIT_TEST
+		csc_mem_unittest = csc_tmem_unittest;
+#endif
+		break;
+	}
 }
 
 

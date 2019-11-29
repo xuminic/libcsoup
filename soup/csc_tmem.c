@@ -44,12 +44,12 @@
  * [Managing Block]
  *   char    magic[4]: 
  *     CRC8 + MAGIC + CONFIG1 + CONFIG2
- *   Control Word for the Heap:
+ *   Control Word of the Heap:
  *     MSB+0: parity bit
  *     MSB+1: usable bit (always 1=used)
  *     MSB+2...n: heap size (excluding the managing block)
  * [Memory Block]
- *   Control Word for the memory block:
+ *   Control Word of the memory block:
  *     MSB+0: parity bit
  *     MSB+1: usable bit (0=free 1=used)
  *     MSB+2...n: block size (excluding the control word)
@@ -72,12 +72,15 @@
 #define	TMEM_CLR_USED(n)	((n) & ~TMEM_MASK_USED)
 #define	TMEM_TEST_USED(n)	((n) & TMEM_MASK_USED)
 
-#define TMEM_GUARD(c)		(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2/sizeof(int))
+
+#define TMEM_GUARD(c)		(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2)
 
 
 static int tmem_parity(int cw);
 static int tmem_verify(void *heap, int *mb);
 static int tmem_cword(int uflag, int size);
+static void *tmem_find_client(void *heap, int *mb, size_t *osize);
+static int *tmem_find_control(void *heap, void *mem);
 
 static inline void tmem_config_set(unsigned char *heap, int config)
 {
@@ -88,11 +91,6 @@ static inline void tmem_config_set(unsigned char *heap, int config)
 static inline int tmem_config_get(unsigned char *heap)
 {
 	return (int)((heap[3] << 8) | heap[2]);
-}
-
-static inline int tmem_guarding_words(void *heap)
-{
-	return TMEM_GUARD(tmem_config_get(heap));
 }
 
 static inline int *tmem_heap(void *heap)
@@ -113,7 +111,7 @@ static inline int *tmem_heap(void *heap)
 */
 void *csc_tmem_init(void *hmem, size_t len, int flags)
 {
-	int	*heap;
+	int	*heap, guards;
 
 	if (hmem == NULL) {
 		return hmem;	/* CSC_MERR_INIT */
@@ -123,15 +121,16 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 	len -= sizeof(int) + 4;
 	
 	/* change size unit to per-int; the remains will be cut off  */
-	len /= sizeof(int);	
+	len /= sizeof(int);
+	guards = TMEM_GUARD(flags) / sizeof(int);
 
 	/* make sure the size is not out of range */
 	/* Though CSC_MEM_ZERO is practically useless, supporting CSC_MEM_ZERO
 	 * in program is for the integrity of the memory logic */
-	if ((len <= (size_t)TMEM_GUARD(flags)) || (len > (UINT_MAX >> 2))) {
+	if ((len <= (size_t)guards) || (len > (UINT_MAX >> 2))) {
 		return NULL;	/* CSC_MERR_RANGE */
 	}
-	if ((len == (size_t)TMEM_GUARD(flags) + 1) && !(flags & CSC_MEM_ZERO)) {
+	if ((len == (size_t)guards + 1) && !(flags & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: no support empty allocation */
 	}
 
@@ -149,42 +148,6 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 }
 
 
-/*!\brief scan the memory chain to process every piece of memory block.
-
-   \param[in]  heap the memory heap for allocation.
-   \param[in]  used the callback function when find a piece of used memory
-   \param[in]  loose the callback function when find a piece of free memory
-
-   \return     NULL if successfully scanned the memory chain. If the memory
-               chain is corrupted, it returns a pointer to the broken point.
-
-   \remark The prototype of the callback functions are: int func(int *)
-           The scan process can be broken if func() returns non-zero.
-*/
-void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
-{
-	int	*mb;
-
-	if (tmem_verify(heap, (int*)-1) < 0) {
-		return heap;	/* memory heap not available */
-	}
-	for (mb = tmem_heap(heap) + 1; mb < TMEM_NEXT(tmem_heap(heap)); mb = TMEM_NEXT(mb)) {
-		if (tmem_verify(heap, mb) < 0) {
-			return (void*)mb;	/* chain broken */
-		}
-		if (TMEM_TEST_USED(*mb)) {
-			if (used && used(mb)) {
-				break;
-			}
-		} else {
-			if (loose && loose(mb)) {
-				break;
-			}
-		}
-	}
-	return NULL;
-}
-
 /*!\brief allocate a piece of dynamic memory block inside the specified 
    memory heap.
 
@@ -200,12 +163,11 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 */
 void *csc_tmem_alloc(void *heap, size_t n)
 {
-	int	 *found, *next, config;
-	int	unum = (int)((n + sizeof(int) - 1) / sizeof(int));
+	int	 *found, *next, config, unum;
 	
 	int loose(void *mem)
 	{
-		int	*mb = mem;
+		int	*mb = tmem_find_control(heap, mem);
 
 		if (TMEM_SIZE(*mb) >= unum) {
 			if (found == NULL) {
@@ -232,7 +194,10 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	if (tmem_verify(heap, (int*)-1) < 0) {
 		return NULL;	/* CSC_MERR_INIT: memory heap not available */
 	}
+
+	/* find the request size in unit of int */
 	config = tmem_config_get(heap);
+	unum = (int)(n + TMEM_GUARD(config) + sizeof(int) - 1) / sizeof(int);
 
 	/* make sure the request is NOT out of size */
 	if (unum > TMEM_SIZE(*tmem_heap(heap))) {
@@ -259,9 +224,11 @@ void *csc_tmem_alloc(void *heap, size_t n)
 		*next = tmem_cword(0, TMEM_SIZE(*found) - unum - 1);
 		*found = tmem_cword(1, unum);
 	}
-	found++;
+
+	/* return the client area */
+	found = tmem_find_client(heap, found, &n);
 	if (config & CSC_MEM_CLEAN) {
-		memset(found, 0, TMEM_BYTES(*(found-1)));
+		memset(found, 0, n);
 	}
 	return (void*)found;
 }
@@ -284,19 +251,20 @@ int csc_tmem_free(void *heap, void *mem)
 
 	int used(void *fmem)
 	{
-		int	*mb = fmem;
+		int	*mb;
 
-		if ((void*)(mb+1) == mem) {
-			found = mb;
+		if (fmem == mem) {
+			found = tmem_find_control(heap, fmem);
 			*found = tmem_cword(0, *found);	/* free itself */
 			
 			/* try to down-merge the next memory block */
-			mb = TMEM_NEXT(mb);
+			mb = TMEM_NEXT(found);
 			if (tmem_verify(heap, mb) < 0) {
 				return 1;
 			}
 			if (!TMEM_TEST_USED(*mb)) {
 				*found = tmem_cword(0, TMEM_SIZE(*found + *mb + 1));
+				*mb = 0;	/* liquidate the control word in middle */
 			}
 			return 1;
 		}
@@ -304,13 +272,22 @@ int csc_tmem_free(void *heap, void *mem)
 	}
 	int loose(void *mb)
 	{
-		last = mb; return 0;
+		last = tmem_find_control(heap, mb);
+		return 0;
 	}
 
-	found = (int*)mem;
-	found -= found ? 1 : 0;
+
+	if (mem == NULL) {
+		return CSC_MERR_RANGE;
+	}
+
+	found = tmem_find_control(heap, mem);
 	if ((rc = tmem_verify(heap, found)) < 0) {
 		return rc;	/* memory heap not available */
+	}
+
+	if (!TMEM_TEST_USED(*found)) {
+		return 0;	/* freeing a freed memory */
 	}
 
 	last = found = NULL;
@@ -319,15 +296,52 @@ int csc_tmem_free(void *heap, void *mem)
 	}
 
 	if (found == NULL) {
-		/* BE WARE: To free a free memory returns -3 "not found" */
 		return CSC_MERR_RANGE;	/* memory not found */
 	}
 
 	/* try to up-merge the previous memory block */
 	if (last && (TMEM_NEXT(last) == found)) {
 		*last = tmem_cword(0, TMEM_SIZE(*last + *found + 1));
+		*found = 0;	/* liquidate the control word in middle */
 	}
 	return 0;
+}
+
+/*!\brief scan the memory chain to process every piece of memory block.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  used the callback function when find a piece of used memory
+   \param[in]  loose the callback function when find a piece of free memory
+
+   \return     NULL if successfully scanned the memory chain. If the memory
+               chain is corrupted, it returns a pointer to the broken point.
+
+   \remark The prototype of the callback functions are: int func(int *)
+           The scan process can be broken if func() returns non-zero.
+*/
+void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
+{
+	int	*mb, *cw;
+
+	if (tmem_verify(heap, (int*)-1) < 0) {
+		return heap;	/* memory heap not available */
+	}
+	cw = tmem_heap(heap);
+	for (mb = cw + 1; mb < TMEM_NEXT(cw); mb = TMEM_NEXT(mb)) {
+		if (tmem_verify(heap, mb) < 0) {
+			return (void*)mb;	/* chain broken */
+		}
+		if (TMEM_TEST_USED(*mb)) {
+			if (used && used(tmem_find_client(heap, mb, NULL))) {
+				break;
+			}
+		} else {
+			if (loose && loose(tmem_find_client(heap, mb, NULL))) {
+				break;
+			}
+		}
+	}
+	return NULL;
 }
 
 /*!\brief find the attribution of an allocated memory.
@@ -344,31 +358,84 @@ int csc_tmem_free(void *heap, void *mem)
 */
 size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 {
-	int	rc, *mb = (int*) mem;
+	int	rc, *mb;
 
-	mb -= mb ? 1 : 0;
-	if ((rc = tmem_verify(heap, mb)) < 0) {
-		if (state) {
-			*state = rc;
-		}
-		return rc;	/* memory heap not available */
+	if (state == NULL) {
+		state = &rc;
 	}
 	
-	if (state) {
-		*state = TMEM_TEST_USED(*mb) ? 1 : 0;
+	if (mem == NULL) {
+		*state = CSC_MERR_RANGE;
+		return (size_t) -1;
 	}
-	return (size_t)TMEM_BYTES(*mb);
+
+	mb = tmem_find_control(heap, mem);
+	if ((rc = tmem_verify(heap, mb)) < 0) {
+		*state = rc;
+		return (size_t) -1;	/* memory heap not available */
+	}
+	
+	*state = TMEM_TEST_USED(*mb) ? 1 : 0;
+	return (size_t)TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
 }
 
 
 void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
 {
-	return NULL;
+	int	rc, *mb;
+
+	if (xsize == NULL) {
+		xsize = &rc;
+	}
+	
+	if (mem == NULL) {
+		*xsize = CSC_MERR_RANGE;
+		return NULL;
+	}
+
+	mb = tmem_find_control(heap, mem);
+	if ((rc = tmem_verify(heap, mb)) < 0) {
+		*xsize = rc;
+		return NULL;	/* memory heap not available */
+	}
+
+	/* make sure the memory block was allocated. pointless to guard a free block */
+	if (!TMEM_TEST_USED(*mb)) {
+		*xsize = 0;
+		return NULL;
+	}
+
+	*xsize = TMEM_GUARD(tmem_config_get(heap)) >> 1;
+	return mb+1;
 }
 
 void *csc_tmem_back_guard(void *heap, void *mem, int *xsize)
 {
-	return NULL;
+	int	rc, *mb;
+
+	if (xsize == NULL) {
+		xsize = &rc;
+	}
+	
+	if (mem == NULL) {
+		*xsize = CSC_MERR_RANGE;
+		return NULL;
+	}
+
+	mb = tmem_find_control(heap, mem);
+	if ((rc = tmem_verify(heap, mb)) < 0) {
+		*xsize = rc;
+		return NULL;	/* memory heap not available */
+	}
+
+	/* make sure the memory block was allocated. pointless to guard a free block */
+	if (!TMEM_TEST_USED(*mb)) {
+		*xsize = 0;
+		return NULL;
+	}
+
+	*xsize = TMEM_GUARD(tmem_config_get(heap)) >> 1; 
+	return TMEM_NEXT(mb) - *xsize / sizeof(int);
 }
 
 
@@ -408,17 +475,15 @@ static int tmem_parity(int cw)
 
 static int tmem_verify(void *heap, int *mb)
 {
-	int	*cwp;
-
 	if (heap == NULL) {
 		return CSC_MERR_INIT;
 	}
-	if (((char*)heap)[1] != CSC_MEM_MAGIC_TINY) {
+	if (((char*)heap)[1] != (char)CSC_MEM_MAGIC_TINY) {
 		return CSC_MERR_INIT;	/* memory block corrupted */
 	}
 
-	cwp = (int*)(((char*)heap) + 4);
-	if (*cwp != tmem_parity(*cwp)) {
+	heap = tmem_heap(heap);	/* move to control word */
+	if (*((int*)heap) != tmem_parity(*((int*)heap))) {
 		return CSC_MERR_BROKEN;	/* memory heap not available */
 	}
 
@@ -448,25 +513,74 @@ static int tmem_cword(int uflag, int size)
 
 static void *tmem_find_client(void *heap, int *mb, size_t *osize)
 {
-	int	pages, config = tmem_config_get(heap);
+	int	guards;
 
-	pages = CSC_MEM_XCFG_GUARD(config) * CSC_MEM_XCFG_PAGE(config);
+	guards = TMEM_GUARD(tmem_config_get(heap));
 	if (osize) {
-		*osize = TMEM_BYTES(*mb) - pages - pages;
+		*osize = TMEM_BYTES(*mb) - guards;
 	}
-	return mb + pages/sizeof(int) + 1;
+	return mb + 1 + (guards >> 1) / sizeof(int);
 }
 
 static int *tmem_find_control(void *heap, void *mem)
 {
-	int 	 config = tmem_config_get(heap);
+	int	guard;
 
-
+	guard = TMEM_GUARD(tmem_config_get(heap)) >> 1;
+	return (int*)mem - guard / sizeof(int) - 1;
 }
 
 #ifdef	CFG_UNIT_TEST
 
 #include "libcsoup_debug.h"
+
+#define BMEM_SPAN(f,t)          ((size_t)((char*)(f) - (char*)(t)))
+
+static void tmem_test_function(void *buf, int len);
+static short tmem_parity16(short cw);
+static void tmem_test_empty_memory(void *buf, int len);
+static void tmem_test_nonempty_memory(void *buf, int len);
+
+int csc_tmem_unittest(void)
+{
+	int	buf[1024];
+
+	tmem_test_function(buf, sizeof(buf));
+	//tmem_test_empty_memory(buf, sizeof(buf));
+	//tmem_test_nonempty_memory(buf, sizeof(buf));
+	//tmem_test_misc_memory(buf, sizeof(buf));
+	return 0;
+}
+
+static void tmem_test_function(void *buf, int len)
+{
+	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
+	int	i;
+
+	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
+		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),
+				"ODD Parity 0x%08x: 0x%08x 0x%08x\n", plist[i], 
+				tmem_parity(plist[i]),
+				tmem_parity(tmem_parity(plist[i])));
+		cclog(tmem_parity16((short) plist[i]) == tmem_parity16(tmem_parity16((short)plist[i])),
+				"ODD Parity16   0x%04x: 0x%04x 0x%04x\n", 
+				(unsigned short) plist[i], 
+				(unsigned short) tmem_parity16((short) plist[i]),
+				(unsigned short) tmem_parity16(tmem_parity16((short)plist[i])));
+	}
+
+#if	(UINT_MAX == 0xFFFFFFFFU)
+	len = 0xc0123456;
+	cclog(TMEM_SIZE(len)==0x123456, "TMEM_SIZE(0x%x) == 0x%x\n", len, TMEM_SIZE(len));
+	len = 0x12345678;
+	cclog(TMEM_SIZE(len)==0x12345678, "TMEM_SIZE(0x%x) == 0x%x\n", len, TMEM_SIZE(len));
+#else
+	len = 0xc012;
+	cclog(TMEM_SIZE(len)==0x12, "TMEM_SIZE(0x%x) == 0x%x\n", len, TMEM_SIZE(len));
+	len = 0x1234;
+	cclog(TMEM_SIZE(len)==0x1234, "TMEM_SIZE(0x%x) == 0x%x\n", len, TMEM_SIZE(len));
+#endif
+}
 
 static short tmem_parity16(short cw)
 {
@@ -481,7 +595,8 @@ static short tmem_parity16(short cw)
 	return (cw & ~0x8000) | (x << 15);
 }
 
-static int tmem_unittest_empty_memory(int *buf)
+#if 0
+static void tmem_test_empty_memory(void *buf, int len)
 {
 	int	n, *p;
 	size_t	msize;
@@ -495,9 +610,10 @@ static int tmem_unittest_empty_memory(int *buf)
 
 	/* create a smallest heap where has only one heap control and 
 	 * one block control */
-	p = csc_tmem_init(buf, sizeof(int)*2+1, 0);
+	p = csc_tmem_init(buf, sizeof(int)*2+1, CSC_MEM_ZERO);
 	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*2+1);
 	if (p == NULL) return 0;
+	cclog(-1, "Testing memory function supports empty allocation\n");
 	
 	n = TMEM_SIZE(*buf);
 	cclog(n == 1, "TMEM_SIZE of the heap: %p %d\n", buf, n);
@@ -555,12 +671,12 @@ static int tmem_unittest_empty_memory(int *buf)
 	return 0;
 }
 
-static int tmem_unittest_nonempty_memory(int *buf)
+static void tmem_test_nonempty_memory(void *buf, int len)
 {
 	int	n, *p;
 	size_t	msize;
 
-	p = csc_tmem_init(buf, sizeof(int)*2+1, 0);
+	p = csc_tmem_init(buf, sizeof(int)*2+1, CSC_MEM_DEFAULT);
 	cclog(p == NULL, "Create heap with %d bytes (%p): %d minimum.\n", 
 			sizeof(int)*2+1, p, sizeof(int)*3);
 
@@ -568,6 +684,7 @@ static int tmem_unittest_nonempty_memory(int *buf)
 	p = csc_tmem_init(buf, sizeof(int)*3+1, 0);
 	cclog(p == buf, "Create heap with %d bytes (%p)\n", sizeof(int)*3+1, p);
 	if (p == NULL) return 0;
+	cclog(-1, "Testing memory function doesn't support empty allocation\n");
 
 	n = TMEM_SIZE(*buf);
 	cclog(n == 2, "TMEM_SIZE of the heap: %p %d\n", buf, n);
@@ -691,15 +808,16 @@ static void *tmem_unittest_memory_model(int *buf)
 	return buf;
 }
 
-static int tmem_unittest_misc_memory(int *buf)
+static void tmem_test_misc_memory(void *buf, int len)
 {
-	int	n, k, *p, config = 0;
+	int	n, k, *p;
 	size_t	msize;
 
 	msize = sizeof(int)*20;
-	p = csc_tmem_init(buf, msize, config);
+	p = csc_tmem_init(buf, msize, CSC_MEM_DEFAULT);
 	cclog(p == buf, "Create heap with %d bytes\n", msize);
 	if (p == NULL) return 0;
+	cclog(-1, "Testing other memory functions\n");
 
 	n = csc_tmem_free(NULL, NULL);
 	cclog(n == CSC_MERR_INIT, "Free NULL heap: %d\n", n);
@@ -750,38 +868,6 @@ static int tmem_unittest_misc_memory(int *buf)
 	cclog(k == 0x1112 && n == 0x1425, "Allocated 2 words by Worst Fit method [%x %x]\n", k, n);
 	return 0;
 }
-
-int csc_tmem_unittest(void)
-{
-	int	i, buf[256];
-	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
-	int	config = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(0,0);
-
-	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
-		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),
-				"ODD Parity 0x%08x: 0x%08x 0x%08x\n", plist[i], 
-				tmem_parity(plist[i]),
-				tmem_parity(tmem_parity(plist[i])));
-		cclog(tmem_parity16((short) plist[i]) == tmem_parity16(tmem_parity16((short)plist[i])),
-				"ODD Parity16   0x%04x: 0x%04x 0x%04x\n", 
-				(unsigned short) plist[i], 
-				(unsigned short) tmem_parity16((short) plist[i]),
-				(unsigned short) tmem_parity16(tmem_parity16((short)plist[i])));
-	}
-
-	cclog(-1, "Testing memory function supports empty allocation\n");
-	config |= CSC_MEM_ZERO;
-	tmem_config_set((unsigned char*)buf, config);
-	tmem_unittest_empty_memory(buf);
-	
-	cclog(-1, "Testing memory function doesn't support empty allocation\n");
-	config = CSC_MEM_DEFAULT;
-	tmem_config_set((unsigned char*)buf, config);
-	tmem_unittest_nonempty_memory(buf);
-
-	cclog(-1, "Testing other memory functions\n");
-	tmem_unittest_misc_memory(buf);
-	return 0;
-}
+#endif
 #endif	/* CFG_UNIT_TEST */
 

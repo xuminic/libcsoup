@@ -547,6 +547,14 @@ void *csc_bmem_back_guard(void *heap, void *mem, int *xsize)
 }
 
 
+/*!\brief verify the heap and the memory block.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] err 0 if memory is validate, otherwise the error code.
+
+   \return    the pointer to the memory management block, or NULL if failed.
+*/
 static BMMPC *bmem_verify(BMMCB *bmc, void *mem, int *err)
 {
 	int	tmperr;
@@ -571,22 +579,21 @@ static BMMPC *bmem_verify(BMMCB *bmc, void *mem, int *err)
 	}
 
 	/* make sure the client memory is in range */
-	if (mem > bmem_index_to_addr(bmc, bmc->total)) {
+	if ((mem > bmem_index_to_addr(bmc, bmc->total)) ||
+			(mem < bmem_index_to_addr(bmc, bmc->pages))) {
 		*err = CSC_MERR_RANGE;	/* memory out of range */
 		return NULL;
 	}
 
 	mem = bmem_find_control(bmc, mem);	/* mem become mpc */
-	if (mem < bmem_index_to_addr(bmc, bmc->pages)) {
-		*err = CSC_MERR_RANGE;	/* memory out of range */
-		return NULL;
-	}
 
 	/* Note that bmem_verify() only verify the memory blocks which have
 	 * a BMMPC structure. Uninitialized will be treated as broken */
 	if (!bmem_check(mem, sizeof(BMMPC))) {
 		*err = CSC_MERR_BROKEN; /* broken memory controller */
+		return NULL;
 	}
+	*err = 0;
 	return mem;
 }
 
@@ -900,6 +907,8 @@ static void csc_bmem_minimum_test(char *buf, int blen)
 	rc[1] = (int)csc_bmem_attrib(bmc, p[1], rc);
 	cclog(!rc[0], "Memory destroied: pages=%d %d\n", 
 			bmem_find_control(bmc, p[1])->pages, rc[1]);
+	rc[0] = csc_bmem_free(bmc, NULL);
+	cclog(rc[0]==CSC_MERR_RANGE, "Freeing the NULL memory: %d\n", rc[0]);
 }
 
 static void csc_bmem_fitness_test(char *buf, int blen)
