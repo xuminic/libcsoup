@@ -93,7 +93,7 @@ static inline int tmem_config_get(unsigned char *heap)
 	return (int)((heap[3] << 8) | heap[2]);
 }
 
-static inline int *tmem_heap(void *heap)
+static inline int *tmem_start(void *heap)
 {
 	return (int*)(((char*)heap)+4);
 }
@@ -139,7 +139,7 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 	((char*)hmem)[1] = (char)CSC_MEM_MAGIC_TINY;
 	tmem_config_set(hmem, flags);
 
-	heap = tmem_heap(hmem);
+	heap = tmem_start(hmem);
 	*heap++ = tmem_cword(1, (int)len--);
 	
 	/* create the first memory block */
@@ -200,7 +200,7 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	unum = (int)(n + TMEM_GUARD(config) + sizeof(int) - 1) / sizeof(int);
 
 	/* make sure the request is NOT out of size */
-	if (unum > TMEM_SIZE(*tmem_heap(heap))) {
+	if (unum > TMEM_SIZE(*tmem_start(heap))) {
 		return NULL;	/* CSC_MERR_LOWMEM */
 	} else if (!unum && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
@@ -326,7 +326,7 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 	if (tmem_verify(heap, (int*)-1) < 0) {
 		return heap;	/* memory heap not available */
 	}
-	cw = tmem_heap(heap);
+	cw = tmem_start(heap);
 	for (mb = cw + 1; mb < TMEM_NEXT(cw); mb = TMEM_NEXT(mb)) {
 		if (tmem_verify(heap, mb) < 0) {
 			return (void*)mb;	/* chain broken */
@@ -482,7 +482,7 @@ static int tmem_verify(void *heap, int *mb)
 		return CSC_MERR_INIT;	/* memory block corrupted */
 	}
 
-	heap = tmem_heap(heap);	/* move to control word */
+	heap = tmem_start(heap);	/* move to control word */
 	if (*((int*)heap) != tmem_parity(*((int*)heap))) {
 		return CSC_MERR_BROKEN;	/* memory heap not available */
 	}
@@ -556,6 +556,7 @@ static void tmem_test_function(void *buf, int len)
 {
 	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
 	int	i;
+	unsigned char	*p;
 
 	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
 		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),
@@ -580,6 +581,21 @@ static void tmem_test_function(void *buf, int len)
 	len = 0x1234;
 	cclog(TMEM_SIZE(len)==0x1234, "TMEM_SIZE(0x%x) == 0x%x\n", len, TMEM_SIZE(len));
 #endif
+	memset(buf, 0, 4);
+	p = buf;
+	tmem_config_set(buf, 0xc1c2c3c4);
+	cclog(p[2] == 0xc4 && p[3] == 0xc3, "tmem_config_set: %x %x %x %x\n",
+			p[0], p[1], p[2], p[3]);
+	len = tmem_config_get(buf);
+	cclog(len == 0xc3c4, "tmem_config_get: %x\n", len);
+
+	p = csc_tmem_init(buf, 4*sizeof(int), CSC_MEM_DEFAULT);
+	len = tmem_config_get(p);
+	cclog(len==CSC_MEM_DEFAULT, "csc_tmem_init: flag=%x ", len);
+	len = (int) csc_tmem_attrib(p, p+4+sizeof(int), &i);
+	cslog("heap=%d(%d) ", len, i);
+	len = (int) csc_tmem_attrib(p, p+4+sizeof(int)+sizeof(int), &i);
+	cslog("firstmem=%d(%d)\n", len, i);
 }
 
 static short tmem_parity16(short cw)
