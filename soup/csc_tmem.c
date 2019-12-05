@@ -72,7 +72,7 @@
 #define	TMEM_CLR_USED(n)	((n) & ~TMEM_MASK_USED)
 #define	TMEM_TEST_USED(n)	((n) & TMEM_MASK_USED)
 
-
+#define TMEM_OVERHEAD		4	/* reserved for attribution of the heap */
 #define TMEM_GUARD(c)		(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2)
 
 
@@ -95,7 +95,7 @@ static inline int tmem_config_get(unsigned char *heap)
 
 static inline int *tmem_start(void *heap)
 {
-	return (int*)(((char*)heap)+4);
+	return (int*)(((char*)heap) + TMEM_OVERHEAD);
 }
 
 /*!\brief Initialize the memory heap to be allocable.
@@ -117,8 +117,8 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 		return hmem;	/* CSC_MERR_INIT */
 	}
 
-	/* save 4 bytes and one int for heap managing  */
-	len -= sizeof(int) + 4;
+	/* save TMEM_OVERHEAD bytes and one int for heap managing  */
+	len -= sizeof(int) + TMEM_OVERHEAD;
 	
 	/* change size unit to per-int; the remains will be cut off  */
 	len /= sizeof(int);
@@ -534,10 +534,9 @@ static int *tmem_find_control(void *heap, void *mem)
 
 #include "libcsoup_debug.h"
 
-#define BMEM_SPAN(f,t)          ((size_t)((char*)(f) - (char*)(t)))
+#define BMEM_SPAN(f,t)          ((size_t)((char*)(t) - (char*)(f)))
 
 static void tmem_test_function(void *buf, int len);
-static short tmem_parity16(short cw);
 static void tmem_test_empty_memory(void *buf, int len);
 static void tmem_test_nonempty_memory(void *buf, int len);
 
@@ -546,7 +545,7 @@ int csc_tmem_unittest(void)
 	int	buf[1024];
 
 	tmem_test_function(buf, sizeof(buf));
-	//tmem_test_empty_memory(buf, sizeof(buf));
+	tmem_test_empty_memory(buf, sizeof(buf));
 	//tmem_test_nonempty_memory(buf, sizeof(buf));
 	//tmem_test_misc_memory(buf, sizeof(buf));
 	return 0;
@@ -557,6 +556,19 @@ static void tmem_test_function(void *buf, int len)
 	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
 	int	i;
 	unsigned char	*p;
+
+	short tmem_parity16(short cw)
+	{
+		unsigned short  x = (unsigned short)cw & ~0x8000;
+
+		x = x - ((x >> 1) & 0x5555);
+		x = (x & 0x3333) + ((x >> 2) & 0x3333);
+		x = (x + (x >> 4)) & 0x0F0F;
+		x = x + (x >> 8);
+		x &= 0x1f;
+		x++;	/* make odd bit even */
+		return (cw & ~0x8000) | (x << 15);
+	}
 
 	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
 		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),
@@ -592,26 +604,12 @@ static void tmem_test_function(void *buf, int len)
 	p = csc_tmem_init(buf, 4*sizeof(int), CSC_MEM_DEFAULT);
 	len = tmem_config_get(p);
 	cclog(len==CSC_MEM_DEFAULT, "csc_tmem_init: flag=%x ", len);
-	len = (int) csc_tmem_attrib(p, p+4+sizeof(int), &i);
+	len = (int) csc_tmem_attrib(p, tmem_start(p)+1, &i);
 	cslog("heap=%d(%d) ", len, i);
-	len = (int) csc_tmem_attrib(p, p+4+sizeof(int)+sizeof(int), &i);
-	cslog("firstmem=%d(%d)\n", len, i);
+	len = (int) csc_tmem_attrib(p, tmem_start(p)+2, &i);
+	cslog("freemem=%d(%d)\n", len, i);
 }
 
-static short tmem_parity16(short cw)
-{
-	unsigned short  x = (unsigned short)cw & ~0x8000;
-
-	x = x - ((x >> 1) & 0x5555);
-	x = (x & 0x3333) + ((x >> 2) & 0x3333);
-	x = (x + (x >> 4)) & 0x0F0F;
-	x = x + (x >> 8);
-	x &= 0x1f;
-	x++;	/* make odd bit even */
-	return (cw & ~0x8000) | (x << 15);
-}
-
-#if 0
 static void tmem_test_empty_memory(void *buf, int len)
 {
 	int	n, *p;
@@ -626,20 +624,40 @@ static void tmem_test_empty_memory(void *buf, int len)
 
 	/* create a smallest heap where has only one heap control and 
 	 * one block control */
-	p = csc_tmem_init(buf, sizeof(int)*2+1, CSC_MEM_ZERO);
-	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*2+1);
-	if (p == NULL) return 0;
-	cclog(-1, "Testing memory function supports empty allocation\n");
-	
-	n = TMEM_SIZE(*buf);
-	cclog(n == 1, "TMEM_SIZE of the heap: %p %d\n", buf, n);
-	p = TMEM_NEXT(buf);
-	cclog(p == buf+2, "TMEM_NEXT of the heap: %p\n", p);
-	n = TMEM_SIZE(buf[1]);
-	cclog(n == 0, "TMEM_SIZE of the first block: %d\n", n);
-	p = TMEM_NEXT(buf+1);
-	cclog(p == TMEM_NEXT(buf), "TMEM_NEXT of the first block: %p\n", p);
+	n = CSC_MEM_DEFAULT;
+	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(n) + 1;
+	p = csc_tmem_init(buf, msize, n);
+	cclog(!p, "Create heap(%d,%d) with %ld bytes: empty allocation disabled.\n", 
+			CSC_MEM_XCFG_PAGE(n), CSC_MEM_XCFG_GUARD(n), msize);
 
+	n = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,2);
+	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(n) + 1;
+	p = csc_tmem_init(buf, msize, n);
+	cclog(!p, "Create heap(%d,%d) with %ld bytes: empty allocation disabled.\n", 
+			CSC_MEM_XCFG_PAGE(n), CSC_MEM_XCFG_GUARD(n), msize);
+
+	n |= CSC_MEM_ZERO;
+	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(n) + 1;
+	p = csc_tmem_init(buf, msize, n);
+	cclog(-1, "Create heap(%d,%d) with %ld bytes: empty allocation enabled.\n", 
+			CSC_MEM_XCFG_PAGE(n), CSC_MEM_XCFG_GUARD(n), msize);
+	if (p == NULL) return;
+	
+	p = tmem_start(buf);
+	n = TMEM_SIZE(*p);
+	cclog(n == (int)((msize - TMEM_OVERHEAD)/sizeof(int) - 1), 
+			"TMEM_SIZE of the heap: +%d %d\n", BMEM_SPAN(buf,p), n);
+	p = TMEM_NEXT(p);
+	cclog(p == (int*)buf + msize/sizeof(int), "TMEM_NEXT of the heap: +%d\n", BMEM_SPAN(buf,p));
+
+	p = tmem_start(buf) + 1;	/* move to the first block */
+	n = TMEM_SIZE(*p);
+	cclog(n == (int)(TMEM_GUARD(tmem_config_get(buf))/sizeof(int)), 
+			"TMEM_SIZE of the first block: +%d %d\n", BMEM_SPAN(buf,p), n);
+	p = TMEM_NEXT(p);
+	cclog(p == TMEM_NEXT(tmem_start(buf)), "TMEM_NEXT of the first block: +%d\n", BMEM_SPAN(buf,p));
+
+#if 0
 	p = csc_tmem_alloc(buf, 1);
 	cclog(p == NULL, "Can not allocate 1 byte from the full heap\n");
 
@@ -685,8 +703,10 @@ static void tmem_test_empty_memory(void *buf, int len)
 	csc_tmem_scan(buf, memc, memc);
 	cslog("\n");
 	return 0;
+#endif
 }
 
+#if 0
 static void tmem_test_nonempty_memory(void *buf, int len)
 {
 	int	n, *p;
