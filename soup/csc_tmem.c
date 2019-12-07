@@ -67,6 +67,8 @@
 #define TMEM_SIZE(n)		((n) & TMEM_MASK_USIZE)
 #define TMEM_BYTES(n)		(TMEM_SIZE(n) * sizeof(int))
 #define TMEM_NEXT(p)		((int*)(p) + TMEM_SIZE(*(int*)(p)) + 1)
+#define TMEM_UPWORD(n)		(((n) + sizeof(int) - 1) / sizeof(int))
+#define TMEM_DNWORD(n)		((n) / sizeof(int))
 
 #define TMEM_SET_USED(n)	((n) | TMEM_MASK_USED)
 #define	TMEM_CLR_USED(n)	((n) & ~TMEM_MASK_USED)
@@ -197,12 +199,12 @@ void *csc_tmem_alloc(void *heap, size_t n)
 
 	/* find the request size in unit of int */
 	config = tmem_config_get(heap);
-	unum = (int)(n + TMEM_GUARD(config) + sizeof(int) - 1) / sizeof(int);
+	unum = (int) TMEM_UPWORD(n + TMEM_GUARD(config));
 
 	/* make sure the request is NOT out of size */
 	if (unum > TMEM_SIZE(*tmem_start(heap))) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if (!unum && !(config & CSC_MEM_ZERO)) {
+	} else if (unum == (int)TMEM_DNWORD(TMEM_GUARD(config)) && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -214,7 +216,8 @@ void *csc_tmem_alloc(void *heap, size_t n)
 		return NULL;	/* CSC_MERR_LOWMEM: out of memory */
 	}
 
-	n = config & CSC_MEM_ZERO ? 0 : 1;	/* reuse the 'n' for size test */
+	n = (config & CSC_MEM_ZERO) ? 0 : 1;	/* reuse the 'n' for size test */
+	n += TMEM_DNWORD(TMEM_GUARD(config));	/* make sure the remain no less than guarding area */
 	if (TMEM_SIZE(*found) <= unum + n) {	
 		/* not worth to split this block */
 		*found = tmem_cword(1, *found);
@@ -375,6 +378,14 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 		return (size_t) -1;	/* memory heap not available */
 	}
 	
+	/* should not happen in theory: the remain memory is smaller than
+	 * the guarding area. It should've been sorted out in the allocation 
+	 * function already */
+	if ((int)TMEM_BYTES(*mb) < TMEM_GUARD(tmem_config_get(heap))) {
+		*state = TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+		return (size_t) -1;
+	}
+
 	*state = TMEM_TEST_USED(*mb) ? 1 : 0;
 	return (size_t)TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
 }
@@ -535,6 +546,7 @@ static int *tmem_find_control(void *heap, void *mem)
 #include "libcsoup_debug.h"
 
 #define BMEM_SPAN(f,t)          ((size_t)((char*)(t) - (char*)(f)))
+#define GUARD_WORD(heap)	(TMEM_GUARD(tmem_config_get(heap))/sizeof(int))
 
 static void tmem_test_function(void *buf, int len);
 static void tmem_test_empty_memory(void *buf, int len);
@@ -546,7 +558,7 @@ int csc_tmem_unittest(void)
 
 	tmem_test_function(buf, sizeof(buf));
 	tmem_test_empty_memory(buf, sizeof(buf));
-	//tmem_test_nonempty_memory(buf, sizeof(buf));
+	tmem_test_nonempty_memory(buf, sizeof(buf));
 	//tmem_test_misc_memory(buf, sizeof(buf));
 	return 0;
 }
@@ -612,13 +624,15 @@ static void tmem_test_function(void *buf, int len)
 
 static void tmem_test_empty_memory(void *buf, int len)
 {
-	int	n, *p;
+	int	n, *p, *ctl;
 	size_t	msize;
 	
 	int memc(void *mem)
 	{
-		int	*mb = mem;
-		cslog("(%p:%d:%lu)", mb, TMEM_TEST_USED(*mb)?1:0, TMEM_BYTES(*mb));
+		int	*mb = tmem_find_control(buf, mem);
+
+		cslog("(+%d:%c:%lu)", BMEM_SPAN(buf,mb), 
+				TMEM_TEST_USED(*mb)?'u':'f', TMEM_BYTES(*mb));
 		return 0;
 	}
 
@@ -652,21 +666,18 @@ static void tmem_test_empty_memory(void *buf, int len)
 
 	p = tmem_start(buf) + 1;	/* move to the first block */
 	n = TMEM_SIZE(*p);
-	cclog(n == (int)(TMEM_GUARD(tmem_config_get(buf))/sizeof(int)), 
-			"TMEM_SIZE of the first block: +%d %d\n", BMEM_SPAN(buf,p), n);
+	cclog(n == (int)GUARD_WORD(buf), "TMEM_SIZE of the first block: +%d %d\n", BMEM_SPAN(buf,p), n);
 	p = TMEM_NEXT(p);
 	cclog(p == TMEM_NEXT(tmem_start(buf)), "TMEM_NEXT of the first block: +%d\n", BMEM_SPAN(buf,p));
 
-#if 0
 	p = csc_tmem_alloc(buf, 1);
 	cclog(p == NULL, "Can not allocate 1 byte from the full heap\n");
 
 	p = csc_tmem_alloc(buf, 0);
 	cclog(p != NULL, "Can allocate 0 byte from the full heap %p\n", p);
-	cclog(TMEM_SIZE(buf[1]) == 0, "TMEM_SIZE of the first block: %d\n", TMEM_SIZE(buf[1]));
+	ctl = tmem_find_control(buf, p);
+	cclog(TMEM_SIZE(*ctl) == GUARD_WORD(buf), "TMEM_SIZE of the first block: %d\n", TMEM_SIZE(*ctl));
 
-	msize = csc_tmem_attrib(buf, buf+1, &n);
-	cclog((n == 1) && (msize == sizeof(int)), "Attribution of the heap: %d %ld\n", n, msize);
 	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 1) && (msize == 0), "Attribution of the first block: %d %ld\n", n, msize);
 
@@ -675,95 +686,122 @@ static void tmem_test_empty_memory(void *buf, int len)
 	cclog((n == 0) && (msize == 0), "Attribution of the freed block: %d %ld\n", n, msize);
 
 	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
-	p = csc_tmem_init(buf, sizeof(int)*4+1, 0);
-	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*4+1);
-	if (p == NULL) return 0;
+	n = CSC_MEM_DEFAULT | CSC_MEM_ZERO | CSC_MEM_XCFG_SET(1,2);
+	msize = TMEM_OVERHEAD + sizeof(int) + (sizeof(int) + TMEM_GUARD(n)) * 3 + 1;
+	p = csc_tmem_init(buf, msize, n);
+	cclog(-1, "Create heap(%d,%d) with %ld bytes: empty allocation enabled.\n", 
+			CSC_MEM_XCFG_PAGE(n), CSC_MEM_XCFG_GUARD(n), msize);
+	if (p == NULL) return;
 
 	p = csc_tmem_alloc(buf, 1);
-	cclog(p == buf+2, "Allocated memory %p %x\n", p, buf[1]);
-	cclog(TMEM_NEXT(buf+1) == buf+3, "Next memory %p\n", TMEM_NEXT(buf+1));
-	cclog(TMEM_NEXT(buf+3) == TMEM_NEXT(buf), "End of the memory %p\n", TMEM_NEXT(buf+3));
-	msize = csc_tmem_attrib(buf, buf+1, &n);
-	cclog((n == 1) && (msize == sizeof(int)*3), "Attribution of the heap: %d %ld\n", n, msize);
+	ctl = tmem_find_control(buf, p);
+	cclog(!!p, "Allocated memory +%d %x\n", BMEM_SPAN(buf,p), *ctl);
+	cclog(TMEM_NEXT(ctl) == ctl + GUARD_WORD(buf) + 2, 
+			"Next memory +%d\n", BMEM_SPAN(buf, TMEM_NEXT(ctl)));
+	ctl = TMEM_NEXT(ctl);
+	cclog(TMEM_NEXT(ctl) == TMEM_NEXT(tmem_start(buf)), 
+			"End of the memory +%d\n", BMEM_SPAN(buf, TMEM_NEXT(ctl)));
+
 	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n ==1) && (msize == sizeof(int)), "Attribution of the allocated memory: %d %ld\n", n, msize);
-	msize = csc_tmem_attrib(buf, buf+4, &n);
-	cclog((n == 0) && (msize == 0), "Attribution of the free memory: %d %ld\n", n, msize);
+	msize = csc_tmem_attrib(buf, tmem_find_client(buf, ctl, NULL), &n);
+	cclog(n == 0, "Attribution of the free memory: %d %ld\n", n, msize);
 
 	csc_tmem_free(buf, p);
 	msize = csc_tmem_attrib(buf, p, &n);
-	cclog((n == 0) && (msize == sizeof(int)*2), "Attribution of the freed memory: %d %ld\n", n, msize);
-	cclog(TMEM_NEXT(buf+1) == TMEM_NEXT(buf), "The next address of the freed memory: %p\n", TMEM_NEXT(buf+1));
+	len = CSC_MEM_DEFAULT | CSC_MEM_ZERO | CSC_MEM_XCFG_SET(1,2);
+	cclog((n == 0) && (msize == (sizeof(int) + TMEM_GUARD(len)) * 2), 
+			"Attribution of the freed memory: %d %ld\n", n, msize);
 
 	n = csc_tmem_alloc(buf, 0) ? 1 : 0;
+	n += (p = csc_tmem_alloc(buf, 0)) ? 1 : 0;
 	n += csc_tmem_alloc(buf, 0) ? 1 : 0;
-	n += csc_tmem_alloc(buf, 0) ? 1 : 0;
-	cclog(n == 3, "Allocated 3 empty memories: ");
-	csc_tmem_free(buf, buf+3);
+	cclog(n == 3, "Allocated %d empty memories: ", n);
+	csc_tmem_free(buf, p);
 	csc_tmem_scan(buf, memc, memc);
 	cslog("\n");
-	return 0;
-#endif
 }
 
-#if 0
 static void tmem_test_nonempty_memory(void *buf, int len)
 {
-	int	n, *p;
+	int	n[4], *p[4];
 	size_t	msize;
 
-	p = csc_tmem_init(buf, sizeof(int)*2+1, CSC_MEM_DEFAULT);
-	cclog(p == NULL, "Create heap with %d bytes (%p): %d minimum.\n", 
-			sizeof(int)*2+1, p, sizeof(int)*3);
+	/* create heap with 1 memory block: HEAP+MB0+FG0+4Byte+BG0 */
+	len = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,2);
+	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(len) + sizeof(int);
+	p[0] = csc_tmem_init(buf, msize, len);
+	cclog(-1, "Create heap(%d,%d) with %ld bytes: empty allocation disabled.\n", 
+			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+	if (p[0] == NULL) return;
 
-	/* create heap with 1 memory block: HEAP+MB0+PL0 */
-	p = csc_tmem_init(buf, sizeof(int)*3+1, 0);
-	cclog(p == buf, "Create heap with %d bytes (%p)\n", sizeof(int)*3+1, p);
-	if (p == NULL) return 0;
-	cclog(-1, "Testing memory function doesn't support empty allocation\n");
+	p[0] = tmem_start(buf);
+	n[0] = TMEM_SIZE(*p[0]);
+	n[1] = GUARD_WORD(buf) + 2;
+	cclog(n[0] == n[1], "TMEM_SIZE of the heap: %d\n", n[0]);
+	p[1] = TMEM_NEXT(p[0]);
+	cclog(p[1] == p[0]+n[1]+1, "TMEM_NEXT of the heap: +%d\n", 
+			BMEM_SPAN(buf, p[1]));
 
-	n = TMEM_SIZE(*buf);
-	cclog(n == 2, "TMEM_SIZE of the heap: %p %d\n", buf, n);
-	p = TMEM_NEXT(buf);
-	cclog(p == buf+3, "TMEM_NEXT of the heap: %p\n", p);
-	n = TMEM_SIZE(buf[1]);
-	cclog(n == 1, "TMEM_SIZE of the first block: %d\n", n);
-	p = TMEM_NEXT(buf+1);
-	cclog(p == TMEM_NEXT(buf), "TMEM_NEXT of the first block: %p\n", p);
+	p[1] = p[0] + 1;
+	n[1] = TMEM_SIZE(*p[1]);
+	cclog(n[1] == (int)GUARD_WORD(buf) + 1, "TMEM_SIZE of the first block: %d\n", n[1]);
+	p[2] = TMEM_NEXT(p[1]);
+	cclog(p[2] == TMEM_NEXT(p[0]), "TMEM_NEXT of the first block: +%d\n", BMEM_SPAN(buf, p[2]));
 
-	p = csc_tmem_alloc(buf, 0);
-	cclog(p == NULL, "Allocating 0 byte from the heap: %p\n", p);
+	p[3] = csc_tmem_alloc(buf, 0);
+	cclog(!p[3], "Allocating 0 byte from the heap: disabled %p\n", p[3]);
 
-	p = csc_tmem_alloc(buf, 1);
-	cclog(p != NULL, "Allocating 1 byte from the heap: %p\n", p);
-	msize = csc_tmem_attrib(buf, p, &n);
-	cclog((n == 1) && (msize == sizeof(int)), 
-			"Verify memory %p: %s %ld bytes\n", p, n?"used":"free", msize);
-	cclog(TMEM_NEXT(buf) == TMEM_NEXT(buf+1), "Verify the end of the heap: %p\n", TMEM_NEXT(buf+1));
+	p[3] = csc_tmem_alloc(buf, 1);
+	cclog(p[3] == tmem_find_client(buf, p[1], NULL), 
+			"Allocating 1 byte from the heap: +%d\n", BMEM_SPAN(buf, p[3]));
+	msize = csc_tmem_attrib(buf, p[3], &n[3]);
+	cclog((n[3] == 1) && (msize == sizeof(int)), "Verify memory +%d: %s %ld bytes\n", 
+			BMEM_SPAN(buf, p[3]), n[3] ? "used" : "free", msize);
 
-	csc_tmem_free(buf, p);
-	msize = csc_tmem_attrib(buf, p, &n);
-	cclog((n == 0) && (msize == 4), "Attribution of the freed block: %d %ld\n", n, msize);
+	p[2] = tmem_find_control(buf, p[3]);
+	cclog(TMEM_NEXT(p[2]) == TMEM_NEXT(p[0]), "Verify the end of the heap: +%d\n", 
+			BMEM_SPAN(buf, TMEM_NEXT(p[2])));
+
+	csc_tmem_free(buf, p[3]);
+	msize = csc_tmem_attrib(buf, p[3], &n[3]);
+	cclog((n[3] == 0) && (msize == sizeof(int)), 
+			"Attribution of the freed block: %d %ld\n", n[3], msize);
 
 	/* create heap with 3 memory block: HEAP+MB0+PL0+MB1+PL1+MB2+PL2 */
-	p = csc_tmem_init(buf, sizeof(int)*7+1, 0);
-	cclog(p == buf, "Create heap with %d bytes\n", sizeof(int)*7+1);
-	if (p == NULL) return 0;
+	len = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,2);
+	msize = TMEM_OVERHEAD + sizeof(int) + (sizeof(int) + TMEM_GUARD(len) + sizeof(int)) * 3;
+	p[0] = csc_tmem_init(buf, msize, len);
+	cclog(-1, "Create heap(%d,%d) with %ld bytes: 3 minimum blocks.\n", 
+			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+	if (p[0] != buf) return;
 
 	/* testing merging: create a hole in middle  */
-	n = csc_tmem_alloc(buf, 1) ? 1 : 0;
-	n += csc_tmem_alloc(buf, 1) ? 1 : 0;
-	n += csc_tmem_alloc(buf, 1) ? 1 : 0;
-	csc_tmem_free(buf, buf+4);
-	cclog((n == 3) && !TMEM_TEST_USED(buf[3]), "Create a memory hole in the middle\n");
+	p[0] = csc_tmem_alloc(buf, 1);
+	p[1] = csc_tmem_alloc(buf, 1);
+	p[2] = csc_tmem_alloc(buf, 1);
+	csc_tmem_free(buf, p[1]);
+	cclog(p[0]&&p[1]&&p[2], "Create a memory hole in the middle: +%d\n", BMEM_SPAN(buf, p[1]));
 
-	csc_tmem_free(buf, buf+2);
-	msize = csc_tmem_attrib(buf, buf+2, &n);
-	cclog((n == 0) && TMEM_SIZE(buf[1]) == 3, "Freed: down-merged the memory hole. [%d]\n", TMEM_SIZE(buf[1]));
-	csc_tmem_free(buf, buf+6);
-	msize = csc_tmem_attrib(buf, buf+2, &n);
-	cclog((n == 0) && TMEM_SIZE(buf[1]) == 5, "Freed: up-merged the memory hole. [%d]\n", TMEM_SIZE(buf[1]));
+	/* testing merging: merging down the next free block */
+	csc_tmem_free(buf, p[2]);
+	msize = csc_tmem_attrib(buf, p[2], &n[2]);	/* should be cleaned */
+	cclog(msize==(size_t)-1, "Merging down the memory: control block cleaned (%d)\n", n[2]);
+	msize = csc_tmem_attrib(buf, p[1], &n[1]);
+	p[3] = tmem_find_control(buf, p[1]);
+	cclog(!n[1] && TMEM_SIZE(*p[3]) == TMEM_DNWORD(TMEM_GUARD(len)) * 2 + 3, 
+			"Merged down the memory: %d words (%ld)\n", TMEM_SIZE(*p[3]), msize);
 
+	/* testing merging: merging up the previou free block */
+	csc_tmem_free(buf, p[0]);
+	msize = csc_tmem_attrib(buf, p[1], &n[1]);	/* should be cleaned */
+	cclog(msize==(size_t)-1, "Merging up the memory: control block cleaned (%d)\n", n[1]);
+	msize = csc_tmem_attrib(buf, p[0], &n[0]); 
+	p[3] = tmem_find_control(buf, p[0]);
+	cclog(!n[0] && TMEM_SIZE(*p[3]) == TMEM_DNWORD(TMEM_GUARD(len)) * 3 + 5,
+			"Merged up the memory: %d words (%ld)\n", TMEM_SIZE(*p[3]), msize);
+
+#if 0
 	/* testing merging: create a hole in middle  */
 	n = csc_tmem_alloc(buf, 1) ? 1 : 0;
 	n += csc_tmem_alloc(buf, 1) ? 1 : 0;
@@ -795,9 +833,10 @@ static void tmem_test_nonempty_memory(void *buf, int len)
 	p = csc_tmem_alloc(buf, 5);
 	msize = csc_tmem_attrib(buf, p, &n);
 	cclog((n == 1) && (msize == sizeof(int)*3), "Do not split if the rest memory too small. [%ld]\n", msize);
-	return 0;
+#endif
 }
 
+#if 0
 static int tmem_unittest_memory_pattern(int *buf, int *rc)
 {
 	int	u = 0, f = 0;
