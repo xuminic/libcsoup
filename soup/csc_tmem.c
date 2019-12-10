@@ -390,7 +390,25 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 	return (size_t)TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
 }
 
+/*!\brief find the front guard area.
 
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] xsize the size of the front guard area, or 0=freed memory, 
+               or the error code when failed
+
+   \return    the pointer to the front guard area, or NULL if failed.
+
+   \remark    the guarding area is a piece of memories in front of the client area
+   and in the end of the client area. It can be used to buffer a possible memory overflow
+   while debugging, or store extra information about the memory user. The size of the
+   guarding area was defined in the 'flags' parameter in csc_tmem_init(), while bit 4-7,
+   the page size multiply the bit 8-11, the guarding pages.
+
+   \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
+   because the pad area in the memory management block was defined as a part of the front guard,
+   and the pad area in the allocated memory block was defined as a part of the back guard.
+*/
 void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
 {
 	int	rc, *mb;
@@ -420,6 +438,25 @@ void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
 	return mb+1;
 }
 
+/*!\brief find the back guard area.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] xsize the size of the back guard area, or 0=freed memory, 
+               or the error code when failed
+
+   \return    the pointer to the back guard area, or NULL if failed.
+
+   \remark    the guarding area is a piece of memories in front of the client area
+   and in the end of the client area. It can be used to buffer a possible memory overflow
+   while debugging, or store extra information about the memory user. The size of the
+   guarding area was defined in the 'flags' parameter in csc_tmem_init(), while bit 4-7,
+   the page size multiply the bit 8-11, the guarding pages.
+
+   \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
+   because the pad area in the memory management block was defined as a part of the front guard,
+   and the pad area in the allocated memory block was defined as a part of the back guard.
+*/
 void *csc_tmem_back_guard(void *heap, void *mem, int *xsize)
 {
 	int	rc, *mb;
@@ -552,17 +589,17 @@ static void tmem_test_function(void *buf, int len);
 static void tmem_test_empty_memory(void *buf, int len);
 static void tmem_test_nonempty_memory(void *buf, int len);
 static void tmem_test_misc_memory(void *buf, int len);
-static int memory_check_pattern(void *heap, int *rc);
-static void *memory_set_pattern(void *heap);
+static void tmem_test_fitness(void *buf, int len);
 
 int csc_tmem_unittest(void)
 {
-	int	buf[1024];
+	int	buf[4096];
 
 	tmem_test_function(buf, sizeof(buf));
 	tmem_test_empty_memory(buf, sizeof(buf));
 	tmem_test_nonempty_memory(buf, sizeof(buf));
 	tmem_test_misc_memory(buf, sizeof(buf));
+	tmem_test_fitness(buf, sizeof(buf));
 	return 0;
 }
 
@@ -876,7 +913,7 @@ static void tmem_test_nonempty_memory(void *buf, int len)
 
 static void tmem_test_misc_memory(void *buf, int len)
 {
-	int	n, k, *p;
+	int	n, k, *p, *q;
 	size_t	msize;
 
 	msize = sizeof(int)*20;
@@ -892,97 +929,94 @@ static void tmem_test_misc_memory(void *buf, int len)
 	cclog(n == CSC_MERR_RANGE, "Free NULL memory: %d\n", n);
 
 	/* test the memory initial clean function */
+	q = csc_tmem_alloc(buf, 1);
+	csc_tmem_free(buf, q);
+	*q = -1;
 	len |= CSC_MEM_CLEAN;
 	tmem_config_set(buf, len);
-	//buf[2] = -1;
-	//p = csc_tmem_alloc(buf, 1);
-	//cclog(buf[2] == 0, "Memory is initialized to %x\n", *p);
+	p = csc_tmem_alloc(buf, 1);
+	cclog(*p == 0, "Memory is initialized to %x\n", *p);
 	
 	/* double free test */
 	n = csc_tmem_free(buf, p);
 	k = csc_tmem_free(buf, p);
-	cclog(n == 0 && k == CSC_MERR_RANGE, "Memory is double freed. [%d]\n", n);
+	cclog(n == 0 && k == 0, "Memory is double freed. [%d]\n", k);
 
 	/* test the memory initial non-clean function */
 	len &= ~CSC_MEM_CLEAN;
 	tmem_config_set(buf, len);
-	//buf[2] = -1;
-	//p = csc_tmem_alloc(buf, sizeof(int));
-	//cclog(*p == -1, "Memory is not initialized. [%x]\n", *p);
-
-#if 0
-	memory_set_pattern(buf);
-	config &= ~CSC_MEM_FITMASK;
-	config |= CSC_MEM_FIRST_FIT;
-	tmem_config_set((unsigned char*)buf, config);
-	p = csc_tmem_alloc(buf, sizeof(int)*2);
-	n = memory_check_pattern(buf, &k);
-	cclog(k == 0x1211 && n == 0x1128, "Allocated 2 words by First Fit method [%x %x]\n", k, n);
-
-	csc_tmem_free(buf, p);
-	config &= ~CSC_MEM_FITMASK;
-	config |= CSC_MEM_BEST_FIT;
-	tmem_config_set((unsigned char*)buf, config);
-	p = csc_tmem_alloc(buf, sizeof(int)*2);
-	n = memory_check_pattern(buf, &k);
-	cclog(k == 0x1121 && n == 0x148, "Allocated 2 words by Best Fit method [%x %x]\n", k, n);
-
-	csc_tmem_free(buf, p);
-	config &= ~CSC_MEM_FITMASK;
-	config |= CSC_MEM_WORST_FIT;
-	tmem_config_set((unsigned char*)buf, config);
-	p = csc_tmem_alloc(buf, sizeof(int)*2);
-	n = memory_check_pattern(buf, &k);
-	cclog(k == 0x1112 && n == 0x1425, "Allocated 2 words by Worst Fit method [%x %x]\n", k, n);
-#endif
+	*q = -1;
+	p = csc_tmem_alloc(buf, 1);
+	cclog(*p == -1, "Memory is not initialized. [%x]\n", *p);
 }
 
-static int memory_check_pattern(void *heap, int *rc)
+static void tmem_test_fitness(void *buf, int len)
 {
 	int	u = 0, f = 0;
 
 	int used(void *mem)
 	{
-		int	*mb = tmem_find_control(heap, mem);
-		u = (u << 4) | TMEM_SIZE(*mb); return 0;
+		int	*mb = tmem_find_control(buf, mem);
+		u = (u << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(buf)); 
+		return 0;
 	}
 
 	int loose(void *mem)
 	{
-		int	*mb = tmem_find_control(heap, mem);
-		f = (f << 4) | TMEM_SIZE(*mb); return 0;
+		int	*mb = tmem_find_control(buf, mem);
+		f = (f << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(buf)); 
+		return 0;
 	}
 
-	csc_tmem_scan(heap, used, loose);
-	if (rc) {
-		*rc = u;
+	void *memory_set_pattern(void *heap, int config)
+	{
+		int	*p[4];
+
+		/* the memory pattern will be: F1+U1+F4+U1+F2+U1+F8
+		 * total 7 section so 7 set of guarding areas.
+		 * The target memory is 2 words */
+
+		len = sizeof(int)*30 + TMEM_GUARD(config)*7;
+		if (csc_tmem_init(heap, len, config) == NULL) {
+			return NULL;
+		}
+
+		p[0] = csc_tmem_alloc(heap, sizeof(int));
+		csc_tmem_alloc(heap, sizeof(int));
+		p[1] = csc_tmem_alloc(heap, sizeof(int)*4);
+		csc_tmem_alloc(heap, sizeof(int));
+		p[2] = csc_tmem_alloc(heap, sizeof(int)*2);
+		csc_tmem_alloc(heap, sizeof(int));
+		csc_tmem_free(heap, p[0]);
+		csc_tmem_free(heap, p[1]);
+		csc_tmem_free(heap, p[2]);
+
+		u = f = 0;
+		csc_tmem_scan(heap, used, loose);
+		cclog((u==0x111)&&(f==0x142b), "Create heap(%d,%d) with 4 holes [%x %x]\n", 
+			CSC_MEM_XCFG_PAGE(config), CSC_MEM_XCFG_GUARD(config), u, f);
+		return heap;
 	}
-	return f;
-}
 
-static void *memory_set_pattern(void *heap)
-{
-	int	*p[4], u, f;
 
-	if (csc_tmem_init(heap, sizeof(int)*26, CSC_MEM_DEFAULT) == NULL) {
-		return NULL;
-	}
+	cclog(-1, "Fitness test of the allocation\n");
+	if (memory_set_pattern(buf, CSC_MEM_FIRST_FIT) == NULL) return;
+	csc_tmem_alloc(buf, sizeof(int)*2);
+	u = f = 0;
+	csc_tmem_scan(buf, used, loose);
+	cclog(u == 0x1211 && f == 0x112b, "Allocated 2 words by First Fit method [%x %x]\n", u, f);
 
-	/* memory target:  2 words
-	 * memory pattern: 1 + 4 + 2 + more */
-	p[0] = csc_tmem_alloc(heap, sizeof(int));
-	csc_tmem_alloc(heap, sizeof(int));
-	p[1] = csc_tmem_alloc(heap, sizeof(int)*4);
-	csc_tmem_alloc(heap, sizeof(int));
-	p[2] = csc_tmem_alloc(heap, sizeof(int)*2);
-	csc_tmem_alloc(heap, sizeof(int));
-	csc_tmem_free(heap, p[0]);
-	csc_tmem_free(heap, p[1]);
-	csc_tmem_free(heap, p[2]);
+	if (memory_set_pattern(buf, CSC_MEM_BEST_FIT | CSC_MEM_XCFG_SET(1,2)) == NULL) return;
+	csc_tmem_alloc(buf, sizeof(int)*2);
+	u = f = 0;
+	csc_tmem_scan(buf, used, loose);
+	cclog(u == 0x1121 && f == 0x14b, "Allocated 2 words by Best Fit method [%x %x]\n", u, f);
 
-	f = memory_check_pattern(heap, &u);
-	cclog(u == 0x111 && f == 0x1428, "Create heap with 4 holes [%x %x]\n", u, f);
-	return heap;
+	if (memory_set_pattern(buf, CSC_MEM_WORST_FIT | CSC_MEM_XCFG_SET(0,1)) == NULL) return;
+	csc_tmem_alloc(buf, sizeof(int)*2);
+	u = f = 0;
+	csc_tmem_scan(buf, used, loose);
+	cclog(u == 0x111b && f == 0x142, "Allocated 2 words by Worst Fit method [%x %x]\n", u, f);
 }
 
 #endif	/* CFG_UNIT_TEST */
