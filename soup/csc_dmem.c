@@ -39,6 +39,9 @@
 #define DMEM_OWNED(n)	((((DMEM*)(n))->magic[2]) & DMEM_USED)
 #define DMEM_PADDED(n)	((((DMEM*)(n))->magic[2]) & DMEM_PAD_MASK)
 
+#define DMEM_GUARD(c)	(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2)
+
+
 typedef	struct	_DMEM	{
 	char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + RSV */
 	struct	_DMEM	*prev;
@@ -152,6 +155,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 {
 	DMHEAP	*hman;
 	DMEM	*found, *next;
+	char	*mem;
 	int	config;
 
 	int loose(void *mman)
@@ -182,9 +186,10 @@ void *csc_dmem_alloc(void *heap, size_t n)
 
 	hman = (DMHEAP*)(((DMEM*)heap) + 1);
 	config = dmem_config_get(hman);
+	n += DMEM_GUARD(config);	/* add up the guarding area */
 	if (n > hman->fr_size) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if ((n == 0) && !(config & CSC_MEM_ZERO)) {
+	} else if ((n == DMEM_GUARD(config)) && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -209,10 +214,12 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	}
 	dmem_set_crc(hman, sizeof(DMHEAP));
 
+	mem = (char*)(found+1);
+	mem += CSC_MEM_XCFG_GUARD(config) * CSC_MEM_XCFG_PAGE(config);
 	if (config & CSC_MEM_CLEAN) {
-		memset(found + 1, 0, n);
+		memset(mem, 0, n - DMEM_GUARD(config));
 	}
-	return (void*)(found+1);
+	return mem;
 }
 
 int csc_dmem_free(void *heap, void *mem)
@@ -307,14 +314,15 @@ void *csc_dmem_back_guard(void *heap, void *mem, int *xsize)
 static DMEM *dmem_alloc(DMEM *cm, size_t size, int config)
 {
 	DMEM	*nb = NULL;
-	size_t	rlen, nlen;
+	size_t	rlen, nlen, min;
 
 	/* round up the 'size' to int boundary */
 	rlen = (size + sizeof(int) - 1) / sizeof(int) * sizeof(int);
 	nlen = cm->size - rlen;		/* the size of the next whole block */
+	min = sizeof(DMEM) + DMEM_GUARD(config);
 
-	if ((nlen > sizeof(DMEM)) ||
-			((nlen == sizeof(DMEM)) && (config & CSC_MEM_ZERO))) {
+	if ((nlen > min) ||
+			((nlen == min) && (config & CSC_MEM_ZERO))) {
 		/* go split */
 		nb = (DMEM*)((char*)cm + sizeof(DMEM) + rlen);
 		nb->prev = cm;
@@ -358,6 +366,14 @@ static int dmem_verify(void *heap, DMEM *mblock)
 		return CSC_MERR_BROKEN;	/* broken memory controller */
 	}
 	return 0;
+}
+
+static void *dmem_find_client(void *heap, DMEM *cb, size_t *osize)
+{
+}
+
+static DMEM *dmem_find_control(void *heap, void *mem)
+{
 }
 
 #ifdef	CFG_UNIT_TEST
