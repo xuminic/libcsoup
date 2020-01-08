@@ -378,16 +378,17 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 		return (size_t) -1;	/* memory heap not available */
 	}
 	
+	*state = TMEM_TEST_USED(*mb) ? 1 : 0;
+	
 	/* should not happen in theory: the remain memory is smaller than
 	 * the guarding area. It should've been sorted out in the allocation 
 	 * function already */
-	if ((int)TMEM_BYTES(*mb) < TMEM_GUARD(tmem_config_get(heap))) {
-		*state = TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+	rc = TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+	if (rc < 0) {
+		*state = rc;
 		return (size_t) -1;
 	}
-
-	*state = TMEM_TEST_USED(*mb) ? 1 : 0;
-	return (size_t)TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+	return (size_t) rc;
 }
 
 /*!\brief find the front guard area.
