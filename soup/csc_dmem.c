@@ -39,7 +39,8 @@
 #define DMEM_OWNED(n)	((((DMEM*)(n))->magic[2]) & DMEM_USED)
 #define DMEM_PADDED(n)	((((DMEM*)(n))->magic[2]) & DMEM_PAD_MASK)
 
-#define DMEM_GUARDS(c)	(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2)
+#define DMEM_GU_AREA(c)	(CSC_MEM_XCFG_GUARD(c) * CSC_MEM_XCFG_PAGE(c) * 2)
+#define DMEM_GU_SIZE(c)	(CSC_MEM_XCFG_GUARD(c) * CSC_MEM_XCFG_PAGE(c))
 
 
 typedef	struct	_DMEM	{
@@ -90,13 +91,6 @@ static inline int dmem_config_get(DMHEAP *hman)
 	return (int)((hman->magic[3] << 8) | hman->magic[2]);
 }
 
-static inline int dmem_guard_unit(void *heap)
-{
-	register int	config = dmem_config_get(heap);
-
-	return CSC_MEM_XCFG_GUARD(config) * CSC_MEM_XCFG_PAGE(config);
-}
-
 void *csc_dmem_init(void *heap, size_t len, int flags)
 {
 	DMHEAP	*hman;
@@ -109,7 +103,7 @@ void *csc_dmem_init(void *heap, size_t len, int flags)
 
 	/* round up the len to int boundary */
 	len = len / sizeof(int) * sizeof(int);
-	min = sizeof(DMHEAP) + sizeof(DMEM) + DMEM_GUARDS(flags);
+	min = sizeof(DMHEAP) + sizeof(DMEM) + DMEM_GU_AREA(flags);
 
 	if (len < min) {
 		return NULL;	/* CSC_MERR_LOWMEM */
@@ -118,8 +112,8 @@ void *csc_dmem_init(void *heap, size_t len, int flags)
 	}
 
 	/* create the first block and set it free */
-	hman = (DMHEAP*)heap;
-	cm = (DMEM*)&hman[1];	/* first memory block following the management block */
+	hman = (DMHEAP*)heap;	/* set ready the management block */
+	cm = (DMEM*)&hman[1];	/* right after the management block */
 	cm->prev = cm->next = NULL;
 	cm->size = len - sizeof(DMHEAP) - sizeof(DMEM);
 	cm->magic[2] = (char) DMEM_FREE;
@@ -141,7 +135,7 @@ void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
 	DMEM	*cm;
 
-	for (cm = heap; cm != NULL; cm = cm->next) {
+	for (cm = ((DMHEAP*)heap)->prev; cm != NULL; cm = cm->next) {
 		if (dmem_verify(heap, cm) < 0) {
 			return cm;
 		}
@@ -191,12 +185,12 @@ void *csc_dmem_alloc(void *heap, size_t n)
 		return NULL;
 	}
 
-	hman = (DMHEAP*)(((DMEM*)heap) + 1);
+	hman = heap;
 	config = dmem_config_get(hman);
-	n += DMEM_GUARDS(config);	/* add up the guarding area */
+	n += DMEM_GU_AREA(config);	/* add up the guarding area */
 	if (n > hman->fr_size) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if ((n == DMEM_GUARDS(config)) && !(config & CSC_MEM_ZERO)) {
+	} else if ((n == DMEM_GU_AREA(config)) && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -221,10 +215,9 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	}
 	dmem_set_crc(hman, sizeof(DMHEAP));
 
-	mem = (char*)(found+1);
-	mem += CSC_MEM_XCFG_GUARD(config) * CSC_MEM_XCFG_PAGE(config);
+	mem = (char*)(found+1) + DMEM_GU_SIZE(config);
 	if (config & CSC_MEM_CLEAN) {
-		memset(mem, 0, n - DMEM_GUARDS(config));
+		memset(mem, 0, n);
 	}
 	return mem;
 }
@@ -265,6 +258,7 @@ int csc_dmem_free(void *heap, void *mem)
 			other->next->prev = cm;
 			dmem_set_crc(other->next, sizeof(DMEM));
 		}
+		other->magic[0] = other->magic[1] = 0;	/* liquidate the control block */
 		hman->fr_size += sizeof(DMEM);
 		hman->fr_num--;
 		if (hman->next == other) {
@@ -281,6 +275,7 @@ int csc_dmem_free(void *heap, void *mem)
 			cm->next->prev = other;
 			dmem_set_crc(cm->next, sizeof(DMEM));
 		}
+		cm->magic[0] = cm->magic[1] = 0;	/* liquidate the control block */
 		hman->fr_size += sizeof(DMEM);
 		hman->fr_num--;
 		if (hman->next == cm) {
@@ -319,7 +314,7 @@ size_t csc_dmem_attrib(void *heap, void *mem, int *state)
 	/* should not happen in theory: the remain memory is smaller than
 	 * the guarding area. It should've been sorted out in the allocation 
 	 * function already */
-	len = cm->size - DMEM_PADDED(cm) - (dmem_guard_unit(heap) << 1);
+	len = cm->size - DMEM_PADDED(cm) - DMEM_GU_AREA(dmem_config_get(heap));
 	if (len < 0) {
 		*state = (int) len;
 		return (size_t) -1;
@@ -354,8 +349,8 @@ void *csc_dmem_front_guard(void *heap, void *mem, int *xsize)
 		return NULL;
 	}
 
-	*xsize = dmem_guard_unit(heap);
-	return (void*)&cm[1];
+	*xsize = DMEM_GU_SIZE(dmem_config_get(heap));
+	return (void*)(cm + 1);
 }
 
 void *csc_dmem_back_guard(void *heap, void *mem, int *xsize)
@@ -384,7 +379,7 @@ void *csc_dmem_back_guard(void *heap, void *mem, int *xsize)
 		return NULL;
 	}
 
-	*xsize = dmem_guard_unit(heap) + DMEM_PADDED(cm);
+	*xsize = DMEM_GU_SIZE(dmem_config_get(heap)) + DMEM_PADDED(cm);
 	return (char*)mem + sizeof(DMEM) + cm->size - *xsize;
 }
 
@@ -400,7 +395,7 @@ static DMEM *dmem_alloc(DMEM *cm, size_t size, int config)
 	/* round up the 'size' to int boundary */
 	rlen = (size + sizeof(int) - 1) / sizeof(int) * sizeof(int);
 	nlen = cm->size - rlen;		/* the size of the next whole block */
-	min = sizeof(DMEM) + DMEM_GUARDS(config);
+	min = sizeof(DMEM) + DMEM_GU_AREA(config);
 
 	if ((nlen > min) || ((nlen == min) && (config & CSC_MEM_ZERO))) {
 		/* go split */
@@ -422,24 +417,14 @@ static DMEM *dmem_alloc(DMEM *cm, size_t size, int config)
 
 static int dmem_verify(void *heap, DMEM *mblock)
 {
-	DMEM	*cm;
-	
-	if ((cm = heap) == NULL) {
+	if (heap == NULL) {
 		return CSC_MERR_INIT;	/* heap not created */
 	}
-	if (!dmem_check(cm, sizeof(DMEM))) {
-		return CSC_MERR_BROKEN;
-	}
-	if (DMEM_OWNED(cm) == 0) {
-		return CSC_MERR_TYPE;
-	}
-	
-	cm++;
-	if (!dmem_check(cm, sizeof(DMHEAP))) {
+	if (!dmem_check(heap, sizeof(DMHEAP))) {
 		return CSC_MERR_BROKEN;
 	}
 
-	if ((mblock < cm->prev) || (mblock > cm->next)) {
+	if ((mblock < ((DMHEAP*)heap)->prev) || (mblock > ((DMHEAP*)heap)->next)) {
 		return CSC_MERR_RANGE;	/* memory out of range */
 	}
 	if (!dmem_check(mblock, sizeof(DMEM))) {
@@ -451,18 +436,20 @@ static int dmem_verify(void *heap, DMEM *mblock)
 static void *dmem_find_client(void *heap, DMEM *cm, size_t *osize)
 {
 	char	*p;
+	int	config = dmem_config_get(heap);
 
-	p = (char*)&cm[1];
-	p += dmem_guard_unit(heap);
+	p = (char*)(cm + 1) + DMEM_GU_SIZE(config);
 	if (osize) {
-		*osize = cm->size - DMEM_PADDED(cm) - (dmem_guard_unit(heap) << 1);
+		*osize = cm->size - DMEM_PADDED(cm) - DMEM_GU_AREA(config);
 	}
 	return p;
 }
 
 static DMEM *dmem_find_control(void *heap, void *mem)
 {
-	return (DMEM*) ((char*)mem - sizeof(DMEM) - dmem_guard_unit(heap);
+	register int	config = dmem_config_get(heap);
+
+	return (DMEM*) ((char*)mem - sizeof(DMEM) - DMEM_GU_SIZE(config));
 }
 
 #ifdef	CFG_UNIT_TEST
