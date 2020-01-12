@@ -39,19 +39,17 @@
 #define DMEM_OWNED(n)	((((DMEM*)(n))->magic[2]) & DMEM_USED)
 #define DMEM_PADDED(n)	((((DMEM*)(n))->magic[2]) & DMEM_PAD_MASK)
 
-#define DMEM_GU_AREA(c)	(CSC_MEM_XCFG_GUARD(c) * CSC_MEM_XCFG_PAGE(c) * 2)
-#define DMEM_GU_SIZE(c)	(CSC_MEM_XCFG_GUARD(c) * CSC_MEM_XCFG_PAGE(c))
-
+#define DMEM_GUARD(c)	(CSC_MEM_GETPG(c) * 2)
 
 typedef	struct	_DMEM	{
-	char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + RSV */
+	unsigned char	magic[4];	/* CRC8 + MAGIC + USAGE|PAD + RSV */
 	struct	_DMEM	*prev;
 	struct	_DMEM	*next;
 	size_t	size;		/* size of the payload in bytes, includes paddings */
 } DMEM;
 
 typedef	struct	_DMHEAP	{
-	char	magic[4];	/* CRC8 + MAGIC + CONFIG1 + CONFIG2 */
+	unsigned char	magic[4];	/* CRC8 + MAGIC + CONFIG1 + CONFIG2 */
 	struct	_DMEM	*prev;	/* point to the first memory block */
 	struct	_DMEM	*next;	/* point to the last memory block */
 	size_t	al_size;	/* total allocated size */
@@ -103,11 +101,11 @@ void *csc_dmem_init(void *heap, size_t len, int flags)
 
 	/* round up the len to int boundary */
 	len = len / sizeof(int) * sizeof(int);
-	min = sizeof(DMHEAP) + sizeof(DMEM) + DMEM_GU_AREA(flags);
+	min = sizeof(DMHEAP) + sizeof(DMEM) + DMEM_GUARD(flags);
 
-	if (len < min) {
+	if ((int)len < min) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if ((len == min) && !(flags & CSC_MEM_ZERO)) {
+	} else if (((int)len == min) && !(flags & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -140,11 +138,11 @@ void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 			return cm;
 		}
 		if (DMEM_OWNED(cm)) {
-			if (used && used(cm)) {
+			if (used && used(dmem_find_client(heap, cm, NULL))) {
 				break;
 			}
 		} else {
-			if (loose && loose(cm)) {
+			if (loose && loose(dmem_find_client(heap, cm, NULL))) {
 				break;
 			}
 		}
@@ -159,19 +157,21 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	char	*mem;
 	int	config;
 
-	int loose(void *mman)
+	int loose(void *mem)
 	{
-		if (((DMEM*)mman)->size >= n) {
-			found = (found == NULL) ? mman : found;
+		DMEM	*cm = dmem_find_control(heap, mem);
+
+		if (cm->size >= n) {
+			found = (found == NULL) ? cm : found;
 			switch (config & CSC_MEM_FITMASK) {
 			case CSC_MEM_BEST_FIT:
-				if (found->size > ((DMEM*)mman)->size) {
-					found = mman;
+				if (found->size > cm->size) {
+					found = cm;
 				}
 				break;
 			case CSC_MEM_WORST_FIT:
-				if (found->size < ((DMEM*)mman)->size) {
-					found = mman;
+				if (found->size < cm->size) {
+					found = cm;
 				}
 				break;
 			default:	/* CSC_MEM_FIRST_FIT */
@@ -187,10 +187,10 @@ void *csc_dmem_alloc(void *heap, size_t n)
 
 	hman = heap;
 	config = dmem_config_get(hman);
-	n += DMEM_GU_AREA(config);	/* add up the guarding area */
+	n += DMEM_GUARD(config);	/* add up the guarding area */
 	if (n > hman->fr_size) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if ((n == DMEM_GU_AREA(config)) && !(config & CSC_MEM_ZERO)) {
+	} else if (((int)n == DMEM_GUARD(config)) && !(config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
@@ -215,7 +215,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	}
 	dmem_set_crc(hman, sizeof(DMHEAP));
 
-	mem = (char*)(found+1) + DMEM_GU_SIZE(config);
+	mem = (char*)(found+1) + CSC_MEM_GETPG(config);
 	if (config & CSC_MEM_CLEAN) {
 		memset(mem, 0, n);
 	}
@@ -314,8 +314,8 @@ size_t csc_dmem_attrib(void *heap, void *mem, int *state)
 	/* should not happen in theory: the remain memory is smaller than
 	 * the guarding area. It should've been sorted out in the allocation 
 	 * function already */
-	len = cm->size - DMEM_PADDED(cm) - DMEM_GU_AREA(dmem_config_get(heap));
-	if (len < 0) {
+	len = cm->size - DMEM_PADDED(cm) - DMEM_GUARD(dmem_config_get(heap));
+	if (cm->size < (size_t)DMEM_PADDED(cm) + DMEM_GUARD(dmem_config_get(heap))) {
 		*state = (int) len;
 		return (size_t) -1;
 	}
@@ -349,7 +349,7 @@ void *csc_dmem_front_guard(void *heap, void *mem, int *xsize)
 		return NULL;
 	}
 
-	*xsize = DMEM_GU_SIZE(dmem_config_get(heap));
+	*xsize = CSC_MEM_GETPG(dmem_config_get(heap));
 	return (void*)(cm + 1);
 }
 
@@ -379,7 +379,7 @@ void *csc_dmem_back_guard(void *heap, void *mem, int *xsize)
 		return NULL;
 	}
 
-	*xsize = DMEM_GU_SIZE(dmem_config_get(heap)) + DMEM_PADDED(cm);
+	*xsize = CSC_MEM_GETPG(dmem_config_get(heap)) + DMEM_PADDED(cm);
 	return (char*)mem + sizeof(DMEM) + cm->size - *xsize;
 }
 
@@ -395,7 +395,7 @@ static DMEM *dmem_alloc(DMEM *cm, size_t size, int config)
 	/* round up the 'size' to int boundary */
 	rlen = (size + sizeof(int) - 1) / sizeof(int) * sizeof(int);
 	nlen = cm->size - rlen;		/* the size of the next whole block */
-	min = sizeof(DMEM) + DMEM_GU_AREA(config);
+	min = sizeof(DMEM) + DMEM_GUARD(config);
 
 	if ((nlen > min) || ((nlen == min) && (config & CSC_MEM_ZERO))) {
 		/* go split */
@@ -438,9 +438,9 @@ static void *dmem_find_client(void *heap, DMEM *cm, size_t *osize)
 	char	*p;
 	int	config = dmem_config_get(heap);
 
-	p = (char*)(cm + 1) + DMEM_GU_SIZE(config);
+	p = (char*)(cm + 1) + CSC_MEM_GETPG(config);
 	if (osize) {
-		*osize = cm->size - DMEM_PADDED(cm) - DMEM_GU_AREA(config);
+		*osize = cm->size - DMEM_PADDED(cm) - DMEM_GUARD(config);
 	}
 	return p;
 }
@@ -449,13 +449,39 @@ static DMEM *dmem_find_control(void *heap, void *mem)
 {
 	register int	config = dmem_config_get(heap);
 
-	return (DMEM*) ((char*)mem - sizeof(DMEM) - DMEM_GU_SIZE(config));
+	return (DMEM*) ((char*)mem - sizeof(DMEM) - CSC_MEM_GETPG(config));
 }
 
 #ifdef	CFG_UNIT_TEST
 #include "libcsoup_debug.h"
 
 #define DMEM_MDATA(n,k)	(unsigned char)(((DMEM*)(n))->magic[k])
+
+static int dmem_test_function(void *buf, int len);
+
+int csc_dmem_unittest(void)
+{
+	char     buf[40960];
+	
+	dmem_test_function(buf, sizeof(buf));
+	return 0;
+}
+
+static int dmem_test_function(void *buf, int len)
+{
+	unsigned char   *p;
+
+	memset(buf, 0, 4);
+        p = buf;
+        dmem_config_set(buf, 0xc1c2c3c4);
+        cclog(p[2] == 0xc4 && p[3] == 0xc3, "dmem_config_set: %x %x %x %x\n",
+                        p[0], p[1], p[2], p[3]);
+	len = dmem_config_get(buf);
+        cclog(len == 0xc3c4, "dmem_config_get: %x\n", len);
+
+
+	return 0;
+}
 
 static int dmem_heap_state(void *heap, int used, int freed)
 {
@@ -468,7 +494,7 @@ static int dmem_heap_state(void *heap, int used, int freed)
 	return 0;
 }
 
-int csc_dmem_unittest(void)
+int dmem_unittest(void)
 {
 	int	buf[256], s[4];
 	DMEM	*cm;

@@ -433,25 +433,44 @@ void *csc_pack_hex_index(void *pachex);
 #endif
 
 /*****************************************************************************
- * See csc_?mem.c: a group of memory management functions.
+ * The dynamic memory allocation management based on:
+ * csc_bmem.c: mapping by the bitmap.
+ * csc_dmem.c: the doubly linked list. 
+ * csc_tmem.c: the single linked list with minimum memory cost.
  * Definitions and functions for the memory management.
  ****************************************************************************/
-/* Bit 0-3: general settings */
+/* Bit 0-1: memory allocation strategy. */
 #define CSC_MEM_FIRST_FIT	0
 #define CSC_MEM_BEST_FIT	1
 #define CSC_MEM_WORST_FIT	2
 #define CSC_MEM_FITMASK		3
+
+/* Bit 2-3: general settings */
 #define CSC_MEM_CLEAN		4	/* fill allocated memory with 0 */
 #define CSC_MEM_ZERO		8	/* allow allocating empty memory */
+
+/* Bit 4-7: page size for bitmap management and guarding area.
+ * 0=32; 1=64; 2=128; 3=256; ...; 11=65536; 
+ * Currently it only supports up to 11 so the padding size can be limited to 
+ * 16bit in the bitmap management method */
+#define CSC_MEM_PAGE(n)		(32<<((((n)>>4)&0xf)%12))
+
+/* Bit 8-11: number of pages for the guarding area.
+ * The guarding area is used to debug the memory violation by buffering 
+ * both ends. It includes the front guard and back guard, located before and 
+ * after the allocated memory.  0=no guardings 1-15=number of pages */
+#define CSC_MEM_GUARD(n)	(((n)>>8)&0xf)
+
+/* Set up the page unit and the guarding pages. 
+ * The size of guarding page is multiplied by pages size in Bit 4-7. 
+ * For example: Bit8-11=3 Bit4-7=2, so both the frond and the back guarding 
+ * area is 3*128=384 bytes */
+#define CSC_MEM_SETPG(page,guard)	((((page)&15)<<4) | (((guard)&15)<<8))
+#define CSC_MEM_GETPG(n)		(CSC_MEM_PAGE(n) * CSC_MEM_GUARD(n))
+
+/* The default memory setting: 
+ * First Fit, fill 0 when allocation, not allow empty allocation, no guarding area */
 #define CSC_MEM_DEFAULT		(CSC_MEM_FIRST_FIT | CSC_MEM_CLEAN)
-
-/* Bit 4-7: page size for bitmap management
- * Bit 8-11: guarding pages for debugging memory violation
- *   The memory size is multiplied by pages size in Bit 4-7. */
-#define CSC_MEM_XCFG_SET(page,guard)	((((page)&15)<<4) | (((guard)&15)<<8))
-
-#define CSC_MEM_XCFG_PAGE(n)	(32<<((((n)>>4)&0xf)%12))
-#define CSC_MEM_XCFG_GUARD(n)	(((n)>>8)&0xf)
 
 #define CSC_MEM_MAGIC_BITMAP	0xAC
 #define CSC_MEM_MAGIC_DLINK	0xA6
