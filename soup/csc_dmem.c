@@ -181,10 +181,11 @@ void *csc_dmem_alloc(void *heap, size_t n)
 		return 0;
 	}
 
-	if (dmem_verify(heap, heap) < 0) {
+	if (dmem_verify(heap, (void*)-1) < 0) {
 		return NULL;
 	}
 
+	puts("1");
 	hman = heap;
 	config = dmem_config_get(hman);
 	n += DMEM_GUARD(config);	/* add up the guarding area */
@@ -194,6 +195,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
+	puts("2");
 	found = NULL;
 	if (csc_dmem_scan(heap, NULL, loose)) {
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
@@ -202,6 +204,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 		return NULL;	/* CSC_MERR_LOWMEM */
 	}
 
+	puts("3");
 	if ((next = dmem_alloc(found, n, config)) == NULL) {	/* no splitting */
 		hman->al_size += found->size;
 		hman->al_num++;
@@ -424,6 +427,11 @@ static int dmem_verify(void *heap, DMEM *mblock)
 		return CSC_MERR_BROKEN;
 	}
 
+	/* Only verify the heap; not using NULL because NULL is valid */
+	if (mblock == (DMEM*) -1) {
+		return 0;
+	}
+
 	if ((mblock < ((DMHEAP*)heap)->prev) || (mblock > ((DMHEAP*)heap)->next)) {
 		return CSC_MERR_RANGE;	/* memory out of range */
 	}
@@ -455,7 +463,8 @@ static DMEM *dmem_find_control(void *heap, void *mem)
 #ifdef	CFG_UNIT_TEST
 #include "libcsoup_debug.h"
 
-#define DMEM_MDATA(n,k)	(unsigned char)(((DMEM*)(n))->magic[k])
+#define BMEM_SPAN(f,t)		((size_t)((char*)(t) - (char*)(f)))
+#define DMEM_MDATA(n,k)		(unsigned char)(((DMEM*)(n))->magic[k])
 
 static int dmem_test_function(void *buf, int len);
 
@@ -469,7 +478,11 @@ int csc_dmem_unittest(void)
 
 static int dmem_test_function(void *buf, int len)
 {
-	unsigned char   *p;
+	unsigned char   *p, *cm;
+	size_t	msize;
+
+	cclog(-1, "Size of Heap manager: %d; size of memory manager: %d\n", 
+			sizeof(DMHEAP), sizeof(DMEM));
 
 	memset(buf, 0, 4);
         p = buf;
@@ -479,6 +492,30 @@ static int dmem_test_function(void *buf, int len)
 	len = dmem_config_get(buf);
         cclog(len == 0xc3c4, "dmem_config_get: %x\n", len);
 
+	dmem_set_crc(buf, sizeof(DMEM));
+	p[3]++;
+	len = csc_crc8(0, ((char*)buf) + 1, sizeof(DMEM) - 1);
+	cclog(!dmem_check(buf, sizeof(DMEM)), "dmem_set_crc: %x %x vs %x\n", p[0], p[1], len);
+
+	msize = 1024;
+	len = CSC_MEM_DEFAULT | CSC_MEM_SETPG(1,2);
+	p = csc_dmem_init(buf, msize, len);
+	cclog(!!p, "Create heap(%d,%d) with %ld bytes: %p.\n",
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize, p);
+
+	cm = p + sizeof(DMHEAP);	/* move to the first block */
+	cclog(!dmem_verify(buf, (DMEM*)cm), "First memory block at: +%d\n", BMEM_SPAN(buf, cm));
+	if (dmem_verify(buf, (DMEM*)cm)) return -1;
+
+	p = dmem_find_client(buf, (DMEM*)cm, &msize);
+	cclog((size_t)(p - cm) == CSC_MEM_GETPG(len) + sizeof(DMEM), 
+		"Client of the first memory block: +%d (%u)\n", BMEM_SPAN(buf, p), msize);
+
+	p = (void*) dmem_find_control(buf, p);
+	cclog(p == cm, "Managing block at: +%d\n", BMEM_SPAN(buf, p));
+
+	p = csc_dmem_alloc(buf, 29);
+	cclog(!!p, "Allocated a memory at: +%d (29)\n", BMEM_SPAN(buf, p));
 
 	return 0;
 }
@@ -515,8 +552,6 @@ int dmem_unittest(void)
 	/********************************************************************
 	 * testing the empty heap
 	 *******************************************************************/
-	cclog(-1, "Size of Heap manager: %d; size of memory manager: %d\n", 
-			sizeof(DMHEAP), sizeof(DMEM));
 
 	msize = sizeof(DMHEAP) + sizeof(DMEM);
 	cm = csc_dmem_init(buf, msize, CSC_MEM_DEFAULT);
