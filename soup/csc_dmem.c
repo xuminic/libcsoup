@@ -454,7 +454,8 @@ static DMEM *dmem_find_control(void *heap, void *mem)
 
 static int dmem_test_function(void *buf, int len);
 static int dmem_test_empty(void *buf, int len);
-static void dmem_heap_status(DMHEAP *hman, int used, int freed);
+static int dmem_test_minimum(void *buf, int len);
+static void dmem_heap_status(DMHEAP *hman, size_t used, size_t freed);
 
 int csc_dmem_unittest(void)
 {
@@ -462,6 +463,7 @@ int csc_dmem_unittest(void)
 	
 	dmem_test_function(buf, sizeof(buf));
 	dmem_test_empty(buf, sizeof(buf));
+	dmem_test_minimum(buf, sizeof(buf));
 	return 0;
 }
 
@@ -506,7 +508,7 @@ static int dmem_test_function(void *buf, int len)
 	dmem_heap_status(buf, 0, 1);
 
 	p = csc_dmem_alloc(buf, 29);
-	dmem_heap_status(buf, 1, 0);
+	dmem_heap_status(buf, 1, 1);
 
 	cm = dmem_find_control(buf, p);
 	cclog(!!p, "Allocated a memory at: +%d (%u)\n", BMEM_SPAN(buf, p), cm->size);
@@ -573,81 +575,44 @@ static int dmem_test_empty(void *buf, int len)
 
 static int dmem_test_minimum(void *buf, int len)
 {
-}
-
-static void dmem_heap_status(DMHEAP *hman, int used, int freed)
-{
-	int	cond, s[4];
-
-	int f_used(void *mem)
-	{
-		DMEM *cm = dmem_find_control(hman, mem);
-		s[0]++; s[1] += ((DMEM*)cm)->size; return 0;
-	}
-	
-	int f_loose(void *mem)
-	{
-		DMEM *cm = dmem_find_control(hman, mem);
-		s[2]++; s[3] += ((DMEM*)cm)->size; return 0;
-	}
-
-	memset(s, 0, sizeof(s));
-	csc_dmem_scan(hman, f_used, f_loose);
-
-	cond = (((int)hman->al_num == used) && ((int)hman->fr_num == freed));
-	cclog(cond, "Heap:Scan: used=%u:%d usize=%u:%d freed=%u:%d fsize=%u:%d\n",
-			hman->al_num, s[0], hman->al_size, s[1],
-			hman->fr_num, s[2], hman->fr_size, s[3]);
-}
-
-
-#if 0
-int dmem_unittest(void)
-{
-	int	buf[256], s[4];
 	DMEM	*cm;
 	DMHEAP	*hman;
 	size_t	msize;
 	char	*p[8];
+	int	s[4];
 
 	/********************************************************************
 	 * testing the minimum heap
 	 *******************************************************************/
-	msize = sizeof(DMHEAP) + sizeof(DMEM) + sizeof(DMEM) + sizeof(int);
-	cm = csc_dmem_init(buf, msize, CSC_MEM_DEFAULT);
-	cclog(cm != NULL, "The minimum heap is created: %d\n", msize);
-	if (cm == NULL) return 0;
-	hman = (DMHEAP*)(cm+1);
-	cclog(-1, "The minimum heap size: %d\n", (int)hman->fr_size);
+	msize = sizeof(DMHEAP) + sizeof(DMEM) + sizeof(int);
+	hman = csc_dmem_init(buf, msize, CSC_MEM_DEFAULT);
+	cclog(!!hman, "The minimum heap is created: %u\n", msize);
+	if (hman == NULL) return -1;
+	cclog(-1, "The minimum heap size: %u\n", hman->fr_size);
+	dmem_heap_status(hman, 0, 1);
 
-	csc_dmem_scan(cm, used, loose);
-	cclog(s[0]==1 && s[2]==1, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
-	cclog(dmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+	cm = (DMEM *)(hman + 1);
+	p[0] = dmem_find_client(hman, cm, NULL);
+	msize = csc_dmem_attrib(hman, p[0], &s[0]);
+	cclog(!s[0]&&(msize==sizeof(int)), "Memory attribute: Memory %s %u\n", 
+			s[0] ? "used" : "free", msize);
 
-	msize = csc_dmem_attrib(cm, cm+1, s);
-	cclog(s[0]&&(msize==sizeof(DMHEAP)), "Memory attribute: Heap %s %d\n", s[0]?"used":"free", msize);
-	msize = csc_dmem_attrib(cm, cm->next+1, s);
-	cclog(!s[0]&&(msize==sizeof(int)), "Memory attribute: Memory %s %d\n", s[0]?"used":"free", msize);
+	p[0] = csc_dmem_alloc(hman, 0);
+	cclog(!p[0], "Not allow to allocate empty memory: %p\n", p[0]);
 
-	p[0] = csc_dmem_alloc(cm, 0);
-	cclog(p[0] == NULL, "Not allow to allocate empty memory: %p\n", p[0]);
+	p[0] = csc_dmem_alloc(hman, 3);
+	msize = csc_dmem_attrib(hman, p[0], &s[0]);
+	cclog(!!p[0] && s[0], "Try to allocate %u byte at: +%d\n", msize, BMEM_SPAN(hman, p[0]));
+	cm = dmem_find_control(hman, p[0]);
+	cclog(DMEM_PADDED(cm) == 1, "Usage Flags and paddning size: %x\n", cm->magic[2]);
+	dmem_heap_status(hman, 1, 0);
 
-	p[0] = csc_dmem_alloc(cm, 1);
-	cclog(p[0] != NULL, "Try to allocate 1 byte: %p\n", p[0]);
-	msize = csc_dmem_attrib(cm, p[0], s);
-	cclog(s[0]&&(msize==1), "Memory attribute: Memory %s %d\n", s[0]?"used":"free", msize);
+	s[0] = csc_dmem_free(hman, p[0]);
+	msize = csc_dmem_attrib(hman, p[0], &s[1]);
+	cclog(!s[0] && !s[1], "Free the memory gets %u bytes\n", msize);
+	dmem_heap_status(hman, 0, 1);
 
-	p[1] = p[0] - sizeof(DMEM);
-	cclog(DMEM_PADDED(p[1]) == 3, "Usage Flags and paddning size: %x\n", DMEM_MDATA(p[1], 2));
-	cclog(dmem_heap_state(cm, 2, 0), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-
-	s[0] = csc_dmem_free(cm, p[0]);
-	cclog(s[0] == 0, "Free the 1 byte memory: %d\n", s[0]);
-	cclog(dmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-
+#if 0
 	/********************************************************************
 	 * testing the free function in minimum heap
 	 *******************************************************************/
@@ -701,6 +666,49 @@ int dmem_unittest(void)
 	cclog(s[0] == 0 && s[1] == 0, "Tri-merge %p: %ld (%s)\n", p[0], msize, s[1]?"used":"free");
 	cclog(dmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
 			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+#endif
+	return 0;
+}
+
+static void dmem_heap_status(DMHEAP *hman, size_t used, size_t freed)
+{
+	size_t	s[4];
+	int	cond;
+
+	int f_used(void *mem)
+	{
+		DMEM *cm = dmem_find_control(hman, mem);
+		s[0]++; s[1] += ((DMEM*)cm)->size; return 0;
+	}
+	
+	int f_loose(void *mem)
+	{
+		DMEM *cm = dmem_find_control(hman, mem);
+		s[2]++; s[3] += ((DMEM*)cm)->size; return 0;
+	}
+
+	memset(s, 0, sizeof(s));
+	csc_dmem_scan(hman, f_used, f_loose);
+
+	cond = ((hman->al_num == used) && (hman->fr_num == freed) &&
+			(hman->al_num == s[0]) && (hman->al_size == s[1]) &&
+			(hman->fr_num == s[2]) && (hman->fr_size == s[3]));
+
+	cclog(cond, "Heap:Scan: used=%u:%d usize=%u:%d freed=%u:%d fsize=%u:%d endp=+%d\n",
+			hman->al_num, s[0], hman->al_size, s[1],
+			hman->fr_num, s[2], hman->fr_size, s[3],
+			BMEM_SPAN(hman, hman->next));
+}
+
+
+#if 0
+int dmem_unittest(void)
+{
+	int	buf[256], s[4];
+	DMEM	*cm;
+	DMHEAP	*hman;
+	size_t	msize;
+	char	*p[8];
 
 	/* maximum test */
 	msize = hman->fr_size + 1;
