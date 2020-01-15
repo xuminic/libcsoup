@@ -88,6 +88,15 @@ static inline int dmem_config_get(DMHEAP *hman)
 	return (int)((hman->magic[3] << 8) | hman->magic[2]);
 }
 
+/*!\brief Initialize the memory heap to be allocable.
+
+   \param[in]  hmem the memory heap for allocation.
+   \param[in]  len the size of the memory heap.
+   \param[in]  flags the bit combination of the memory manage settings.
+               See CSC_MEM_xxx macro in libcsoup.h for details.
+
+   \return    The pointer to the memory heap object, or NULL if failed.
+*/
 void *csc_dmem_init(void *heap, size_t len, int flags)
 {
 	DMHEAP	*hman;
@@ -128,27 +137,17 @@ void *csc_dmem_init(void *heap, size_t len, int flags)
 	return heap;
 }
 
-void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
-{
-	DMEM	*cm;
+/*!\brief allocate a piece of dynamic memory block inside the specified 
+    memory heap.
 
-	for (cm = ((DMHEAP*)heap)->prev; cm != NULL; cm = cm->next) {
-		if (dmem_verify(heap, cm) < 0) {
-			return cm;
-		}
-		if (DMEM_OWNED(cm)) {
-			if (used && used(dmem_find_client(heap, cm, NULL))) {
-				break;
-			}
-		} else {
-			if (loose && loose(dmem_find_client(heap, cm, NULL))) {
-				break;
-			}
-		}
-	}
-	return NULL;
-}
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  n the size of the expecting allocated memory block.
 
+   \return    point to the allocated memory block in the memory heap. 
+              or NULL if not enough space for allocating.
+
+   \remark The strategy of allocation is defined by CSC_MEM_FITNESS field.
+*/
 void *csc_dmem_alloc(void *heap, size_t n)
 {
 	DMHEAP	*hman;
@@ -243,6 +242,14 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	return mem;
 }
 
+/*!\brief free the allocated memory block.
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  mem the memory block.
+
+   \return    0 if freed successfully, or error code smaller than 0
+   \remark    If freeing a freed memory block, it returns 0.
+*/
 int csc_dmem_free(void *heap, void *mem)
 {
 	DMHEAP	*hman;
@@ -309,6 +316,54 @@ int csc_dmem_free(void *heap, void *mem)
 	return 0;
 }
 
+/*!\brief scan and inspecting the heap.
+
+   \param[in]  heap the memory heap.
+   \param[in]  used the callback function when scanned an allocated memory block.
+   \param[in]  loose  the callback function when scanned a freed memory block.
+
+   \return    NULL if successfully scanned to the end of heap, or break the scan 
+   by the callback functions. Otherwise it returns the pointer to the faulty memory block.
+   
+   \remark    The scan function will scan the heap from the first memory block to the last.
+   When it found an allocated memory block, it will call the used() function with the address
+   of the allocated memory block. When it found a freed memory block, it will call the loose() 
+   function with the address of the freed memory block.
+
+   \remark The prototype of the callback functions are: int func(void *)
+           The scan process will stop in middle if func() returns non-zero.
+*/
+void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
+{
+	DMEM	*cm;
+
+	for (cm = ((DMHEAP*)heap)->prev; cm != NULL; cm = cm->next) {
+		if (dmem_verify(heap, cm) < 0) {
+			return cm;
+		}
+		if (DMEM_OWNED(cm)) {
+			if (used && used(dmem_find_client(heap, cm, NULL))) {
+				break;
+			}
+		} else {
+			if (loose && loose(dmem_find_client(heap, cm, NULL))) {
+				break;
+			}
+		}
+	}
+	return NULL;
+}
+
+/*!\brief find the attribution of the memory block.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the memory block.
+   \param[out] state the state of the memory block. 
+               0=free 1=used, or <0 in error codes.
+
+   \return    the size of the allocated memory without padding when succeed,
+              or (size_t) -1 in error. the error code returns in 'state'.
+*/
 size_t csc_dmem_attrib(void *heap, void *mem, int *state)
 {
 	DMEM	*cm;
@@ -343,7 +398,25 @@ size_t csc_dmem_attrib(void *heap, void *mem, int *state)
 	return len;
 }
 
+/*!\brief find the front guard area.
 
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] xsize the size of the front guard area, or 0=freed memory, 
+               or the error code when failed
+
+   \return    the pointer to the front guard area, or NULL if failed.
+
+   \remark    the guarding area is a piece of memories in front of the client area
+   and in the end of the client area. It can be used to buffer a possible memory overflow
+   while debugging, or store extra information about the memory user. The size of the
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
+
+   \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
+   because the pad area in the memory management block was defined as a part of the front guard,
+   and the pad area in the allocated memory block was defined as a part of the back guard.
+*/
 void *csc_dmem_front_guard(void *heap, void *mem, int *xsize)
 {
 	DMEM	*cm;
@@ -374,6 +447,25 @@ void *csc_dmem_front_guard(void *heap, void *mem, int *xsize)
 	return (void*)(cm + 1);
 }
 
+/*!\brief find the back guard area.
+
+   \param[in]  heap the memory heap.
+   \param[in]  mem the allocated memory block.
+   \param[out] xsize the size of the back guard area, or 0=freed memory, 
+               or the error code when failed
+
+   \return    the pointer to the back guard area, or NULL if failed.
+
+   \remark    the guarding area is a piece of memories in front of the client area
+   and in the end of the client area. It can be used to buffer a possible memory overflow
+   while debugging, or store extra information about the memory user. The size of the
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
+
+   \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
+   because the pad area in the memory management block was defined as a part of the front guard,
+   and the pad area in the allocated memory block was defined as a part of the back guard.
+*/
 void *csc_dmem_back_guard(void *heap, void *mem, int *xsize)
 {
 	DMEM	*cm;
@@ -450,11 +542,11 @@ static DMEM *dmem_find_control(void *heap, void *mem)
 #include "libcsoup_debug.h"
 
 #define BMEM_SPAN(f,t)		((size_t)((char*)(t) - (char*)(f)))
-#define DMEM_MDATA(n,k)		(unsigned char)(((DMEM*)(n))->magic[k])
 
 static int dmem_test_function(void *buf, int len);
 static int dmem_test_empty(void *buf, int len);
 static int dmem_test_minimum(void *buf, int len);
+static int dmem_test_fitness(void *buf, int len);
 static void dmem_heap_status(DMHEAP *hman, size_t used, size_t freed);
 
 int csc_dmem_unittest(void)
@@ -464,6 +556,7 @@ int csc_dmem_unittest(void)
 	dmem_test_function(buf, sizeof(buf));
 	dmem_test_empty(buf, sizeof(buf));
 	dmem_test_minimum(buf, sizeof(buf));
+	dmem_test_fitness(buf, sizeof(buf));
 	return 0;
 }
 
@@ -547,14 +640,14 @@ static int dmem_test_empty(void *buf, int len)
 {
 	DMHEAP	*hman;
 	size_t	msize;
-	char	*mem;
+	char	*mem, *gd;
 
 	/********************************************************************
 	 * testing the empty heap
 	 *******************************************************************/
 	msize = sizeof(DMHEAP) + sizeof(DMEM);
 	hman = csc_dmem_init(buf, msize, CSC_MEM_DEFAULT);
-	cclog(!hman, "Mmeory pool is too small to create a heap: %d\n", msize);
+	cclog(!hman, "Memory pool is too small to create a heap: %d\n", msize);
 
 	hman = csc_dmem_init(buf, msize, CSC_MEM_DEFAULT | CSC_MEM_ZERO);
 	cclog(-1, "Created an empty heap: %d\n", msize);
@@ -566,6 +659,40 @@ static int dmem_test_empty(void *buf, int len)
 	mem = csc_dmem_alloc(hman, 0);
 	cclog(!!mem, "Allocated 0 byte from the empty heap: +%d\n", BMEM_SPAN(hman, mem));
 	dmem_heap_status(hman, 1, 0);
+	msize = csc_dmem_attrib(hman, mem, &len);
+	cclog(!msize, "The size of the allocated memory is %u: %d\n", msize, len);
+	gd = csc_dmem_front_guard(hman, mem, &len);
+	cclog(!!gd, "The front guard: +%d (%d)\n", BMEM_SPAN(hman, gd), len);
+	gd = csc_dmem_back_guard(hman, mem, &len);
+	cclog(!!gd, "The front guard: +%d (%d)\n", BMEM_SPAN(hman, gd), len);
+
+	len = csc_dmem_free(hman, mem);
+	cclog(len == 0, "Free 0 byte from the empty heap: +%d\n", BMEM_SPAN(hman, mem));
+	dmem_heap_status(hman, 0, 1);
+
+	len = CSC_MEM_DEFAULT | CSC_MEM_SETPG(1,2);
+	msize = sizeof(DMHEAP) + sizeof(DMEM) + DMEM_GUARD(len);
+	hman = csc_dmem_init(buf, msize, len);
+	cclog(!hman, "Memory pool is too small to create a heap: %d\n", msize);
+
+	len |= CSC_MEM_ZERO;
+	hman = csc_dmem_init(buf, msize, len);
+	cclog(!!hman, "Create heap(%d,%d) with %u bytes: %p.\n",
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize, hman);
+	if (hman == NULL) return -1;
+	dmem_heap_status(hman, 0, 1);
+
+	mem = csc_dmem_alloc(hman, 1);
+	cclog(!mem, "Can not allocate 1 byte from the empty heap\n");
+	mem = csc_dmem_alloc(hman, 0);
+	cclog(!!mem, "Allocated 0 byte from the empty heap: +%d\n", BMEM_SPAN(hman, mem));
+	dmem_heap_status(hman, 1, 0);
+	msize = csc_dmem_attrib(hman, mem, &len);
+	cclog(!msize, "The size of the allocated memory is %u: %d\n", msize, len);
+	gd = csc_dmem_front_guard(hman, mem, &len);
+	cclog(!!gd, "The front guard: +%d (%d)\n", BMEM_SPAN(hman, gd), len);
+	gd = csc_dmem_back_guard(hman, mem, &len);
+	cclog(!!gd, "The front guard: +%d (%d)\n", BMEM_SPAN(hman, gd), len);
 
 	len = csc_dmem_free(hman, mem);
 	cclog(len == 0, "Free 0 byte from the empty heap: +%d\n", BMEM_SPAN(hman, mem));
@@ -604,7 +731,7 @@ static int dmem_test_minimum(void *buf, int len)
 	msize = csc_dmem_attrib(hman, p[0], &s[0]);
 	cclog(!!p[0] && s[0], "Try to allocate %u byte at: +%d\n", msize, BMEM_SPAN(hman, p[0]));
 	cm = dmem_find_control(hman, p[0]);
-	cclog(DMEM_PADDED(cm) == 1, "Usage Flags and paddning size: %x\n", cm->magic[2]);
+	cclog(DMEM_PADDED(cm) == 1, "Usage Flags and padding size: 0x%x\n", cm->magic[2]);
 	dmem_heap_status(hman, 1, 0);
 
 	s[0] = csc_dmem_free(hman, p[0]);
@@ -612,61 +739,157 @@ static int dmem_test_minimum(void *buf, int len)
 	cclog(!s[0] && !s[1], "Free the memory gets %u bytes\n", msize);
 	dmem_heap_status(hman, 0, 1);
 
-#if 0
 	/********************************************************************
 	 * testing the free function in minimum heap
 	 *******************************************************************/
-	cm = csc_dmem_init(buf, sizeof(buf), CSC_MEM_DEFAULT);
-	if (cm == NULL) return 0;
-	hman = (DMHEAP*)(cm+1);
-	cclog(-1, "The test heap is created: %p %d\n", cm, (int)hman->fr_size);
+	hman = csc_dmem_init(buf, len, CSC_MEM_DEFAULT);
+	if (hman == NULL) return 0;
+	cclog(-1, "Create heap(%d,%d) with %d bytes: %p (%u).\n",
+			CSC_MEM_PAGE(CSC_MEM_DEFAULT), CSC_MEM_GUARD(CSC_MEM_DEFAULT), 
+			len, hman, hman->fr_size);
 
 	/* testing down-merge the free space */
-	p[0] = csc_dmem_alloc(cm, 12);
-	cclog(p[0] != NULL, "Allocated %p: %ld\n", p[0], csc_dmem_attrib(cm, p[0], NULL));
-	p[1] = csc_dmem_alloc(cm, 24);
-	cclog(p[1] != NULL, "Allocated %p: %ld\n", p[1], csc_dmem_attrib(cm, p[1], NULL));
-	p[2] = csc_dmem_alloc(cm, 36);
-	cclog(p[2] != NULL, "Allocated %p: %ld\n", p[2], csc_dmem_attrib(cm, p[2], NULL));
-	p[3] = csc_dmem_alloc(cm, 16);
-	cclog(p[3] != NULL, "Allocated %p: %ld\n", p[3], csc_dmem_attrib(cm, p[3], NULL));
-	cclog(dmem_heap_state(cm, 5, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-
+	p[0] = csc_dmem_alloc(hman, 12);
+	cclog(!!p[0], "Allocated +%d: %u\n", BMEM_SPAN(hman, p[0]), 
+			csc_dmem_attrib(hman, p[0], NULL));
+	p[1] = csc_dmem_alloc(hman, 24);
+	cclog(!!p[1], "Allocated +%d: %u\n", BMEM_SPAN(hman, p[1]), 
+			csc_dmem_attrib(hman, p[1], NULL));
+	p[2] = csc_dmem_alloc(hman, 36);
+	cclog(!!p[2], "Allocated +%d: %u\n", BMEM_SPAN(hman, p[2]), 
+			csc_dmem_attrib(hman, p[2], NULL));
+	p[3] = csc_dmem_alloc(hman, 16);
+	cclog(!!p[3], "Allocated +%d: %u\n", BMEM_SPAN(hman, p[3]), 
+			csc_dmem_attrib(hman, p[3], NULL));
+	dmem_heap_status(hman, 4, 1);
 
 	/* create a hole: USED FREE USED USED FREE */
-	s[0] = csc_dmem_free(cm, p[1]);
-	msize = csc_dmem_attrib(cm, p[1], &s[1]);
-	cclog(s[0] == 0 && s[1] == 0, "Freed %p: %ld (%s)\n", p[1], msize, s[1]?"used":"free");
-	cclog(dmem_heap_state(cm, 4, 2), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+	s[0] = csc_dmem_free(hman, p[1]);
+	msize = csc_dmem_attrib(hman, p[1], &s[1]);
+	cclog(!s[0] && !s[1], "Freed %p: %u (%s)\n", p[1], msize, s[1]?"used":"free");
+	dmem_heap_status(hman, 3, 2);
 
 	/* down merge the first two memory: (FREE FREE) USED USED FREE */
-	s[0] = csc_dmem_free(cm, p[0]);
-	msize = csc_dmem_attrib(cm, p[0], &s[1]);
-	cclog(s[0] == 0 && s[1] == 0, "Down merge %p: %ld (%s)\n", p[0], msize, s[1]?"used":"free");
-	cclog(dmem_heap_state(cm, 3, 2), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
+	s[0] = csc_dmem_free(hman, p[0]);
+	msize = csc_dmem_attrib(hman, p[0], &s[1]);
+	cclog(!s[0] && !s[1], "Down merge %p: %u (%s)\n", p[0], msize, s[1]?"used":"free");
+	dmem_heap_status(hman, 2, 2);
 
 	/* up merge the three memories: (FREE FREE FREE) USED FREE */
-	s[0] = csc_dmem_free(cm, p[2]);
-	msize = csc_dmem_attrib(cm, p[0], &s[1]);
-	cclog(s[0] == 0 && s[1] == 0, "Up merge %p: %ld (%s)\n", p[2], msize, s[1]?"used":"free");
-	cclog(dmem_heap_state(cm, 2, 2), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-
-	/* run a scanner to verify the result */
-	memset(s, 0, sizeof(s));
-	csc_dmem_scan(cm, used, loose);
-	cclog(s[0]==2 && s[2]==2, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
+	s[0] = csc_dmem_free(hman, p[2]);
+	msize = csc_dmem_attrib(hman, p[0], &s[1]);
+	cclog(!s[0] && !s[1], "Up merge %p: %u (%s)\n", p[2], msize, s[1]?"used":"free");
+	dmem_heap_status(hman, 1, 2);
 
 	/* tri-merge all memories: (FREE FREE FREE FREE FREE) */
-	s[0] = csc_dmem_free(cm, p[3]);
-	msize = csc_dmem_attrib(cm, p[0], &s[1]);
-	cclog(s[0] == 0 && s[1] == 0, "Tri-merge %p: %ld (%s)\n", p[0], msize, s[1]?"used":"free");
-	cclog(dmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n", 
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-#endif
+	s[0] = csc_dmem_free(hman, p[3]);
+	msize = csc_dmem_attrib(hman, p[0], &s[1]);
+	cclog(!s[0] && !s[1], "Tri-merge %p: %u (%s)\n", p[0], msize, s[1]?"used":"free");
+	dmem_heap_status(hman, 0, 1);
+	return 0;
+}
+
+static int dmem_test_fitness(void *buf, int len)
+{
+	DMHEAP	*hman;
+	size_t	msize;
+	char	*p[8], *ref[4];
+	int	s[4];
+
+	void *memory_set_pattern(void *heap, int len, int config)
+	{
+		size_t	msize;
+		char	*fitness[] = { "FIRSTFIT", "BESTFIT", "WORSTFIT", "" };
+
+		if ((heap = csc_dmem_init(heap, len, config)) == NULL) {
+			return NULL;
+		}
+		ref[0] = csc_dmem_alloc(heap, 32);	/* trap */
+		csc_dmem_alloc(heap, 1);
+		ref[1] = csc_dmem_alloc(heap, 128);	/* for first fit */
+		csc_dmem_alloc(heap, 1);
+		ref[2] = csc_dmem_alloc(heap, 61);	/* for best fit */
+		csc_dmem_alloc(heap, 1);
+		ref[3] = (void*)((DMHEAP *)heap)->next;	/* for worst fit */
+		msize = csc_dmem_attrib(heap, ref[3], &len);
+		if ((msize < 128) || (len != 0)) {
+			return NULL;
+		}
+		csc_dmem_free(heap, ref[0]);
+		csc_dmem_free(heap, ref[1]);
+		csc_dmem_free(heap, ref[2]);
+		cclog(-1, "Create heap(%d,%d) with %s method: used=%d free=%d.\n",
+			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
+			fitness[config & CSC_MEM_FITMASK], 
+			((DMHEAP *)heap)->al_num, ((DMHEAP *)heap)->fr_num);
+		return heap;
+	}
+
+
+	hman = csc_dmem_init(buf, len, CSC_MEM_DEFAULT);
+	if (hman == NULL) return 0;
+	cclog(-1, "Create heap(%d,%d) with %d bytes: %p (%u).\n",
+			CSC_MEM_PAGE(CSC_MEM_DEFAULT), CSC_MEM_GUARD(CSC_MEM_DEFAULT), 
+			len, hman, hman->fr_size);
+
+	/* maximum test */
+	msize = hman->fr_size + 1;
+	p[0] = csc_dmem_alloc(hman, msize);
+	cclog(!p[0], "Allocating %d: %p\n", msize, p[0]);
+	msize = hman->fr_size;
+	p[0] = csc_dmem_alloc(hman, msize);
+	cclog(!!p[0], "Allocating %d: %p\n", msize, p[0]);
+	s[0] = csc_dmem_free(hman, p[0]);
+	dmem_heap_status(hman, 0, 1);
+
+	/* general allocating and freeing */
+	p[0] = csc_dmem_alloc(hman, 12);
+	cclog(!!p[0], "Allocated %p: %u\n", BMEM_SPAN(hman, p[0]), 
+			csc_dmem_attrib(hman, p[0], NULL));
+	p[1] = csc_dmem_alloc(hman, 24);
+	cclog(!!p[1], "Allocated %p: %u\n", BMEM_SPAN(hman, p[1]), 
+			csc_dmem_attrib(hman, p[1], NULL));
+	p[2] = csc_dmem_alloc(hman, 36);
+	cclog(!!p[2], "Allocated %p: %u\n", BMEM_SPAN(hman, p[2]), 
+			csc_dmem_attrib(hman, p[2], NULL));
+	p[3] = csc_dmem_alloc(hman, 16);
+	cclog(!!p[3], "Allocated %p: %u\n", BMEM_SPAN(hman, p[3]), 
+			csc_dmem_attrib(hman, p[3], NULL));
+	p[4] = csc_dmem_alloc(hman, 12);
+	cclog(!!p[4], "Allocated %p: %u\n", BMEM_SPAN(hman, p[4]), 
+			csc_dmem_attrib(hman, p[4], NULL));
+	p[5] = csc_dmem_alloc(hman, 24);
+	cclog(!!p[5], "Allocated %p: %u\n", BMEM_SPAN(hman, p[5]), 
+			csc_dmem_attrib(hman, p[5], NULL));
+	p[6] = csc_dmem_alloc(hman, 36);
+	cclog(!!p[6], "Allocated %p: %u\n", BMEM_SPAN(hman, p[6]), 
+			csc_dmem_attrib(hman, p[6], NULL));
+	p[7] = csc_dmem_alloc(hman, 16);
+	cclog(!!p[7], "Allocated %p: %u\n", BMEM_SPAN(hman, p[7]), 
+			csc_dmem_attrib(hman, p[7], NULL));
+	dmem_heap_status(hman, 8, 1);
+
+	/* free half of them */
+	s[0]  = csc_dmem_free(hman, p[0]);
+	s[0] += csc_dmem_free(hman, p[2]);
+	s[0] += csc_dmem_free(hman, p[4]);
+	s[0] += csc_dmem_free(hman, p[6]);
+	cclog(!s[0], "Free half of them\n");
+	dmem_heap_status(hman, 4, 5);
+
+	/* free rest of them */
+	s[0]  = csc_dmem_free(hman, p[1]);
+	s[0] += csc_dmem_free(hman, p[3]);
+	s[0] += csc_dmem_free(hman, p[5]);
+	s[0] += csc_dmem_free(hman, p[7]);
+	cclog(!s[0], "Free rest of them\n");
+	dmem_heap_status(hman, 0, 1);
+
+	/* testing the fitness */
+	hman = memory_set_pattern(buf, len, CSC_MEM_FIRST_FIT);
+	if (hman == NULL) return -1;
+	p[0] = csc_dmem_alloc(hman, 64);
+	cclog(p[0] == ref[1], "Allocated 64 words by First Fit method\n");
 	return 0;
 }
 
@@ -699,78 +922,5 @@ static void dmem_heap_status(DMHEAP *hman, size_t used, size_t freed)
 			hman->fr_num, s[2], hman->fr_size, s[3],
 			BMEM_SPAN(hman, hman->next));
 }
-
-
-#if 0
-int dmem_unittest(void)
-{
-	int	buf[256], s[4];
-	DMEM	*cm;
-	DMHEAP	*hman;
-	size_t	msize;
-	char	*p[8];
-
-	/* maximum test */
-	msize = hman->fr_size + 1;
-	p[0] = csc_dmem_alloc(cm, msize);
-	cclog(p[0] == NULL, "Allocating %d: %p\n", msize, p[0]);
-	msize = hman->fr_size;
-	p[0] = csc_dmem_alloc(cm, msize);
-	cclog(p[0] != NULL, "Allocating %d: %p\n", msize, p[0]);
-	s[0] = csc_dmem_free(cm, p[0]);
-	cclog(dmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n",
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-
-	/* general allocating and freeing */
-	p[0] = csc_dmem_alloc(cm, 12);
-	cclog(p[0] != NULL, "Allocated %p: %ld\n", p[0], csc_dmem_attrib(cm, p[0], NULL));
-	p[1] = csc_dmem_alloc(cm, 24);
-	cclog(p[1] != NULL, "Allocated %p: %ld\n", p[1], csc_dmem_attrib(cm, p[1], NULL));
-	p[2] = csc_dmem_alloc(cm, 36);
-	cclog(p[2] != NULL, "Allocated %p: %ld\n", p[2], csc_dmem_attrib(cm, p[2], NULL));
-	p[3] = csc_dmem_alloc(cm, 16);
-	cclog(p[3] != NULL, "Allocated %p: %ld\n", p[3], csc_dmem_attrib(cm, p[3], NULL));
-	p[4] = csc_dmem_alloc(cm, 12);
-	cclog(p[4] != NULL, "Allocated %p: %ld\n", p[4], csc_dmem_attrib(cm, p[4], NULL));
-	p[5] = csc_dmem_alloc(cm, 24);
-	cclog(p[5] != NULL, "Allocated %p: %ld\n", p[5], csc_dmem_attrib(cm, p[5], NULL));
-	p[6] = csc_dmem_alloc(cm, 36);
-	cclog(p[6] != NULL, "Allocated %p: %ld\n", p[6], csc_dmem_attrib(cm, p[6], NULL));
-	p[7] = csc_dmem_alloc(cm, 16);
-	cclog(p[7] != NULL, "Allocated %p: %ld\n", p[7], csc_dmem_attrib(cm, p[7], NULL));
-
-	/* run a scanner to verify the result */
-	memset(s, 0, sizeof(s));
-	csc_dmem_scan(cm, used, loose);
-	cclog(s[0]==9 && s[2]==1, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
-
-	/* free half of them */
-	s[0] = csc_dmem_free(cm, p[0]);
-	s[0] += csc_dmem_free(cm, p[2]);
-	s[0] += csc_dmem_free(cm, p[4]);
-	s[0] += csc_dmem_free(cm, p[6]);
-	cclog(s[0] == 0, "Free half of them\n");
-
-	/* run a scanner to verify the result */
-	memset(s, 0, sizeof(s));
-	csc_dmem_scan(cm, used, loose);
-	cclog(s[0]==5 && s[2]==5, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
-
-	/* free rest of them */
-	s[0] = csc_dmem_free(cm, p[1]);
-	s[0] += csc_dmem_free(cm, p[3]);
-	s[0] += csc_dmem_free(cm, p[5]);
-	s[0] += csc_dmem_free(cm, p[7]);
-	cclog(s[0] == 0, "Free rest of them\n");
-	cclog(dmem_heap_state(cm, 1, 1), "End=%p used=%ld usize=%ld freed=%ld fsize=%ld\n",
-			hman->next, hman->al_num, hman->al_size, hman->fr_num, hman->fr_size);
-
-	/* run a scanner to verify the result */
-	memset(s, 0, sizeof(s));
-	csc_dmem_scan(cm, used, loose);
-	cclog(s[0]==1 && s[2]==1, "Scanned: used=%d usize=%d free=%d fsize=%d\n", s[0], s[1], s[2], s[3]);
-	return 0;
-}
-#endif
 #endif	/* CFG_UNIT_TEST */
 

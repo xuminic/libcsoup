@@ -319,8 +319,13 @@ int csc_tmem_free(void *heap, void *mem)
    \return     NULL if successfully scanned the memory chain. If the memory
                chain is corrupted, it returns a pointer to the broken point.
 
-   \remark The prototype of the callback functions are: int func(int *)
-           The scan process can be broken if func() returns non-zero.
+   \remark    The scan function will scan the heap from the first memory block to the last.
+   When it found an allocated memory block, it will call the used() function with the address
+   of the allocated memory block. When it found a freed memory block, it will call the loose() 
+   function with the address of the freed memory block.
+
+   \remark The prototype of the callback functions are: int func(void *)
+           The scan process will stop in middle if func() returns non-zero.
 */
 void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
@@ -351,13 +356,11 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 
    \param[in]  heap the memory heap for allocation.
    \param[in]  mem the memory block.
-   \param[out] state the state of the memory block. 0=free 1=used
-               CSC_MERR_INIT memory heap not initialized
-	       CSC_MERR_BROKEN memory block corrupted
-	       CSC_MERR_RANGE memory out of range
+   \param[out] state the state of the memory block. 
+               0=free 1=used, or <0 in error codes.
 
-   \return    size of memory block without padding,
-              or (size_t)-1 when error
+   \return    the size of the allocated memory without padding when succeed,
+              or (size_t) -1 in error. the error code returns in 'state'.
 */
 size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 {
@@ -403,8 +406,8 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
    \remark    the guarding area is a piece of memories in front of the client area
    and in the end of the client area. It can be used to buffer a possible memory overflow
    while debugging, or store extra information about the memory user. The size of the
-   guarding area was defined in the 'flags' parameter in csc_tmem_init(), while bit 4-7,
-   the page size multiply the bit 8-11, the guarding pages.
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
 
    \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
    because the pad area in the memory management block was defined as a part of the front guard,
@@ -451,8 +454,8 @@ void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
    \remark    the guarding area is a piece of memories in front of the client area
    and in the end of the client area. It can be used to buffer a possible memory overflow
    while debugging, or store extra information about the memory user. The size of the
-   guarding area was defined in the 'flags' parameter in csc_tmem_init(), while bit 4-7,
-   the page size multiply the bit 8-11, the guarding pages.
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
 
    \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
    because the pad area in the memory management block was defined as a part of the front guard,

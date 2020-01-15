@@ -155,13 +155,13 @@ static inline void *bmem_index_to_addr(BMMCB *bmc, int idx)
 
    \param[in]  mem the memory heap for allocation.
    \param[in]  mlen the size of the memory heap.
-   \param[in]  flags the bit combination of a group of settings.
+   \param[in]  flags the bit combination of the memory manage settings.
                See CSC_MEM_xxx macro in libcsoup.h for details.
 
    \return    The pointer to the memory heap object, or NULL if failed.
 
-   \remark The minimum allocation unit is 'page' which size is defined in Bit4-7 of the flags.
-   The detail settings of flags maybe find in libcsoup.h
+   \remark The minimum allocation unit is 'page' which is defined in Bit4-7 
+   of the 'flags'. See CSC_MEM_xxx macro in libcsoup.h for details.
 */
 void *csc_bmem_init(void *mem, size_t mlen, int flags)
 {
@@ -212,9 +212,7 @@ void *csc_bmem_init(void *mem, size_t mlen, int flags)
               or NULL if not enough space for allocating.
 
    \remark The strategy of allocation is defined by CSC_MEM_FITNESS field
-           in csc_bmem_init()
 */
-
 void *csc_bmem_alloc(void *heap, size_t size)
 {
 	BMMCB	*bmc = heap;
@@ -345,6 +343,9 @@ int csc_bmem_free(void *heap, void *mem)
    When it found an allocated memory block, it will call the used() function with the address
    of the allocated memory block. When it found a freed memory block, it will call the loose() 
    function with the address of the freed memory block.
+
+   \remark The prototype of the callback functions are: int func(void *)
+           The scan process will stop in middle if func() returns non-zero.
 */
 void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
@@ -400,11 +401,11 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 
    \param[in]  heap the memory heap.
    \param[in]  mem the memory block.
-   \param[out] state the state of the memory block. 0=free; 1=allocated
-               if state<0, then state returns the error code.
+   \param[out] state the state of the memory block. 
+               0=free 1=used, or <0 in error codes.
 
-   \return    the size of the memory block when succeed, or (size_t) -1 in error.
-              the error code returns in 'state'.
+   \return    the size of the allocated memory without padding when succeed,
+              or (size_t) -1 in error. the error code returns in 'state'.
 
    \remark  To avoid ambiguous of the memory block, the csc_bmem_attrib() don't
    accept the uninitialized block. 
@@ -458,8 +459,8 @@ size_t csc_bmem_attrib(void *heap, void *mem, int *state)
    \remark    the guarding area is a piece of memories in front of the client area
    and in the end of the client area. It can be used to buffer a possible memory overflow
    while debugging, or store extra information about the memory user. The size of the
-   guarding area was defined in the 'flags' parameter in csc_bmem_init(), while bit 4-7,
-   the page size multiply the bit 8-11, the guarding pages.
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
 
    \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
    because the pad area in the memory management block was defined as a part of the front guard,
@@ -503,8 +504,8 @@ void *csc_bmem_front_guard(void *heap, void *mem, int *xsize)
    \remark    the guarding area is a piece of memories in front of the client area
    and in the end of the client area. It can be used to buffer a possible memory overflow
    while debugging, or store extra information about the memory user. The size of the
-   guarding area was defined in the 'flags' parameter in csc_bmem_init(), while bit 4-7,
-   the page size multiply the bit 8-11, the guarding pages.
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
 
    \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
    because the pad area in the memory management block was defined as a part of the front guard,
