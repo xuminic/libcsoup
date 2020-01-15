@@ -160,7 +160,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	{
 		DMEM	*cm = dmem_find_control(heap, mem);
 
-		if (cm->size >= n) {
+		if (cm->size >= realn) {
 			found = (found == NULL) ? cm : found;
 			switch (config & CSC_MEM_FITMASK) {
 			case CSC_MEM_BEST_FIT:
@@ -810,21 +810,19 @@ static int dmem_test_fitness(void *buf, int len)
 		csc_dmem_alloc(heap, 1);
 		ref[2] = csc_dmem_alloc(heap, 61);	/* for best fit */
 		csc_dmem_alloc(heap, 1);
-		ref[3] = (void*)((DMHEAP *)heap)->next;	/* for worst fit */
-		msize = csc_dmem_attrib(heap, ref[3], &len);
-		if ((msize < 128) || (len != 0)) {
-			return NULL;
-		}
+		ref[3] = dmem_find_client(heap, ((DMHEAP *)heap)->next, NULL); /* for worst fit */
 		csc_dmem_free(heap, ref[0]);
 		csc_dmem_free(heap, ref[1]);
 		csc_dmem_free(heap, ref[2]);
-		cclog(-1, "Create heap(%d,%d) with %s method: used=%d free=%d.\n",
+
+		msize = csc_dmem_attrib(heap, ref[3], &len);
+		cclog((msize > 128) && (len == 0), 
+			"Create heap(%d,%d) with %s method: used=%d free=%d.\n",
 			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
 			fitness[config & CSC_MEM_FITMASK], 
 			((DMHEAP *)heap)->al_num, ((DMHEAP *)heap)->fr_num);
 		return heap;
 	}
-
 
 	hman = csc_dmem_init(buf, len, CSC_MEM_DEFAULT);
 	if (hman == NULL) return 0;
@@ -835,37 +833,37 @@ static int dmem_test_fitness(void *buf, int len)
 	/* maximum test */
 	msize = hman->fr_size + 1;
 	p[0] = csc_dmem_alloc(hman, msize);
-	cclog(!p[0], "Allocating %d: %p\n", msize, p[0]);
+	cclog(!p[0], "Allocating %d bytes: %p\n", msize, p[0]);
 	msize = hman->fr_size;
 	p[0] = csc_dmem_alloc(hman, msize);
-	cclog(!!p[0], "Allocating %d: %p\n", msize, p[0]);
+	cclog(!!p[0], "Allocating %d bytes: %p\n", msize, p[0]);
 	s[0] = csc_dmem_free(hman, p[0]);
 	dmem_heap_status(hman, 0, 1);
 
 	/* general allocating and freeing */
 	p[0] = csc_dmem_alloc(hman, 12);
-	cclog(!!p[0], "Allocated %p: %u\n", BMEM_SPAN(hman, p[0]), 
+	cclog(!!p[0], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[0]), 
 			csc_dmem_attrib(hman, p[0], NULL));
 	p[1] = csc_dmem_alloc(hman, 24);
-	cclog(!!p[1], "Allocated %p: %u\n", BMEM_SPAN(hman, p[1]), 
+	cclog(!!p[1], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[1]), 
 			csc_dmem_attrib(hman, p[1], NULL));
 	p[2] = csc_dmem_alloc(hman, 36);
-	cclog(!!p[2], "Allocated %p: %u\n", BMEM_SPAN(hman, p[2]), 
+	cclog(!!p[2], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[2]), 
 			csc_dmem_attrib(hman, p[2], NULL));
 	p[3] = csc_dmem_alloc(hman, 16);
-	cclog(!!p[3], "Allocated %p: %u\n", BMEM_SPAN(hman, p[3]), 
+	cclog(!!p[3], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[3]), 
 			csc_dmem_attrib(hman, p[3], NULL));
 	p[4] = csc_dmem_alloc(hman, 12);
-	cclog(!!p[4], "Allocated %p: %u\n", BMEM_SPAN(hman, p[4]), 
+	cclog(!!p[4], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[4]), 
 			csc_dmem_attrib(hman, p[4], NULL));
 	p[5] = csc_dmem_alloc(hman, 24);
-	cclog(!!p[5], "Allocated %p: %u\n", BMEM_SPAN(hman, p[5]), 
+	cclog(!!p[5], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[5]), 
 			csc_dmem_attrib(hman, p[5], NULL));
 	p[6] = csc_dmem_alloc(hman, 36);
-	cclog(!!p[6], "Allocated %p: %u\n", BMEM_SPAN(hman, p[6]), 
+	cclog(!!p[6], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[6]), 
 			csc_dmem_attrib(hman, p[6], NULL));
 	p[7] = csc_dmem_alloc(hman, 16);
-	cclog(!!p[7], "Allocated %p: %u\n", BMEM_SPAN(hman, p[7]), 
+	cclog(!!p[7], "Allocated at +%d: %u bytes\n", BMEM_SPAN(hman, p[7]), 
 			csc_dmem_attrib(hman, p[7], NULL));
 	dmem_heap_status(hman, 8, 1);
 
@@ -885,11 +883,23 @@ static int dmem_test_fitness(void *buf, int len)
 	cclog(!s[0], "Free rest of them\n");
 	dmem_heap_status(hman, 0, 1);
 
-	/* testing the fitness */
+	/* testing the first fit */
 	hman = memory_set_pattern(buf, len, CSC_MEM_FIRST_FIT);
 	if (hman == NULL) return -1;
 	p[0] = csc_dmem_alloc(hman, 64);
-	cclog(p[0] == ref[1], "Allocated 64 words by First Fit method\n");
+	cclog(p[0] == ref[1], "First Fit: allocated 64 bytes at +%d\n", BMEM_SPAN(buf, p[0]));
+
+	/* testing the best fit */
+	hman = memory_set_pattern(buf, len, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2));
+	if (hman == NULL) return -1;
+	p[0] = csc_dmem_alloc(hman, 64);
+	cclog(p[0] == ref[2], "Best Fit: allocated 64 bytes at +%d\n", BMEM_SPAN(buf, p[0]));
+
+	/* testing the worst fit */
+	hman = memory_set_pattern(buf, len, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1));
+	if (hman == NULL) return -1;
+	p[0] = csc_dmem_alloc(hman, 64);
+	cclog(p[0] == ref[3], "Worst Fit: allocated 64 bytes at +%d\n", BMEM_SPAN(buf, p[0]));
 	return 0;
 }
 
