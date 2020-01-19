@@ -46,9 +46,10 @@
 
 #include "libcsoup.h"
 
+/*#define BMEM_SLOWMOTION*/
 #define BMEM_MAGPIE		0xCA
 
-static	unsigned char	bmtab[8] = { 128, 64, 32, 16, 8, 4, 2, 1 };
+static	const unsigned char	bmtab[8] = { 128, 64, 32, 16, 8, 4, 2, 1 };
 #define BM_CK_PAGE(bm, idx)	((bm)[(idx)/8] & bmtab[(idx)&7])
 #define BM_SET_PAGE(bm, idx)	((bm)[(idx)/8] |= bmtab[(idx)&7])
 #define BM_CLR_PAGE(bm, idx)	((bm)[(idx)/8] &= ~bmtab[(idx)&7])
@@ -67,7 +68,7 @@ typedef	struct	_BMMCB	{
 	unsigned char	magic[4];	/* CRC8 + MAGIC + CONFIG1 + CONFIG2 */
 	int	pages;		/* control block used pages, inc. BMMCB and bitmap */
 
-	//char	*trunk;		/* point to the head of the page array */
+	/*char	*trunk;*/	/* point to the head of the page array */
 	int	total;		/* number of allocable pages */
 	int	avail;		/* number of available pages */
 
@@ -76,8 +77,9 @@ typedef	struct	_BMMCB	{
 
 
 static BMMPC *bmem_verify(BMMCB *bmc, void *mem, int *err);
-static void bmem_page_take(BMMCB *bmc, int idx, int pages);
+static void bmem_page_alloc(BMMCB *bmc, int idx, int pages);
 static void bmem_page_free(BMMCB *bmc, int idx, int pages);
+static int bmem_page_find(BMMCB *bmc, int idx);
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize);
 static BMMPC *bmem_find_control(BMMCB *bmc, void *mem);
 static void *bmem_make_free(BMMCB *bmc, int index, int pages);
@@ -197,7 +199,7 @@ void *csc_bmem_init(void *mem, size_t mlen, int flags)
 	bmc->pages = bmpage;
 	bmc->total = allpage;
 	bmc->avail = allpage - bmpage;
-	bmem_page_take(bmc, 0, bmpage);		/* set the bitmap */	
+	bmem_page_alloc(bmc, 0, bmpage);		/* set the bitmap */	
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	return bmc;
 }
@@ -281,7 +283,7 @@ void *csc_bmem_alloc(void *heap, size_t size)
 	}
 
 	/* take the free pages */
-	bmem_page_take(bmc, fnd_idx, pages);
+	bmem_page_alloc(bmc, fnd_idx, pages);
 	bmc->avail -= pages;
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	
@@ -589,17 +591,45 @@ static BMMPC *bmem_verify(BMMCB *bmc, void *mem, int *err)
 	return mem;
 }
 
-static void bmem_page_take(BMMCB *bmc, int idx, int pages)
+static void bmem_page_alloc_slow(BMMCB *bmc, int idx, int pages)
 {
 	int	i;
 
-	//printf("bmem_page_take: %d %d\n", idx, pages);
-	for (i = 0; i < pages; i++) {
-		BM_SET_PAGE(bmc->bitmap, idx + i);
+	for (i = idx; i < idx + pages; i++) {
+		BM_SET_PAGE(bmc->bitmap, i);
 	}
 }
 
-static void bmem_page_free(BMMCB *bmc, int idx, int pages)
+#ifdef	BMEM_SLOWMOTION
+static void bmem_page_alloc(BMMCB *bmc, int idx, int pages)
+{
+	bmem_page_alloc_slow(bmc, idx, pages);
+}
+#else
+static const char	mapsetfront[8] = { 0xff, 0x7f, 0x3f, 0x1f, 0xf, 7, 3, 1 };
+static const char	mapsetback[8]  = { 0, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe };
+
+static void bmem_page_alloc(BMMCB *bmc, int idx, int pages)
+{
+	//printf("bmem_page_alloc: %d %d\n", idx, pages);
+	if (pages < 8) {	/* too short to be worth of bit trick */
+		bmem_page_alloc_slow(bmc, idx, pages);
+	} else {
+		/* set the first byte in the bitmap, especially when it's uneven */
+		bmc->bitmap[idx / 8] |= mapsetfront[idx & 7];
+		pages -= 8 - (idx & 7);
+		idx   += 8 - (idx & 7);
+
+		memset(&bmc->bitmap[idx / 8], 0xff, pages / 8);
+		if (pages & 7) {
+			idx += pages / 8 * 8;
+			bmc->bitmap[idx / 8] |= mapsetback[pages & 7];
+		}
+	}
+}
+#endif	/* BMEM_SLOWMOTION */
+
+static void bmem_page_free_slow(BMMCB *bmc, int idx, int pages)
 {
 	int	i;
 
@@ -607,6 +637,58 @@ static void bmem_page_free(BMMCB *bmc, int idx, int pages)
 		BM_CLR_PAGE(bmc->bitmap, idx + i);
 	}
 }
+
+#ifdef	BMEM_SLOWMOTION
+static void bmem_page_free(BMMCB *bmc, int idx, int pages)
+{
+	bmem_page_free_slow(bmc, idx, pages);
+}
+#else
+static const char	mapclrfront[8] = { 0, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe };
+static const char	mapclrback[8]  = { 0, 0x7f, 0x3f, 0x1f, 0xf, 0x7, 0x3, 0x1 };
+
+static void bmem_page_free(BMMCB *bmc, int idx, int pages)
+{
+	if (pages < 8) {	/* too short to be worth of bit trick */
+		bmem_page_alloc_slow(bmc, idx, pages);
+	} else {
+		/* clean the first byte in the bitmap, especially when it's uneven */
+		bmc->bitmap[idx / 8] &= mapclrfront[idx & 7];
+		pages -= 8 - (idx & 7);
+		idx   += 8 - (idx & 7);
+
+		memset(&bmc->bitmap[idx / 8], 0, pages / 8);
+		if (pages & 7) {
+			idx += pages / 8 * 8;
+			bmc->bitmap[idx / 8] &= mapclrback[pages & 7];
+		}
+	}
+}
+#endif	/* BMEM_SLOWMOTION */
+
+static int bmem_page_find_slow(BMMCB *bmc, int idx)
+{
+	int	i;
+	
+	for (i = idx; i < bmc->total; i++) {
+		if (BM_CK_PAGE(bmc->bitmap, i)) {
+			break;
+		}
+	}
+	return i - idx;
+}
+
+#ifdef	BMEM_SLOWMOTION
+static int bmem_page_find(BMMCB *bmc, int idx)
+{
+	return bmem_page_find_slow(bmc, idx);
+}
+#else
+static int bmem_page_find(BMMCB *bmc, int idx)
+{
+	return bmem_page_find_slow(bmc, idx);
+}
+#endif	/* BMEM_SLOWMOTION */
 
 static void *bmem_find_client(BMMCB *bmc, BMMPC *mpc, size_t *osize)
 {
@@ -638,12 +720,7 @@ static void *bmem_make_free(BMMCB *bmc, int index, int pages)
 	if (pages >= 0) {
 		mpc->pages = pages;
 	} else {
-		for (pages = index; pages < bmc->total; pages++) {
-			if (BM_CK_PAGE(bmc->bitmap, pages)) {
-				break;
-			}
-		}
-		mpc->pages = pages - index;
+		mpc->pages = bmem_page_find(bmc, index);
 	}
 	bmem_set_crc(mpc, sizeof(BMMPC));
 	return bmem_find_client(bmc, mpc, NULL);
@@ -656,6 +733,7 @@ static void *bmem_make_free(BMMCB *bmc, int index, int pages)
 static void csc_bmem_function_test(char *buf, int blen);
 static void csc_bmem_minimum_test(char *buf, int blen);
 static void csc_bmem_fitness_test(char *buf, int blen);
+static void csc_bmem_bitmap_test(char *buf, int blen);
 static char *show_bitmap(BMMCB *bmc, int len);
 
 int csc_bmem_unittest(void)
@@ -665,6 +743,7 @@ int csc_bmem_unittest(void)
 	csc_bmem_function_test(buf, sizeof(buf));
 	csc_bmem_minimum_test(buf, sizeof(buf));
 	csc_bmem_fitness_test(buf, sizeof(buf));
+	csc_bmem_bitmap_test(buf, sizeof(buf));
 	return 0;
 }
 
@@ -983,6 +1062,112 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 			BMEM_SPAN(p[6], bmc), rc[1], bmc->avail, show_bitmap(bmc, -1));
 }
 
+static void csc_bmem_bitmap_test(char *buf, int blen)
+{
+	BMMCB	*bmc1, *bmc2;
+	int	i, config;
+
+	int bitmap_compare()
+	{
+		int	i;
+		for (i = 0; i < 16; i++) {
+			if (bmc1->bitmap[i] != bmc2->bitmap[i]) {
+				return i+1;
+			}
+		}
+		return 0;
+	}
+
+	void bitmap_set()
+	{
+		memset(bmc1->bitmap, 0xff, 6);
+		memset(bmc2->bitmap, 0xff, 6);
+	}
+
+	void bitmap_clr()
+	{
+		bmc1->bitmap[0] = 0xc0;
+		memset(&bmc1->bitmap[1], 0, 10);
+		bmc2->bitmap[0] = 0xc0;
+		memset(&bmc2->bitmap[1], 0, 10);
+	}
+
+	config = CSC_MEM_DEFAULT | CSC_MEM_SETPG(0,0);
+	bmc1 = csc_bmem_init(buf, 128*CSC_MEM_PAGE(config), config);
+	if (!bmc1) return;
+	cclog(-1, "Created Heap(%d,%d): bmc=%d free=%d map=%s\n",
+			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
+			bmc1->pages, bmc1->avail, show_bitmap(bmc1, 0));
+
+	bmc2 = csc_bmem_init(buf + blen / 2, 128*CSC_MEM_PAGE(config), config);
+	if (!bmc2) return;
+	cclog(-1, "Created Heap(%d,%d): bmc=%d free=%d map=%s\n",
+			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
+			bmc2->pages, bmc2->avail, show_bitmap(bmc2, 0));
+
+	for (i = 2; i < 20; i++) {
+		bitmap_clr();
+		bmem_page_alloc_slow(bmc1, i, 9);
+		bmem_page_alloc(bmc2, i, 9);
+		if ((config = bitmap_compare()) != 0) {
+			cclog(0, "Bit Set failed at %d: [%s]\n", 
+					config, show_bitmap(bmc1, 0)); 
+			cclog(0, "Bit Set failed at %d: [%s]\n", 
+					config, show_bitmap(bmc2, 0));
+			break;
+		}
+		if ((i == 2) || (i == 19)) {
+			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
+		}
+	}
+	for (i = 2; i < 20; i++) {
+		bitmap_clr();
+		bmem_page_alloc_slow(bmc1, i, 19);
+		bmem_page_alloc(bmc2, i, 19);
+		if ((config = bitmap_compare()) != 0) {
+			cclog(0, "Bit Set failed at %d: [%s]\n", 
+					config, show_bitmap(bmc1, 0)); 
+			cclog(0, "Bit Set failed at %d: [%s]\n", 
+					config, show_bitmap(bmc2, 0));
+			break;
+		}
+		if ((i == 2) || (i == 19)) {
+			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
+		}
+	}
+	for (i = 2; i < 20; i++) {
+		bitmap_set();
+		bmem_page_free_slow(bmc1, i, 9);
+		bmem_page_free(bmc2, i, 9);
+		if ((config = bitmap_compare()) != 0) {
+			cclog(0, "Bit Clear failed at %d: [%s]\n", 
+					config, show_bitmap(bmc1, 0)); 
+			cclog(0, "Bit Clear failed at %d: [%s]\n", 
+					config, show_bitmap(bmc2, 0));
+			break;
+		}
+		if ((i == 2) || (i == 19)) {
+			cclog(1, "Bit Clear succeed: [%s]\n", show_bitmap(bmc1, 0));
+		}
+	}
+	for (i = 2; i < 20; i++) {
+		bitmap_set();
+		bmem_page_free_slow(bmc1, i, 19);
+		bmem_page_free(bmc2, i, 19);
+		if ((config = bitmap_compare()) != 0) {
+			cclog(0, "Bit Clear failed at %d: [%s]\n", 
+					config, show_bitmap(bmc1, 0)); 
+			cclog(0, "Bit Clear failed at %d: [%s]\n", 
+					config, show_bitmap(bmc2, 0));
+			break;
+		}
+		if ((i == 2) || (i == 19)) {
+			cclog(1, "Bit Clear succeed: [%s]\n", show_bitmap(bmc1, 0));
+		}
+	}
+}
+
+
 static char *show_bitmap(BMMCB *bmc, int len)
 {
 	static	char	buf[1024];
@@ -992,8 +1177,7 @@ static char *show_bitmap(BMMCB *bmc, int len)
 	if ((len < 0) || (len > n)) {
 		len = n;
 	} else if (len == 0) {
-		for (i = 0; (i < n) && bmc->bitmap[i]; i++);
-		len = i;
+		for (len = n; len && !bmc->bitmap[len - 1]; len--);
 	}			
 	for (i = n = 0; i < len; i++) {
 		for (k = 0x80; k; k >>= 1) {
