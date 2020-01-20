@@ -675,7 +675,23 @@ static int bmem_page_find(BMMCB *bmc, int idx)
 #else
 static int bmem_page_find(BMMCB *bmc, int idx)
 {
-	return bmem_page_find_slow(bmc, idx);
+	int	i, n;
+
+	if (bmc->bitmap[idx / 8] & mapsetfront[idx & 7]) {
+		return bmem_page_find_slow(bmc, idx);
+	}
+
+	n = 8 - (idx & 7);
+	for (i = idx / 8 + 1; i < bmc->total / 8; i++) {
+		if (bmc->bitmap[i]) {
+			return n + bmem_page_find_slow(bmc, i * 8);
+		}
+		n += 8;
+	}
+	if (bmc->total & 7) {
+		n += bmem_page_find_slow(bmc, i * 8);
+	}
+	return n;
 }
 #endif	/* BMEM_SLOWMOTION */
 
@@ -1074,6 +1090,27 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 		memset(&bmc2->bitmap[1], 0, 10);
 	}
 
+	void bitmap_chk()
+	{
+		int	i, k;
+		printf("Bitmap usage: ");
+		for (i = 0; i < bmc1->total; i++) {
+			if (BM_CK_PAGE(bmc1->bitmap, i)) {
+				for (k = i+1; k < bmc1->total; k++) {
+					if (!BM_CK_PAGE(bmc1->bitmap, k)) {
+						break;
+					}
+				}
+				printf("A%d ", k - i);
+			} else {
+				k = bmem_page_find(bmc1, i);
+				printf("F%d ", k);
+			}
+			i = i + k - 1;
+		}
+		printf("\n");
+	}
+
 	config = CSC_MEM_DEFAULT | CSC_MEM_SETPG(0,0);
 	bmc1 = csc_bmem_init(buf, 128*CSC_MEM_PAGE(config), config);
 	if (!bmc1) return;
@@ -1098,9 +1135,10 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 					config, show_bitmap(bmc2, 0));
 			break;
 		}
-		if ((i == 2) || (i == 19)) {
+		//if ((i == 2) || (i == 19)) {
 			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
-		}
+		//}
+		bitmap_chk();
 	}
 	for (i = 2; i < 20; i++) {
 		bitmap_clr();
