@@ -601,7 +601,7 @@ static const char	mapsetback[8]  = { 0, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe
 static void bmem_page_alloc(BMMCB *bmc, int idx, int pages)
 {
 	//printf("bmem_page_alloc: %d %d\n", idx, pages);
-	if (pages < 8) {	/* too short to be worth of bit trick */
+	if (pages <= 8) {	/* too short to be worth of bit trick */
 		bmem_page_alloc_slow(bmc, idx, pages);
 	} else {
 		/* set the first byte in the bitmap, especially when it's uneven */
@@ -638,7 +638,7 @@ static const char	mapclrback[8]  = { 0, 0x7f, 0x3f, 0x1f, 0xf, 0x7, 0x3, 0x1 };
 
 static void bmem_page_free(BMMCB *bmc, int idx, int pages)
 {
-	if (pages < 8) {	/* too short to be worth of bit trick */
+	if (pages <= 8) {	/* too short to be worth of bit trick */
 		bmem_page_free_slow(bmc, idx, pages);
 	} else {
 		/* clean the first byte in the bitmap, especially when it's uneven */
@@ -677,7 +677,8 @@ static int bmem_page_find(BMMCB *bmc, int idx)
 {
 	int	i, n;
 
-	if (bmc->bitmap[idx / 8] & mapsetfront[idx & 7]) {
+	if ((bmc->bitmap[idx / 8] & mapsetfront[idx & 7]) ||
+			(bmc->total <= 8)) {
 		return bmem_page_find_slow(bmc, idx);
 	}
 
@@ -1090,25 +1091,39 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 		memset(&bmc2->bitmap[1], 0, 10);
 	}
 
-	void bitmap_chk()
+	int bitmap_allocated(int idx)
 	{
-		int	i, k;
-		printf("Bitmap usage: ");
+		int	i;
+		for (i = idx; i < bmc1->total; i++) {
+			if (!BM_CK_PAGE(bmc1->bitmap, i)) {
+				break;	
+			}
+		}
+		return i - idx;
+	}
+
+	void bitmap_chk(int used, int freed)
+	{
+		int	i, k, cnt_used, cnt_free;
+		
+		cnt_used = cnt_free = 0;
+		cclog(1, "Bitmap usage: ");
 		for (i = 0; i < bmc1->total; i++) {
 			if (BM_CK_PAGE(bmc1->bitmap, i)) {
-				for (k = i+1; k < bmc1->total; k++) {
-					if (!BM_CK_PAGE(bmc1->bitmap, k)) {
-						break;
-					}
-				}
-				printf("A%d ", k - i);
+				k = bitmap_allocated(i);
+				cnt_used += k;
+				cslog("A%d ", k);
 			} else {
 				k = bmem_page_find(bmc1, i);
-				printf("F%d ", k);
+				cnt_free += k;
+				cslog("F%d ", k);
 			}
 			i = i + k - 1;
 		}
-		printf("\n");
+		cslog("\n");
+		if ((used != cnt_used) || (freed != cnt_free)) {
+			cclog(0, "Bit finder failed: used=%d freed=%d\n", cnt_used, cnt_free);
+		}
 	}
 
 	config = CSC_MEM_DEFAULT | CSC_MEM_SETPG(0,0);
@@ -1135,10 +1150,10 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 					config, show_bitmap(bmc2, 0));
 			break;
 		}
-		//if ((i == 2) || (i == 19)) {
+		if ((i == 2) || (i == 19)) {
 			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
-		//}
-		bitmap_chk();
+		}
+		bitmap_chk(11, 117);
 	}
 	for (i = 2; i < 20; i++) {
 		bitmap_clr();
@@ -1154,6 +1169,7 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 		if ((i == 2) || (i == 19)) {
 			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
 		}
+		bitmap_chk(21, 107);
 	}
 	for (i = 2; i < 20; i++) {
 		bitmap_set();
