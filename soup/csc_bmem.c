@@ -1061,15 +1061,19 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 			BMEM_SPAN(p[6], bmc), rc[1], bmc->avail, show_bitmap(bmc, -1));
 }
 
+
+#define	BMTEST_ROUND	20
+#define BMTEST_PAGES	128
+
 static void csc_bmem_bitmap_test(char *buf, int blen)
 {
 	BMMCB	*bmc1, *bmc2;
-	int	i, config;
+	int	config, verbose=0;
 
 	int bitmap_compare()
 	{
 		int	i;
-		for (i = 0; i < 16; i++) {
+		for (i = 0; i < (bmc1->total + 7)/8; i++) {
 			if (bmc1->bitmap[i] != bmc2->bitmap[i]) {
 				return i+1;
 			}
@@ -1079,16 +1083,16 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 
 	void bitmap_set()
 	{
-		memset(bmc1->bitmap, 0xff, 6);
-		memset(bmc2->bitmap, 0xff, 6);
+		memset(bmc1->bitmap, 0xff, (bmc1->total + 7)/8);
+		memset(bmc2->bitmap, 0xff, (bmc1->total + 7)/8);
 	}
 
 	void bitmap_clr()
 	{
+		memset(bmc1->bitmap, 0, (bmc1->total + 7)/8);
 		bmc1->bitmap[0] = 0xc0;
-		memset(&bmc1->bitmap[1], 0, 10);
+		memset(bmc2->bitmap, 0, (bmc1->total + 7)/8);
 		bmc2->bitmap[0] = 0xc0;
-		memset(&bmc2->bitmap[1], 0, 10);
 	}
 
 	int bitmap_allocated(int idx)
@@ -1107,100 +1111,93 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 		int	i, k, cnt_used, cnt_free;
 		
 		cnt_used = cnt_free = 0;
-		cclog(1, "Bitmap usage: ");
+		if (verbose == 1) cclog(1, "Bitmap usage: ");
 		for (i = 0; i < bmc1->total; i++) {
 			if (BM_CK_PAGE(bmc1->bitmap, i)) {
 				k = bitmap_allocated(i);
 				cnt_used += k;
-				cslog("A%d ", k);
+				if (verbose == 1) cslog("A%d ", k);
 			} else {
 				k = bmem_page_find(bmc1, i);
 				cnt_free += k;
-				cslog("F%d ", k);
+				if (verbose == 1) cslog("F%d ", k);
 			}
 			i = i + k - 1;
 		}
-		cslog("\n");
+		if (verbose == 1) cslog("\n");
 		if ((used != cnt_used) || (freed != cnt_free)) {
 			cclog(0, "Bit finder failed: used=%d freed=%d\n", cnt_used, cnt_free);
 		}
 	}
 
+	void bitmap_test_bitset(int bitlen)
+	{
+		int	i, n, k;
+
+		k = (bitlen + BMTEST_ROUND + 17) / 8;
+		for (i = 0; i < BMTEST_ROUND; i++) {
+			bitmap_clr();
+			bmem_page_alloc_slow(bmc1, i + 2, bitlen);
+			bmem_page_alloc(bmc2, i + 2, bitlen);
+			if ((n = bitmap_compare()) != 0) {
+				cclog(0, "Bit Set failed at %d: [%s]\n", 
+						n, show_bitmap(bmc1, k)); 
+				cclog(0, "Bit Set failed at %d: [%s]\n", 
+						n, show_bitmap(bmc2, k));
+				break;
+			}
+			if ((verbose == 2) || (i == 0) || (i == BMTEST_ROUND - 1)) {
+				cclog(1, "Set %d Bit succeed: [%s]\n", 
+						bitlen, show_bitmap(bmc1, k));
+			}
+			bitmap_chk(bitlen+2, BMTEST_PAGES-bitlen-2);
+		}
+	}
+
+	void bitmap_test_bitclr(int bitlen)
+	{
+		int	i, n, k;
+
+		k = (bitlen + BMTEST_ROUND + 17) / 8;
+		for (i = 0; i < BMTEST_ROUND; i++) {
+			bitmap_set();
+			bmem_page_free_slow(bmc1, i + 2, bitlen);
+			bmem_page_free(bmc2, i + 2, bitlen);
+			if ((n = bitmap_compare()) != 0) {
+				cclog(0, "Bit Clear failed at %d: [%s]\n", 
+						n, show_bitmap(bmc1, k)); 
+				cclog(0, "Bit Clear failed at %d: [%s]\n", 
+						n, show_bitmap(bmc2, k));
+				break;
+			}
+			if ((verbose == 2) || (i == 0) || (i == BMTEST_ROUND - 1)) {
+				cclog(1, "Clear %d Bit succeed: [%s]\n", 
+						bitlen, show_bitmap(bmc1, k));
+			}
+			bitmap_chk(BMTEST_PAGES-bitlen, bitlen);
+		}
+	}
+
 	config = CSC_MEM_DEFAULT | CSC_MEM_SETPG(0,0);
-	bmc1 = csc_bmem_init(buf, 128*CSC_MEM_PAGE(config), config);
+	bmc1 = csc_bmem_init(buf, BMTEST_PAGES*CSC_MEM_PAGE(config), config);
 	if (!bmc1) return;
 	cclog(-1, "Created Heap(%d,%d): bmc=%d free=%d map=%s\n",
 			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
 			bmc1->pages, bmc1->avail, show_bitmap(bmc1, 0));
 
-	bmc2 = csc_bmem_init(buf + blen / 2, 128*CSC_MEM_PAGE(config), config);
+	bmc2 = csc_bmem_init(buf + blen / 2, BMTEST_PAGES*CSC_MEM_PAGE(config), config);
 	if (!bmc2) return;
 	cclog(-1, "Created Heap(%d,%d): bmc=%d free=%d map=%s\n",
 			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
 			bmc2->pages, bmc2->avail, show_bitmap(bmc2, 0));
 
-	for (i = 2; i < 20; i++) {
-		bitmap_clr();
-		bmem_page_alloc_slow(bmc1, i, 9);
-		bmem_page_alloc(bmc2, i, 9);
-		if ((config = bitmap_compare()) != 0) {
-			cclog(0, "Bit Set failed at %d: [%s]\n", 
-					config, show_bitmap(bmc1, 0)); 
-			cclog(0, "Bit Set failed at %d: [%s]\n", 
-					config, show_bitmap(bmc2, 0));
-			break;
-		}
-		if ((i == 2) || (i == 19)) {
-			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
-		}
-		bitmap_chk(11, 117);
-	}
-	for (i = 2; i < 20; i++) {
-		bitmap_clr();
-		bmem_page_alloc_slow(bmc1, i, 19);
-		bmem_page_alloc(bmc2, i, 19);
-		if ((config = bitmap_compare()) != 0) {
-			cclog(0, "Bit Set failed at %d: [%s]\n", 
-					config, show_bitmap(bmc1, 0)); 
-			cclog(0, "Bit Set failed at %d: [%s]\n", 
-					config, show_bitmap(bmc2, 0));
-			break;
-		}
-		if ((i == 2) || (i == 19)) {
-			cclog(1, "Bit Set succeed: [%s]\n", show_bitmap(bmc1, 0));
-		}
-		bitmap_chk(21, 107);
-	}
-	for (i = 2; i < 20; i++) {
-		bitmap_set();
-		bmem_page_free_slow(bmc1, i, 9);
-		bmem_page_free(bmc2, i, 9);
-		if ((config = bitmap_compare()) != 0) {
-			cclog(0, "Bit Clear failed at %d: [%s]\n", 
-					config, show_bitmap(bmc1, 0)); 
-			cclog(0, "Bit Clear failed at %d: [%s]\n", 
-					config, show_bitmap(bmc2, 0));
-			break;
-		}
-		if ((i == 2) || (i == 19)) {
-			cclog(1, "Bit Clear succeed: [%s]\n", show_bitmap(bmc1, 0));
-		}
-	}
-	for (i = 2; i < 20; i++) {
-		bitmap_set();
-		bmem_page_free_slow(bmc1, i, 19);
-		bmem_page_free(bmc2, i, 19);
-		if ((config = bitmap_compare()) != 0) {
-			cclog(0, "Bit Clear failed at %d: [%s]\n", 
-					config, show_bitmap(bmc1, 0)); 
-			cclog(0, "Bit Clear failed at %d: [%s]\n", 
-					config, show_bitmap(bmc2, 0));
-			break;
-		}
-		if ((i == 2) || (i == 19)) {
-			cclog(1, "Bit Clear succeed: [%s]\n", show_bitmap(bmc1, 0));
-		}
-	}
+	bitmap_test_bitset(8);
+	bitmap_test_bitset(9);
+	bitmap_test_bitset(19);
+	bitmap_test_bitset(29);
+
+	bitmap_test_bitclr(9);
+	bitmap_test_bitclr(19);
 }
 
 
