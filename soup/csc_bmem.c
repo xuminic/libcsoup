@@ -677,13 +677,14 @@ static int bmem_page_find(BMMCB *bmc, int idx)
 {
 	int	i, n;
 
-	if ((bmc->bitmap[idx / 8] & mapsetfront[idx & 7]) ||
-			(bmc->total <= 8)) {
+	i = idx / 8;
+	if ((bmc->bitmap[i] & mapsetfront[idx & 7]) ||
+			((bmc->total - idx) <= 8)) {
 		return bmem_page_find_slow(bmc, idx);
 	}
 
 	n = 8 - (idx & 7);
-	for (i = idx / 8 + 1; i < bmc->total / 8; i++) {
+	for (i++; i < bmc->total / 8; i++) {
 		if (bmc->bitmap[i]) {
 			return n + bmem_page_find_slow(bmc, i * 8);
 		}
@@ -1062,7 +1063,7 @@ static void csc_bmem_fitness_test(char *buf, int blen)
 }
 
 
-#define	BMTEST_ROUND	20
+#define	BMTEST_ROUND	40
 #define BMTEST_PAGES	128
 
 static void csc_bmem_bitmap_test(char *buf, int blen)
@@ -1121,6 +1122,9 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 				k = bmem_page_find(bmc1, i);
 				cnt_free += k;
 				if (verbose == 1) cslog("F%d ", k);
+				if (k != bmem_page_find_slow(bmc1, i)) {
+					cclog(0, "Bit finder finding free failed: idx=%d (%d)\n", i, k);
+				}		
 			}
 			i = i + k - 1;
 		}
@@ -1196,8 +1200,10 @@ static void csc_bmem_bitmap_test(char *buf, int blen)
 	bitmap_test_bitset(19);
 	bitmap_test_bitset(29);
 
+	bitmap_test_bitclr(8);
 	bitmap_test_bitclr(9);
 	bitmap_test_bitclr(19);
+	bitmap_test_bitclr(29);
 }
 
 

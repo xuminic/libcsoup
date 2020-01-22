@@ -1,3 +1,9 @@
+20200122: 0.12.0
+	* csc_bmem.c: bitmap memory management updated and tested.
+	* csc_dmem.c: doubly linked memory management supports guarding area.
+	* csc_tmem.c: all three memory management implemented a unified
+	framework.
+
 20191104:
 	* Makefile: added CFG_UNIT_TEST for integrating unit tests.
 	* libcsoup.h: added more controls to tmem.
