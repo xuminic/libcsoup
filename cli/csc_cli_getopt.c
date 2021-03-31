@@ -59,7 +59,9 @@ void *csc_cli_getopt_open(struct cliopt *optbl, int *pt_optind)
 		csc_cli_make_table(optbl, rtbuf->oplst, n);
 	}
 
-	/* reset the getopt() function */
+	/* reset the getopt() function.
+	 * Note the reset shall not be done in here like "optind = 1". 
+	 * It should be called like csc_cli_getopt_open(optbl, &optind) */
 	if (pt_optind) {
 		*pt_optind = 1;
 	}
