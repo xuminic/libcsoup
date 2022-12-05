@@ -21,13 +21,13 @@ static	struct	cliopt	short_list[] = {
 	{ 'c', NULL,      0, "change current working directory" },
 	{ 'f', NULL,      1, "configure file process" },
 	{ 'm', NULL,      2, "make directory" },
-	{  0,  NULL,     -1, "This is the second line" },
+	{  0,  NULL,     15, "This is the second line" },
 	{  0,  NULL, 0, NULL }
 };
 
 static	struct	cliopt	long_list[] = {
 	{   0, NULL,      0, "OPTIONS:" },
-	{   0,  NULL,     -1, "This is the second line" },
+	{   0,  NULL,     15, "This is the second line" },
 	{   1, "help",     0, "Display the help message" },
 	{   2, "version",  1, "Display the version message" },
 	{   3, "dir-fifo", 2, NULL },
@@ -41,10 +41,13 @@ static	struct	cliopt	mixed_list[] = {
 	{ 'p', NULL,      0, "test the csc_cli_print()" },
 	{ 'c', "classic", 0, "test the classic table and list" },
 	{ '1', "one",     1, "test with one argument" },
-	{ 'o', "opt",     2, "test the optional argument", },
+	{ 'o', "opt",     2, "test the optional argument" },
+	{ 'x', "extend",  0, "test the extension options" },
+	{  10, "x-hello", 0x103, "test the hello word" },
+	{  11, "x-world", 0x104, "just print world" },
 	{   1, "version", 0, "Display the version message" },
 	{   2, "help",    0, "Display the help message" },
-	{   0,  NULL,    -1, "The optional argument should be either -oxxx or '--one=xxx'" },
+	{   0,  NULL,    15, "The optional argument should be either -oxxx or '--opt=xxx'" },
 	{  0,  NULL, 0, NULL }
 };
 
@@ -74,9 +77,9 @@ static int myputs(char *s)
 
 static int print_options(void)
 {
-	csc_cli_print(short_list, NULL);
-	csc_cli_print(long_list, myputs);
-	csc_cli_print(mixed_list, NULL);
+	csc_cli_print(short_list, 0,  NULL);
+	csc_cli_print(long_list, 0, myputs);
+	csc_cli_print(mixed_list, 0, NULL);
 	return 0;
 }
 
@@ -112,7 +115,7 @@ int csc_cli_main(void *rtime, int argc, char **argv)
 	(void) rtime;
 	
 	if (argc < 2) {
-		csc_cli_print(mixed_list, NULL);
+		csc_cli_print(mixed_list, 0, NULL);
 		return 0;
 	}
 	if ((argp = csc_cli_getopt_open(mixed_list, &optind)) == NULL) {
@@ -136,7 +139,16 @@ int csc_cli_main(void *rtime, int argc, char **argv)
 			cslog("Optional ARG: %s\n", optarg);
 			break;
 		case 2:
-			csc_cli_print(mixed_list, NULL);
+			csc_cli_print(mixed_list, 0, NULL);
+			break;
+		case 'x':
+			csc_cli_print(mixed_list, 0x100, NULL);
+			break;
+		case 10:
+			cslog("Next ARG: %s\n", optarg);
+			break;
+		case 11:
+			cslog("Hello: %s\n", optarg);
 			break;
 		default:
 			cslog("Unknown: %c %c\n", c, optopt);
@@ -156,7 +168,7 @@ int csc_cli_main2(void *rtime, int argc, char **argv)
 	(void) rtime;
 	
 	if (argc < 2) {
-		csc_cli_print(mixed_list, NULL);
+		csc_cli_print(mixed_list, 0, NULL);
 		return 0;
 	}
 	if ((argp = csc_cli_qopt_open(argc, argv)) == NULL) {
@@ -181,7 +193,16 @@ int csc_cli_main2(void *rtime, int argc, char **argv)
 					csc_cli_qopt_optarg(argp));
 			break;
 		case 2:
-			csc_cli_print(mixed_list, NULL);
+			csc_cli_print(mixed_list, 0, NULL);
+			break;
+		case 'x':
+			csc_cli_print(mixed_list, 0x100, NULL);
+			break;
+		case 10:
+			cslog("Next ARG: %s\n", csc_cli_qopt_optarg(argp));
+			break;
+		case 11:
+			cslog("Hello: %s\n", csc_cli_qopt_optarg(argp));
 			break;
 		default:
 			cslog("Unknown: %c %c\n", 

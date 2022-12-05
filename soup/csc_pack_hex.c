@@ -248,7 +248,7 @@ static int bin2c(char *path, char *fullname)
 {
 	FILE	*fp;
 	long	i, flen;
-	char	buf[16];
+	char	buf[32];
 
 
 	if ((fp = fopen(path, "rb")) == NULL) {

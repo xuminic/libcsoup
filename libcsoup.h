@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	12		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -44,7 +44,10 @@ typedef	struct	_CSCLNK	CSCLNK;
  * Command line process functions
  *****************************************************************************/
 
-#define CSC_CLI_UNCMD	(('U'<<24)|('C'<<16)|('M'<<8)|'D')
+#define CSC_CLI_UNCMD		(('U'<<24)|('C'<<16)|('M'<<8)|'D')
+#define CSC_CLI_MASK		0xf
+#define CSC_CLI_PARAM(c)	((c)->param & CSC_CLI_MASK)
+#define CSC_CLI_SHOW(c,m)	((m) ? (c)->param & (m) : ((c)->param <= CSC_CLI_MASK))
 
 /*!
  * The option list of Command line interface.
@@ -53,13 +56,19 @@ struct	cliopt	{
 	int	opt_char;	///Short form of option characters.
 	char	*opt_long;	///Long form of option strings.
 
-	/*! param 
-	 *  How many arguments are required.
-	 *  - 0: No argument required.
-	 *  - 1: One argument required.
-	 *  - 2: Optional argument.  */
+	/*! param
+	 *  0-0xf: how many arguments are required.
+	 *  CSC Extension       getopt()
+	 *    0                   0        No argument required.
+	 *    1                   1        One string argument required.
+	 *    2                   2        Optional string argument.
+	 *    3                   1        One number required
+	 *    4                   2        Optional number argument
+	 *    15                 n/a       display comments only   
+	 *  0xfffffff0: bitmask of hidden options (CSC Extension)
+	 */
 	int	param;
-	char	*comment;	///A description about thi option
+	char	*comment;	///A description about this option
 };
 
 /*!
@@ -78,7 +87,7 @@ extern "C"
 #endif
 int csc_cli_make_list(struct cliopt *optbl, char *list, int len);
 int csc_cli_make_table(struct cliopt *optbl, struct option *oplst, int len);
-int csc_cli_print(struct cliopt *optbl, int (*show)(char *));
+int csc_cli_print(struct cliopt *optbl, int mask, int (*show)(char *));
 
 void *csc_cli_getopt_open(struct cliopt *optbl, int *pt_optind);
 int csc_cli_getopt_close(void *clibuf);

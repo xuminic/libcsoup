@@ -36,7 +36,7 @@ mkclicmd: mkclicmd.c
 	$(CC) $(CFLAGS) -L.. -o $@ $< -lcsoup
 
 packhex.h: packhex
-	packhex -i packed_hex * > $@
+	packhex -i packed_hex *.c > $@
 
 packhex: ../soup/csc_pack_hex.c
 	$(CC) $(CFLAGS) -L.. -DEXECUTABLE -o $@ $< -lcsoup

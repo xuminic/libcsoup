@@ -15,7 +15,7 @@ SYSAPI	=
 DEBUG	= -g -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
 DEFINES = -DUNICODE -D_UNICODE -D_FILE_OFFSET_BITS=64 $(SLOG_SOCKET)
 
-export	CFLAGS	= -Wall -Wextra -O1 $(DEBUG) $(DEFINES) $(SYSAPI) 
+export	CFLAGS	= -Wall -Wno-array-bounds -O1 $(DEBUG) $(DEFINES) $(SYSAPI) 
 
 ifndef	RELCS
 RELCS	= libcsoup-$(shell version.sh)

@@ -394,7 +394,7 @@ int config_main(void *rtime, int argc, char **argv)
 	char	*sdir = NULL;
 
 	if (argc < 2) {
-		csc_cli_print(clist, NULL);
+		csc_cli_print(clist, 0, NULL);
 		return 0;
 	}
 	if ((rtime = csc_cli_qopt_open(argc, argv)) == NULL) {
@@ -403,7 +403,7 @@ int config_main(void *rtime, int argc, char **argv)
 	while ((c = csc_cli_qopt(rtime, clist)) >= 0) {
 		switch (c) {
 		case 'h':
-			csc_cli_print(clist, NULL);
+			csc_cli_print(clist, 0, NULL);
 			break;
 		case 'o':
 			config_open_rdonly();
@@ -442,7 +442,7 @@ int config_main(void *rtime, int argc, char **argv)
 			} else {
 				cslog("%c: unknown option\n", c);
 			}
-			csc_cli_print(clist, NULL);
+			csc_cli_print(clist, 0, NULL);
 			break;
 		}
 	}
