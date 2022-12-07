@@ -584,8 +584,8 @@ char *csc_url_decode_alloc(char *src);
 /* see csc_crc*.c */
 unsigned short csc_crc16_byte(unsigned short crc, char data);
 unsigned short csc_crc16(unsigned short crc, void *buf, size_t len);
-unsigned long csc_crc32_byte(unsigned long crc, char data);
-unsigned long csc_crc32(unsigned long crc, void  *buf, size_t len);
+unsigned csc_crc32_byte(unsigned crc, char data);
+unsigned csc_crc32(unsigned crc, void  *buf, size_t len);
 unsigned char csc_crc8_byte(unsigned char crc, char data);
 unsigned char csc_crc8(unsigned char crc, void *buf, size_t len);
 unsigned short csc_crc_ccitt_byte(unsigned short crc, char data);
