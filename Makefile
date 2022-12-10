@@ -74,7 +74,3 @@ release:
 	$(RM) $(RELCS).tar.gz
 	tar czf $(RELCS).tar.gz $(RELCS)
 
-export: release
-	$(RM) $(RELCS).tar.gz
-	cp -au $(RELCS)/* ../ezthumb/external/libcsoup
-
