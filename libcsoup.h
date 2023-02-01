@@ -30,9 +30,9 @@
 #include <limits.h>
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
-#define LIBCSOUP_VER_MAJOR	0		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	12		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	2		/* 0-4095 */
+#define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
+#define LIBCSOUP_VER_MINOR	0		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -182,6 +182,7 @@ slog(int control_word, char *fmt, ...);
 #define SLOG_OPT_TMSTAMP	1
 #define SLOG_OPT_MODULE		2
 #define SLOG_OPT_ALL		3
+#define SLOG_OPT_SPLIT		4	/* the log file will be splitted by size or by date */
 
 #define SLOG_TRANSL_MODUL	0
 #define SLOG_TRANSL_DATE	1
@@ -197,8 +198,12 @@ typedef	struct	{
 	int	option;
 
 	/* log into the file */
-	char	*filename;
-	FILE	*logd;
+	char	*filename;	/* log file without the split extension */
+	int	fileday;	/* day number for splitting by date */
+	FILE	*logd;		/* only meaningful for nonsplit mode */
+	size_t	splitlen;	/* file limitation by size, if 0, split by date */
+	int	splitnum;	/* maximum splitted logs, if 0, unlimited */
+
 	/* log into the standard output, stdout or stderr */
 	FILE	*stdio;
 
@@ -225,6 +230,7 @@ extern "C"
 SMMDBG *slog_initialize(void *mem, int cword);
 int slog_shutdown(SMMDBG *dbgc);
 int slog_bind_file(SMMDBG *dbgc, char *fname);
+int slog_bind_split_file(SMMDBG *dbgc, char *fname, size_t flen, int fnum);
 int slog_bind_stdio(SMMDBG *dbgc, FILE *ioptr);
 int slog_translate_setup(SMMDBG *dbgc, int which, F_PREFIX func);
 int slog_translate_remove(SMMDBG *dbgc, int which, F_PREFIX func);

@@ -12,10 +12,10 @@ MANDIR	= /usr/local/man/man1
 
 # Options: CFG_WIN32_API, CFG_UNIX_API CFG_SLOG_SOCKET
 SYSAPI	= 
-DEBUG	= -g -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
+DEBUG	= -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
 DEFINES = -DUNICODE -D_UNICODE -D_FILE_OFFSET_BITS=64 $(SLOG_SOCKET)
 
-export	CFLAGS	= -Wall -Wno-array-bounds -O1 $(DEBUG) $(DEFINES) $(SYSAPI) 
+export	CFLAGS	= -Wall -Wno-array-bounds -O3 $(DEBUG) $(DEFINES) $(SYSAPI)
 
 ifndef	RELCS
 RELCS	= libcsoup-$(shell version.sh)

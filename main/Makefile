@@ -8,7 +8,7 @@ CP      = cp
 RM      = rm -f
 
 ifndef	CFLAGS
-CFLAGS	= -Wall -Wextra -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
+CFLAGS	= -Wall -Wextra -O3 -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
 endif
 CFLAGS	+= -I.. -I.
 

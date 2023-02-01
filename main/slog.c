@@ -188,6 +188,27 @@ int slog_main(void *rtime, int argc, char **argv)
 #endif
 
 	slog_translate_test(tstdbg);
+
+	cslog("Binding split logfile (by size)\n");
+	/* split by size of 128 bytes, atmost 5 logs */
+	/* test: touch logfile.0 logfile.1 logfile.2 logfile.3 logfile.4 logfile.5 logfile.6
+	 */
+        slog_bind_split_file(tstdbg, "logfile", 128, 5);
+	for (i = 0; i < 8; i++) {
+		slogf(tstdbg, SLOG_CWORD(CSOUP_MOD_SLOG, i), 
+				"%d: debug level test\n", i);
+	}
+
+	cslog("Binding split logfile (by date)\n");
+	/* split by days, atmost 5 logs */
+	/* test: touch logfile.44956 logfile.44955 logfile.44954 logfile.44953 logfile.44952 logfile.44951
+	 */
+        slog_bind_split_file(tstdbg, "logfile", 0, 5);
+	for (i = 0; i < 8; i++) {
+		slogf(tstdbg, SLOG_CWORD(CSOUP_MOD_SLOG, i), 
+				"%d: debug level test\n", i);
+	}
+
 	slog_shutdown(tstdbg);
 	return 0;
 }
