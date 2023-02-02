@@ -59,6 +59,8 @@ int slog_shutdown(SMMDBG *dbgc)
 		dbgc->f_inet(dbgc, NULL, NULL);
 		dbgc->f_inet = NULL;
 	}
+
+	dbgc->stdio = (void*) -1;
 	return 0;
 }
 
