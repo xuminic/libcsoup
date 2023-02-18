@@ -74,7 +74,7 @@ int slog_bind_file(SMMDBG *dbgc, char *fname)
 	}
 	
 	/* in non-split mode, the logd would be always open for appending */
-	if ((dbgc->logd = fopen(fname, "a+")) == NULL) {	
+	if ((dbgc->logd = fopen(fname, "a")) == NULL) {	
 		return SMM_ERR_OPEN;
 	}
 	
@@ -411,7 +411,7 @@ static int slog_open_by_epoch_day(SMMDBG *dbgc)
 	}
 	dbgc->fileday = slog_epoch_day();
 	sprintf(fname, "%s.%d", dbgc->filename, dbgc->fileday);
-	if ((dbgc->logd = fopen(fname, "a+")) == NULL) {
+	if ((dbgc->logd = fopen(fname, "a")) == NULL) {
 		free(fname);
 		return -2;
 	}
@@ -439,7 +439,7 @@ static int slog_open_by_epoch_day(SMMDBG *dbgc)
 static int slog_open_by_quota(SMMDBG *dbgc)
 {
 	if (dbgc->logd == NULL) {
-		if ((dbgc->logd = fopen(dbgc->filename, "a+")) == NULL) {	
+		if ((dbgc->logd = fopen(dbgc->filename, "a")) == NULL) {	
 			return -1;
 		}
 	}
@@ -460,7 +460,7 @@ static int slog_open_by_quota(SMMDBG *dbgc)
 	}
 
 	/* create and open the new log file */
-	if ((dbgc->logd = fopen(dbgc->filename, "a+")) == NULL) {	
+	if ((dbgc->logd = fopen(dbgc->filename, "a")) == NULL) {	
 		return -1;
 	}
 	return 0;
