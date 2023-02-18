@@ -31,7 +31,7 @@
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	0		/* 0-4095 */
+#define LIBCSOUP_VER_MINOR	1		/* 0-4095 */
 #define LIBCSOUP_VER_BUGFIX	1		/* 0-4095 */
 
 
@@ -181,8 +181,9 @@ slog(int control_word, char *fmt, ...);
 
 #define SLOG_OPT_TMSTAMP	1
 #define SLOG_OPT_MODULE		2
-#define SLOG_OPT_ALL		3
+#define SLOG_OPT_ALL		(SLOG_OPT_TMSTAMP | SLOG_OPT_MODULE)
 #define SLOG_OPT_SPLIT		4	/* the log file will be splitted by size or by date */
+#define SLOG_OPT_ONCE		8	/* append-and-close mode so logs can be shared */
 
 #define SLOG_TRANSL_MODUL	0
 #define SLOG_TRANSL_DATE	1

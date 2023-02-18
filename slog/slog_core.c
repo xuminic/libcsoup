@@ -107,6 +107,7 @@ int slog_bind_split_file(SMMDBG *dbgc, char *fname, size_t flen, int fnum)
 	dbgc->splitlen = flen;
 	dbgc->splitnum = fnum;
 	dbgc->option |= SLOG_OPT_SPLIT;
+	//dbgc->option |= SLOG_OPT_ONCE;
 
 	if (dbgc->splitlen == 0) {	/* splitting log files by date */
 		rc = slog_open_by_epoch_day(dbgc);
@@ -349,7 +350,7 @@ static int slog_unbind_file(SMMDBG *dbgc)
 	}
 	dbgc->splitlen = 0;
 	dbgc->splitnum = 0;
-	dbgc->option &= ~SLOG_OPT_SPLIT;
+	dbgc->option = SLOG_OPT_ALL;
 	return 0;
 }
 
@@ -369,7 +370,12 @@ static int slog_save_to_files(SMMDBG *dbgc, char *buf)
 
 	if (dbgc->logd) {
 		fputs(buf, dbgc->logd);
-		fflush(dbgc->logd);
+		if (dbgc->option & SLOG_OPT_ONCE) {
+			fclose(dbgc->logd);
+			dbgc->logd = NULL;
+		} else {
+			fflush(dbgc->logd);
+		}
 	}
 	return 0;
 }
