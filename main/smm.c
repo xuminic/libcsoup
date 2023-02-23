@@ -385,7 +385,7 @@ int smm_main(void *rtime, int argc, char **argv)
 	while ((c = csc_cli_getopt(argc, argv, rtbuf)) > 0) {
 		switch (c) {
 		case 1:
-			csc_cli_print(clist, NULL);
+			csc_cli_print(clist, 0, NULL);
 			goto quick_quit;
 		case 2:
 			cslog("%s\n", version);

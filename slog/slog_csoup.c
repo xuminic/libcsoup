@@ -28,15 +28,12 @@ static int slog_csoup_trans_date(int cw, char *buf, int blen);
 static int slog_csoup_trans_module(int cw, char *buf, int blen);
 
 SMMDBG	csoup_debug_control = {
-	SLOG_MAGIC,			/* the magic word */
-	SLOG_MODUL_ALL(SLOG_LVL_AUTO),	/* control word in host */
-	SLOG_OPT_ALL,			/* option */
-	NULL, NULL,			/* file name and FILEP */
-	(void*) -1,			/* standard i/o */
-	{ slog_csoup_trans_module },
-	{ slog_csoup_trans_date },
-	NULL, NULL,			/* socket extension */
-	NULL, NULL, NULL		/* mutex setting */
+	.magic = SLOG_MAGIC,			/* the magic word */
+	.cword = SLOG_MODUL_ALL(SLOG_LVL_AUTO),	/* control word in host */
+	.option = SLOG_OPT_ALL,			/* option */
+	.stdio = (void*) -1,			/* standard i/o */
+	.trans_module = { slog_csoup_trans_module },
+	.trans_date = { slog_csoup_trans_date }
 };
 
 

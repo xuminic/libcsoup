@@ -75,7 +75,7 @@
 #define	TMEM_TEST_USED(n)	((n) & TMEM_MASK_USED)
 
 #define TMEM_OVERHEAD		4	/* reserved for attribution of the heap */
-#define TMEM_GUARD(c)		(CSC_MEM_XCFG_GUARD(c)*CSC_MEM_XCFG_PAGE(c)*2)
+#define TMEM_GUARD(c)		(CSC_MEM_GETPG(c) * 2)
 
 
 static int tmem_parity(int cw);
@@ -319,8 +319,13 @@ int csc_tmem_free(void *heap, void *mem)
    \return     NULL if successfully scanned the memory chain. If the memory
                chain is corrupted, it returns a pointer to the broken point.
 
-   \remark The prototype of the callback functions are: int func(int *)
-           The scan process can be broken if func() returns non-zero.
+   \remark    The scan function will scan the heap from the first memory block to the last.
+   When it found an allocated memory block, it will call the used() function with the address
+   of the allocated memory block. When it found a freed memory block, it will call the loose() 
+   function with the address of the freed memory block.
+
+   \remark The prototype of the callback functions are: int func(void *)
+           The scan process will stop in middle if func() returns non-zero.
 */
 void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 {
@@ -351,13 +356,11 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 
    \param[in]  heap the memory heap for allocation.
    \param[in]  mem the memory block.
-   \param[out] state the state of the memory block. 0=free 1=used
-               CSC_MERR_INIT memory heap not initialized
-	       CSC_MERR_BROKEN memory block corrupted
-	       CSC_MERR_RANGE memory out of range
+   \param[out] state the state of the memory block. 
+               0=free 1=used, or <0 in error codes.
 
-   \return    size of memory block without padding,
-              or (size_t)-1 when error
+   \return    the size of the allocated memory without padding when succeed,
+              or (size_t) -1 in error. the error code returns in 'state'.
 */
 size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 {
@@ -378,16 +381,17 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
 		return (size_t) -1;	/* memory heap not available */
 	}
 	
+	*state = TMEM_TEST_USED(*mb) ? 1 : 0;
+	
 	/* should not happen in theory: the remain memory is smaller than
 	 * the guarding area. It should've been sorted out in the allocation 
 	 * function already */
-	if ((int)TMEM_BYTES(*mb) < TMEM_GUARD(tmem_config_get(heap))) {
-		*state = TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+	rc = TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+	if (rc < 0) {
+		*state = rc;
 		return (size_t) -1;
 	}
-
-	*state = TMEM_TEST_USED(*mb) ? 1 : 0;
-	return (size_t)TMEM_BYTES(*mb) - TMEM_GUARD(tmem_config_get(heap));
+	return (size_t) rc;
 }
 
 /*!\brief find the front guard area.
@@ -402,8 +406,8 @@ size_t csc_tmem_attrib(void *heap, void *mem, int *state)
    \remark    the guarding area is a piece of memories in front of the client area
    and in the end of the client area. It can be used to buffer a possible memory overflow
    while debugging, or store extra information about the memory user. The size of the
-   guarding area was defined in the 'flags' parameter in csc_tmem_init(), while bit 4-7,
-   the page size multiply the bit 8-11, the guarding pages.
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
 
    \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
    because the pad area in the memory management block was defined as a part of the front guard,
@@ -450,8 +454,8 @@ void *csc_tmem_front_guard(void *heap, void *mem, int *xsize)
    \remark    the guarding area is a piece of memories in front of the client area
    and in the end of the client area. It can be used to buffer a possible memory overflow
    while debugging, or store extra information about the memory user. The size of the
-   guarding area was defined in the 'flags' parameter in csc_tmem_init(), while bit 4-7,
-   the page size multiply the bit 8-11, the guarding pages.
+   guarding area was defined in the 'flags' parameter when initializing in bit 4-7,
+   the page size will multiply the number of guarding pages in bit 8-11.
 
    \remark    the size of the guarding area may not be the exact same to the size defined in 'flags',
    because the pad area in the memory management block was defined as a part of the front guard,
@@ -682,19 +686,19 @@ static void tmem_test_empty_memory(void *buf, int len)
 	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(len) + 1;
 	p = csc_tmem_init(buf, msize, len);
 	cclog(!p, "Create heap(%d,%d) with %ld bytes: empty allocation disabled.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 
-	len = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,2);
+	len = CSC_MEM_DEFAULT | CSC_MEM_SETPG(1,2);
 	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(len) + 1;
 	p = csc_tmem_init(buf, msize, len);
 	cclog(!p, "Create heap(%d,%d) with %ld bytes: empty allocation disabled.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 
 	len |= CSC_MEM_ZERO;
 	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(len) + 1;
 	p = csc_tmem_init(buf, msize, len);
 	cclog(-1, "Create heap(%d,%d) with %ld bytes: empty allocation enabled.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 	if (p == NULL) return;
 	
 	p = tmem_start(buf);
@@ -732,11 +736,11 @@ static void tmem_test_empty_memory(void *buf, int len)
 	cclog((n == 0) && (msize == 0), "Attribution of the freed block: %d %ld\n", n, msize);
 
 	/* create heap with 3 empty block: HEAP+MB0+MB1+MB2 */
-	len = CSC_MEM_DEFAULT | CSC_MEM_ZERO | CSC_MEM_XCFG_SET(1,2);
+	len = CSC_MEM_DEFAULT | CSC_MEM_ZERO | CSC_MEM_SETPG(1,2);
 	msize = TMEM_OVERHEAD + sizeof(int) + (sizeof(int) + TMEM_GUARD(len)) * 3 + 1;
 	p = csc_tmem_init(buf, msize, len);
 	cclog(-1, "Create heap(%d,%d) with %ld bytes: empty allocation enabled.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 	if (p == NULL) return;
 
 	/* split test: split the memory by allocation 1 byte */
@@ -794,11 +798,11 @@ static void tmem_test_nonempty_memory(void *buf, int len)
 	size_t	msize;
 
 	/* create heap with 1 memory block: HEAP+MB0+FG0+4Byte+BG0 */
-	len = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,2);
+	len = CSC_MEM_DEFAULT | CSC_MEM_SETPG(1,2);
 	msize = TMEM_OVERHEAD + sizeof(int) + sizeof(int) + TMEM_GUARD(len) + sizeof(int);
 	p[0] = csc_tmem_init(buf, msize, len);
 	cclog(-1, "Create heap(%d,%d) with %ld bytes: empty allocation disabled.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 	if (p[0] == NULL) return;
 
 	p[0] = tmem_start(buf);
@@ -835,11 +839,11 @@ static void tmem_test_nonempty_memory(void *buf, int len)
 			"Attribution of the freed block: %d %ld\n", n[3], msize);
 
 	/* create heap with 3 memory block: HEAP+MB0+PL0+MB1+PL1+MB2+PL2 */
-	len = CSC_MEM_DEFAULT | CSC_MEM_XCFG_SET(1,2);
+	len = CSC_MEM_DEFAULT | CSC_MEM_SETPG(1,2);
 	msize = TMEM_OVERHEAD + sizeof(int) + (sizeof(int) + TMEM_GUARD(len) + sizeof(int)) * 3;
 	p[0] = csc_tmem_init(buf, msize, len);
 	cclog(-1, "Create heap(%d,%d) with %ld bytes: 3 minimum blocks.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 	if (p[0] != buf) return;
 
 	/* testing merging: create a hole in middle  */
@@ -920,7 +924,7 @@ static void tmem_test_misc_memory(void *buf, int len)
 	len = 0;
 	p = csc_tmem_init(buf, msize, len);
 	cclog(-1, "Create heap(%d,%d) with %d bytes for misc test.\n", 
-			CSC_MEM_XCFG_PAGE(len), CSC_MEM_XCFG_GUARD(len), msize);
+			CSC_MEM_PAGE(len), CSC_MEM_GUARD(len), msize);
 	if (p == NULL) return;
 
 	n = csc_tmem_free(NULL, NULL);
@@ -994,7 +998,7 @@ static void tmem_test_fitness(void *buf, int len)
 		u = f = 0;
 		csc_tmem_scan(heap, used, loose);
 		cclog((u==0x111)&&(f==0x142b), "Create heap(%d,%d) with 4 holes [%x %x]\n", 
-			CSC_MEM_XCFG_PAGE(config), CSC_MEM_XCFG_GUARD(config), u, f);
+			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), u, f);
 		return heap;
 	}
 
@@ -1006,13 +1010,13 @@ static void tmem_test_fitness(void *buf, int len)
 	csc_tmem_scan(buf, used, loose);
 	cclog(u == 0x1211 && f == 0x112b, "Allocated 2 words by First Fit method [%x %x]\n", u, f);
 
-	if (memory_set_pattern(buf, CSC_MEM_BEST_FIT | CSC_MEM_XCFG_SET(1,2)) == NULL) return;
+	if (memory_set_pattern(buf, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2)) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
 	u = f = 0;
 	csc_tmem_scan(buf, used, loose);
 	cclog(u == 0x1121 && f == 0x14b, "Allocated 2 words by Best Fit method [%x %x]\n", u, f);
 
-	if (memory_set_pattern(buf, CSC_MEM_WORST_FIT | CSC_MEM_XCFG_SET(0,1)) == NULL) return;
+	if (memory_set_pattern(buf, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1)) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
 	u = f = 0;
 	csc_tmem_scan(buf, used, loose);

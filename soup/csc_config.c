@@ -873,9 +873,19 @@ static KEYCB *csc_cfg_root_alloc(int sysdir, char *path,
 	rext = (struct KEYROOT *) root->pool;
 	rext->sysdir = sysdir;
 	rext->dkcb   = root;
+	/* GCC 10 over reacting:
+	 * csc_config.c:878:3: warning: ‘strcpy’ offset 96 from the object at ‘kp’ 
+	 * is out of the bounds of referenced subobject ‘pool’ with type ‘char[1]’ 
+	 * at offset 96 [-Warray-bounds]
+	 * 878 |   strcpy(root->key, path);
+	 *     |   ^~~~~~~~~~~~~~~~~~~~~~~
+	 * The extensive ‘char[1]’ is a common practise in embedded programming */
 	if (path) {
+		#pragma GCC diagnostic push
+		#pragma GCC diagnostic ignored "-Warray-bounds"
 		root->key = rext->pool;
 		strcpy(root->key, path);
+		#pragma GCC diagnostic pop
 	}
 	if (filename) {
 		root->value = rext->pool;

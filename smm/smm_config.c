@@ -688,8 +688,16 @@ static int mem_copy(char **dest, int *room, char *s)
 			**dest = '\0';
 		}
 	} else if ((n = *room - 1) > 0) {
+		/* gcc 10 over reacting:
+		 * smm_config.c:692:4: warning: ‘strncpy’ output truncated copying between 
+		 * 0 and 8 bytes from a string of length 9 [-Wstringop-truncation]
+		 * 692 |    strncpy(*dest, s, n);
+		 *     |    ^~~~~~~~~~~~~~~~~~~~ */
 		if (s) {
+			#pragma GCC diagnostic push
+			#pragma GCC diagnostic ignored "-Wstringop-truncation"
 			strncpy(*dest, s, n);
+			#pragma GCC diagnostic pop
 		}
 	}
 	*dest += n;

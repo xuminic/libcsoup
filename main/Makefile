@@ -8,7 +8,7 @@ CP      = cp
 RM      = rm -f
 
 ifndef	CFLAGS
-CFLAGS	= -Wall -Wextra -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
+CFLAGS	= -Wall -Wextra -O3 -DDEBUG -DCFG_CDLL_SAFE -DCFG_UNIT_TEST
 endif
 CFLAGS	+= -I.. -I.
 
@@ -36,7 +36,7 @@ mkclicmd: mkclicmd.c
 	$(CC) $(CFLAGS) -L.. -o $@ $< -lcsoup
 
 packhex.h: packhex
-	packhex -i packed_hex * > $@
+	packhex -i packed_hex *.c > $@
 
 packhex: ../soup/csc_pack_hex.c
 	$(CC) $(CFLAGS) -L.. -DEXECUTABLE -o $@ $< -lcsoup

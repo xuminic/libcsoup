@@ -50,8 +50,8 @@ int csc_cli_type(struct cliopt *optbl)
 		rc = CLI_SHORT;			/* 'o', NULL, 0, NULL */
 	} else if (optbl->comment == NULL) {
 		rc = CLI_EOL;			/* 0, NULL, 0, NULL */
-	} else if (optbl->param == -1) {
-		rc = CLI_EXTLINE;		/* 0, NULL, -1, "Half line" */
+	} else if (optbl->param == 15) {
+		rc = CLI_EXTLINE;		/* 0, NULL, 15, "Half line" */
 	} else {
 		rc = CLI_COMMENT;		/* 0, NULL, 0, "Full line" */
 	}
