@@ -19,6 +19,7 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "libcsoup.h"
@@ -38,10 +39,10 @@ int strings_strbody(void)
 	char	*p;
 	int	i, rc;
 
-	cslog("csc_strcmp_param() testing:\n");
+	cslog("csc_strlcmp_body() testing:\n");		/* csc_strcmp_param() */
 	for (i = 0; i < (int)(sizeof(testcase)/sizeof(struct dicts)); i++) {
 		cslog("Comparing {%s} and {%s} ... ", testcase[i].dest, testcase[i].sour); 
-		rc = csc_strcmp_param(testcase[i].dest, testcase[i].sour);
+		rc = csc_strlcmp_body(testcase[i].dest, testcase[i].sour);
 		cslog("%d\n", rc);
 	}
 	cslog("\ncsc_strbody() testing:\n");
@@ -139,6 +140,99 @@ static int strings_strinsert(void)
 }
 
 
+static void strx_puts(char *from, char *to)
+{
+	while (from != to) {
+		putchar(*from++);
+	}
+        putchar('\n');
+}
+
+static int strings_url_web(void)
+{
+	char	key[512], tmp[128], *from, *to;
+	int	i;
+
+	/* csc_trim_head() */
+	strcpy(key, "h\n\tttps://libzip.org/g/195/3b968d$#////  ");
+	printf("csc_trim_head(): %s\n", csc_trim_head(key, "hps:t/ "));	/* url_skip_head_ctlsp() */
+
+	/* csc_trim_tail_ro() */
+	strcpy(key, "https://libzip.org/g/195/3b968d$#////  ");
+	to = csc_trim_tail_ro(key, "$#/ ", &i);
+	printf("csc_trim_tail_ro(): %s [%d]\n", to, i);
+	to = csc_trim_tail_alloc(key, "$#/ ", 0);
+	printf("csc_trim_tail_alloc(): %s\n", to);
+	free(to);
+	to = csc_trim_tail_copy(key, "$#/ ", tmp, sizeof(tmp));
+	printf("csc_trim_tail_copy(): %s\n", to);
+	to = csc_trim_tail(key, "$#/ ");		/* url_trim_tail() */
+	printf("csc_trim_tail(): %s\n", to);
+
+	strcpy(key, "https://libzip.org/g/195/3b968d$#////  ");
+	to = csc_trim_body_ro(key, "$#/ ht", &i);
+	printf("csc_trim_body_ro(): %s [%d]\n", to, i);
+	to = csc_trim_body(key, "$#/ ht");
+	printf("csc_trim_body(): %s\n", to);
+
+	strcpy(key, "https://libzip.org/g/195/3b968d$#////  ");
+	to = csc_token_tail_ro(key, '/', &i);
+	printf("csc_token_tail_ro(): %s [%d]\n", to, i);
+	to = csc_token_tail_alloc(key, '/', 0);		/* url_get_tail() */
+	printf("csc_token_tail_alloc(): %s\n", to);
+	free(to);
+
+	for (i = 0; i < 10; i++) {
+		to = csc_token_pick_alloc(key, '/', i, 0);	/* url_get_path() */
+		if (to) {
+			printf("csc_token_pick_alloc(%d): %s\n", i, to);
+			free(to);
+		}
+	}
+
+	/* csc_url_amper() */
+	to = csc_url_amper_alloc("http://50.7.233.114/ehg/png&amp;t=370249&amp;n=039.png", 32);
+	printf("csc_url_amper_alloc(): %s\n", to);	/* url_reform() */
+	strcpy(to, "http://50.7.233.114/ehg/png&amp;t=370249&amp;n=039.png");
+	printf("csc_url_amper_wb(): %s\n", csc_url_amper_wb(to));
+	free(to);
+
+	/* csc_strrpch() */	/* strx_strrpch() */
+	strcpy(key, "replace the 'old' char in the string 's' with 'new'");
+	csc_strrpch(key, 0, '\'', '\"');
+	printf("csc_strrpch: %s\n", key);
+	strcpy(key, "replace the 'old' char in the string 's' with 'new'");
+	csc_strrpch(key, 2, '\'', '\"');
+	printf("csc_strrpch: %s\n", key);
+	strcpy(key, "replace the 'old' char in the string 's' with 'new'");
+	csc_strrpch(key, -2, '\'', '\"');
+	printf("csc_strrpch: %s\n", key);
+
+	/* csc_strstr() */	/* strx_strstr() */
+	from = csc_strstr_list("Each invocation of va_start() must be matched", 
+			&to, "a", "t", "()", NULL);
+	if (from) {
+		strx_puts(from, to);
+	}
+	from = csc_strstr_list("Each invocation of va_start() must be matched", 
+			&to, "a", "c", "mu", "()", NULL);
+	if (from) {
+		strx_puts(from, to);
+	}
+	
+	printf("csc_strrcmp_nc(): %d\n", csc_strrcmp_nc("filename.c", "E.c"));
+	printf("csc_strrcmp(): %d\n", csc_strrcmp_list("filename.c", ".java", "e.", ".", "c", NULL));
+
+#if 0
+	htm_common_pick("<meta name=\"juicyads\" content=\"0f3e4770\"/>", "\"", "\"", key, sizeof(key));
+	printf("htm_common_pick: %s\n", key);
+	htm_common_pick("<meta name=\"juicyads\" content=\"0f3e4770\"/>", "content=\"", "\"/>", key, sizeof(key));
+	printf("htm_common_pick: %s\n", key);
+#endif
+	return 0;
+}
+
+
 int strings_main(void *rtime, int argc, char **argv)
 {
 	/* stop the compiler complaining */
@@ -147,6 +241,7 @@ int strings_main(void *rtime, int argc, char **argv)
 	strings_strbody();
 	strings_strbival();
 	strings_strinsert();
+	strings_url_web();
 	return 0;
 }
 

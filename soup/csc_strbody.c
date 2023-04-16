@@ -31,7 +31,7 @@
 
 /*!\brief find the body of a string
  
-   The csc_strbody() is uesed to skip the heading and trailing white spaces.
+   The csc_strbody() is used to skip the heading and trailing white spaces.
    It returns a pointer to the first non-white-space character in the source
    string and the length of the string without the trailing white-spaces.
 

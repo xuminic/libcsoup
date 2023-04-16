@@ -74,7 +74,8 @@ int csc_extname_filter_match(void *efft, char *fname)
 	if (*flt->filter == NULL) {
 		return 1;
 	}
-	if (!csc_cmp_file_extlist(fname, flt->filter)) {
+	//if (!csc_cmp_file_extlist(fname, flt->filter)) {
+	if (!csc_strrcmp_arry(fname, flt->filter)) {
 		return 1;
 	}
 	return 0;	/* not matched */

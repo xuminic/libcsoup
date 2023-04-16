@@ -1,0 +1,141 @@
+/*!\file       csc_trim_body.c
+   \brief      skip and trim the unwanted characters at both ends of a string.
+
+   \author     "Andy Xuming" <xuming@users.sourceforge.net>
+   \date       2013-2023
+*/
+/* Copyright (C) 1998-2023  "Andy Xuming" <xuming@users.sourceforge.net>
+
+   This file is part of CSOUP library, Chicken Soup for the C
+
+   CSOUP is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   CSOUP is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "libcsoup.h"
+
+/*!\brief skip and trim the unwanted characters at both ends of a string.
+ 
+   The csc_trim_body_ro() is used to trim the both end of a string by skipping the
+   unwanted characters from head and from the tail according to the specified character set. 
+   Most of characters are one to one match, except a whitespace. A whitespace
+   in the character set can match any whitespace.
+
+   For example, if the character set is "/: ", it would match '/', ':' and any
+   whitespaces like ' ', '\t', '\n', etc.
+
+   s[] = "https:\t//libzip.org/g/1958342/016a3b968d////  \n"
+   csc_trim_body_ro(s, "hpst:/ ", &len) trims to "libzip.org/g/1958342/016a3b968d////  \n"
+   The 'len' stores the length of "libzip.org/g/1958342/016a3b968d"
+   
+   \param[in]  s    The source string
+   \param[in]  cset The character set
+   \param[out] len  The length of the string after trimming
+
+   \return The string after trimming. 
+   \remark This function doesn't changes the source string.
+*/
+char *csc_trim_body_ro(char *s, char *cset, int *len)
+{
+	int	i;
+
+	for ( ; *s && csc_isdelim(cset, *s); s++);
+	
+	i = strlen(s);
+	/*for (i--; (i >= 0) && csc_isdelim(cset, s[i]); s[i--] = 0);*/
+	for (i--; (i >= 0) && csc_isdelim(cset, s[i]); i--);
+	if (len) {
+		*len = i + 1;
+	}
+	return s;
+}
+
+/*!\brief skip and trim the unwanted characters at both ends of a string.
+ 
+   The csc_trim_body() is similar to csc_trim_body_ro() except it will chop off
+   the tail part. For example,
+
+   s[] = "https:\t//libzip.org/g/1958342/016a3b968d////  \n"
+   csc_trim_body(s, "hpst:/ ") will return a string "libzip.org/g/1958342/016a3b968d"
+   
+   \param[in]  s    The source string
+   \param[in]  cset The character set
+
+   \return The string after trimming. 
+   \remark This function changes the source string in the tail.
+*/
+char *csc_trim_body(char *s, char *cset)
+{
+	int	len;
+
+	s = csc_trim_body_ro(s, cset, &len);
+	s[len] = 0;
+	return s;
+}
+
+/*!\brief skip and trim the unwanted characters at both ends of a string.
+ 
+   The csc_trim_body_alloc() is similar to csc_trim_body_ro() except it will 
+   allocate a memory to store the trimmed string.
+   
+   \param[in]  s     The source string
+   \param[in]  cset  The character set
+   \param[in]  extra The extra bytes in the allocation if in needs
+
+   \return The memory storing the string after trimming. 
+   \remark This function doesn't changes the source string.
+   \remark The memory should be freed by the caller.
+   \remark The memory size is the length of the trimmed string + the extra bytes + 1
+*/
+char *csc_trim_body_alloc(char *s, char *cset, int extra)
+{
+	int	len;
+
+	s = csc_trim_body_ro(s, cset, &len);
+	if ((cset = malloc(len+extra+1)) != NULL) {
+		memcpy(cset, s, len);
+		cset[len] = 0;
+	}
+	return cset;
+}
+
+/*!\brief skip and trim the unwanted characters at both ends of a string.
+ 
+   The csc_trim_body_copy() is similar to csc_trim_body_ro() except it will 
+   copy the trimmed string to the specified buffer.
+   
+   \param[in]  s     The source string
+   \param[in]  cset  The character set
+   \param[in]  buf   Caller supplied buffer for copying the trimmer string
+   \param[in]  blen  The length of the 'buf'
+
+   \return 'buf' where the trimmed string being copied to.
+   \remark This function doesn't changes the source string.
+*/
+char *csc_trim_body_copy(char *s, char *cset, char *buf, int blen)
+{
+	int	len;
+
+	s = csc_trim_body_ro(s, cset, &len);
+	blen--;		/* space for asc-0 */
+	len = len < blen ? len : blen;
+	memcpy(buf, s, len);
+	s[len] = 0;
+	return buf;
+}
+

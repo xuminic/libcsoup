@@ -1,20 +1,26 @@
 
-/* Copyright (C) 1998-2013  Xuming <xuming@users.sourceforge.net>
-   
-   This program is free software; you can redistribute it and/or 
-   modify it under the terms of the GNU General Public License as 
-   published by the Free Software Foundation; either version 2, or 
+/*!\file       csc_isdelim.c
+   \brief      check if a char is in the delimiter list, all whitespace are treated equal
+
+   \author     "Andy Xuming" <xuming@users.sourceforge.net>
+   \date       2013-2023
+*/
+/* Copyright (C) 1998-2023  "Andy Xuming" <xuming@users.sourceforge.net>
+
+   This file is part of CSOUP library, Chicken Soup for the C
+
+   CSOUP is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
-	   
-   This program is distributed in the hope that it will be useful, 
-   but WITHOUT ANY WARRANTY; without even the implied warranty of 
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License, the file COPYING in this directory, for
-   more details.
-   
+
+   CSOUP is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <ctype.h>
@@ -23,6 +29,20 @@
 
 #include "libcsoup.h"
 
+/*!\brief check if a char is in the delimiter list
+ 
+   The csc_isdelim() is uesed to check if a char byte is a delimiter.
+   The delimiter can be more than one, so if any of them matches, the function matches.
+   The special part of the function is it sees all whitespace equal.
+   If a whitespace is in the delimiter list, then any whitespace matches.
+
+   For example, if the delimiter list is "\t\\/", then ' ', '\n', '/', '\\' all matches.
+
+   \param[in]  delim  The string of the delimiter list
+   \param[in]  ch     The char for matching
+
+   \return 1 if matches the delimiter, 0 if not
+*/
 int csc_isdelim(char *delim, int ch)
 {
 	while (*delim) {

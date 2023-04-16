@@ -6,7 +6,7 @@
 
    \author "Andy Xuming" <xuming@users.sourceforge.net>
 */
-/* Copyright (C) 2013  "Andy Xuming" <xuming@users.sourceforge.net>
+/* Copyright (C) 2013-2023  "Andy Xuming" <xuming@users.sourceforge.net>
 
    CSOUP is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,8 +31,8 @@
 
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
-#define LIBCSOUP_VER_MINOR	1		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	2		/* 0-4095 */
+#define LIBCSOUP_VER_MINOR	2		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	0		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -546,10 +546,33 @@ int csc_extname_filter_match(void *efft, char *fname);
 int csc_extname_filter_export(void *efft, char *buf, int blen);
 char *csc_extname_filter_export_alloc(void *efft);
 
-char *csc_strfill(char *s, int padto, int ch);
 size_t csc_strlcat(char *dst, const char *src, size_t siz);
 size_t csc_strlcpy(char *dst, const char *src, size_t siz);
 char *csc_strcpy_alloc(const char *src, int extra);
+char *csc_strfill(char *s, int padto, int ch);
+int csc_memcpy(char *dest, int dlen, char *from, char *to);
+int csc_strrpch(char *s, int num, int oldc, int newc);
+
+char *csc_strchr(char *s, char *cset);
+char *csc_strrchr(char *s, char *cset);
+
+char *csc_strrstr(char *haystack, char *endp, char *needle);
+char *csc_strstr(char *s, char **endp, char *slist[]);
+char *csc_strstr_list(char *s, char **endp, ...);
+
+int csc_strlcmp(const char *s1, const char *s2);
+int csc_strlcmp_sub(const char *s1, const char *s2);
+int csc_strlcmp_list(char *dest, char *src, ...);
+int csc_strlcmp_body(const char *s1, const char *s2);
+
+int csc_strrcmp(const char *s1, const char *s2);
+int csc_strrcmp_nc(const char *s1, const char *s2);
+int csc_strrcmp_list(char *dest, char *src, ...);
+int csc_strrcmp_list_nc(char *dest, char *src, ...);
+int csc_strrcmp_arry(char *dest, char **src);
+int csc_strcmp_list(char *dest, char *src, ...);
+int csc_strcmp_list_nc(char *dest, char *src, ...);
+
 int csc_fixtoken(char *sour, char **idx, int ids, char *delim);
 char **csc_fixtoken_copy(char *sour, char *delim, int *ids);
 int csc_ziptoken(char *sour, char **idx, int ids, char *delim);
@@ -558,10 +581,34 @@ int csc_isdelim(char *delim, int ch);
 char *csc_cuttoken(char *sour, char **token, char *delim);
 char *csc_gettoken(char *sour, char *buffer, int blen, char *delim);
 
-/* see csc_cmp_file_extname.c */
-int csc_cmp_file_extname(char *fname, char *ext);
-int csc_cmp_file_extlist(char *fname, char **ext);
-int csc_cmp_file_extargs(char *fname, char *ext, ...);
+char *csc_token_pick_ro(char *s, int sep, int idx, int *len);
+char *csc_token_pick(char *s, int sep, int idx);
+char *csc_token_pick_alloc(char *s, int sep, int idx, int extra);
+char *csc_token_pick_copy(char *s, int sep, int idx, char *buf, int blen);
+
+char *csc_token_tail_ro(char *s, int sep, int *len);
+char *csc_token_tail(char *s, int sep);
+char *csc_token_tail_alloc(char *s, int sep, int extra);
+char *csc_token_tail_copy(char *s, int sep, char *buf, int blen);
+
+char *csc_trim_body_ro(char *s, char *cset, int *len);
+char *csc_trim_body(char *s, char *cset);
+char *csc_trim_body_alloc(char *s, char *cset, int extra);
+char *csc_trim_body_copy(char *s, char *cset, char *buf, int blen);
+
+char *csc_trim_head(char *s, char *cset);
+char *csc_trim_tail_ro(char *s, char *cset, int *len);
+char *csc_trim_tail(char *s, char *cset);
+char *csc_trim_tail_alloc(char *s, char *cset, int extra);
+char *csc_trim_tail_copy(char *s, char *cset, char *buf, int blen);
+
+char *csc_url_amper(char *url, char *buffer, int blen);
+char *csc_url_amper_wb(char *url);
+char *csc_url_amper_alloc(char *url, int extra);
+
+char *csc_htm_com_pick(char *s, char *from, char *to, char *buf, int blen);
+char *csc_htm_doc_pick(char *s, char **sp, char *from, char *to, char *buf, int blen);
+char *csc_htm_tag_pick(char *s, char *from, char *to, char *buf, int blen);
 
 /* see csc_strbival.c */
 int csc_strbival_int(char *s, char *delim, int *opt);
@@ -569,12 +616,6 @@ long csc_strbival_long(char *s, char *delim, long *opt);
 
 /* see csc_strbody.c */
 char *csc_strbody(char *s, int *len);
-
-/* see csoup_strcmp_list.c */
-int csc_strcmp_list(char *dest, char *src, ...);
-
-/* see csc_strcmp_param.c */
-int csc_strcmp_param(char *s1, char *s2);
 
 /* see csc_strcount_char.c and csc_strcount_str.c */
 int csc_strcount_char(char *s, char *acct);
