@@ -170,15 +170,13 @@ int csc_cli_qopt(void *ropt, struct cliopt *optbl)
 				break;
 			}
 		} else if (rc == CLI_LONG) {
-			if ((opt[0] == '-') && (opt[1] == '-') &&
-					!strncmp(opt+2, optbl->opt_long, strlen(optbl->opt_long))) {
+			if ((opt[0] == '-') && (opt[1] == '-') && !strcmp(opt+2, optbl->opt_long)) {
 				break;
 			}
 		} else if (rc == CLI_BOTH) {
 			if (opt[1] == optbl->opt_char) {
 				break;
-			} else if ((opt[0] == '-') && (opt[1] == '-') && 
-					!strncmp(opt+2, optbl->opt_long, strlen(optbl->opt_long))) {
+			} else if ((opt[0] == '-') && (opt[1] == '-') && !strcmp(opt+2, optbl->opt_long)) {
 				break;
 			}
 		}
