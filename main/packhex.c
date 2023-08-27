@@ -27,26 +27,29 @@
 
 #include "packhex.h"
 
+static int pack_hex_counter(void *pobj, void *frame, char *fname, void *data, long dlen)
+{
+	unsigned char	*s = data;
+	int		*num = (int*) pobj;
+
+	cslog("%d: %p(%6ld): %s [%d][%d][%d][%d]\n", *num, frame, dlen, 
+				fname, s[0], s[1], s[2], s[3]);
+	(*num)++;
+	return 0;
+}
+
 int packhex_main(void *rtime, int argc, char **argv)
 {
 	struct	phex_idx	*idx;
 	unsigned char	*s;
 	long	dlen;
-	int	i;
-
-	int pack_hex_counter(void *frame, char *fname, void *data, long dlen)
-	{
-		s = data;
-		cslog("%p(%6ld): %s [%d][%d][%d][%d]\n", frame, dlen, 
-					fname, s[0], s[1], s[2], s[3]);
-		return 0;
-	}
+	int	i = 0;
 
 	/* stop the compiler complaining */
 	(void) rtime; 
 
 	if (argc < 2) {
-		csc_pack_hex_list((void*)packed_hex, pack_hex_counter);
+		csc_pack_hex_list((void*)packed_hex, pack_hex_counter, &i);
 		return 0;
 	}
 

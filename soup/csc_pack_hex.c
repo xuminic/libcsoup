@@ -138,7 +138,7 @@ void *csc_pack_hex_find_next(void *pachex)
   \param[in]   lsfunc callback function, which has a prototype:
                int lsfunc(void *frame, char *fname, void *data, long dlen);
 */
-void csc_pack_hex_list(void *pachex, F_PKHEX lsfunc)
+void csc_pack_hex_list(void *pachex, F_PKHEX lsfunc, void *pobj)
 {
 	long	flen = 0, fnsize = 0;
 	char	*p;
@@ -146,7 +146,7 @@ void csc_pack_hex_list(void *pachex, F_PKHEX lsfunc)
 	while ((pachex = csc_pack_hex_find_next(pachex)) != NULL) {
 		p = csc_pack_hex_verify(pachex, &flen, &fnsize);
 		if (lsfunc) {
-			lsfunc(pachex, p, p + fnsize + 1, flen);
+			lsfunc(pobj, pachex, p, p + fnsize + 1, flen);
 		}
 
 		pachex = NULL;	/* move to the next hex frame */
@@ -201,37 +201,39 @@ void *csc_pack_hex_load(void *pachex, char *path, long *size)
   \remark The index array is dynamically allocated so don't forget to free
           them when not using.
 */
+static int pack_hex_counting(void *pobj, void *frame, char *fname, void *data, long dlen)
+{
+	int	*num = (int*) pobj;
+
+	(void) frame; (void) fname; (void) data; (void) dlen;
+	return (*num)++;
+}
+
+static int pack_hex_indexing(void *pobj, void *frame, char *fname, void *data, long dlen)
+{
+	struct	phex_idx	**idx = (struct phex_idx **)pobj;
+
+	(void) frame;
+	(*idx)->fname = fname;
+	(*idx)->data = data;
+	(*idx)->dlen = dlen;
+	idx++;
+	return 0;
+}
+
 void *csc_pack_hex_index(void *pachex)
 {
-	struct	phex_idx	*idx;
-	int	i = 0, acc = 0;
+	struct	phex_idx	*idx, *acc;
+	int	num = 0;
 
-	int pack_hex_counter(void *frame, char *fname, void *data, long dlen)
-	{
-		(void) frame; (void) fname; (void) data; (void) dlen;
-		return acc++;
-	}
-
-	int pack_hex_indexing(void *frame, char *fname, void *data, long dlen)
-	{
-		(void) frame; 
-		idx[i].fname = fname;
-		idx[i].data = data;
-		idx[i].dlen = dlen;
-		return i++;
-	}
-
-	csc_pack_hex_list(pachex, pack_hex_counter);
+	csc_pack_hex_list(pachex, pack_hex_counting, &num);
 	
-	idx = (struct phex_idx *) calloc(sizeof(struct phex_idx), acc + 1);
+	idx = acc = (struct phex_idx *) calloc(sizeof(struct phex_idx), num + 1);
 	if (idx == NULL) {
 		return NULL;
 	}
 	
-	csc_pack_hex_list(pachex, pack_hex_indexing);
-	idx[i].fname = NULL;
-	idx[i].data = NULL;
-	idx[i].dlen = 0;
+	csc_pack_hex_list(pachex, pack_hex_indexing, &acc);
 	return idx;
 }
 
