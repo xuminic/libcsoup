@@ -156,7 +156,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	char	*mem;
 	int	config;
 
-	int loose(void *mem)
+	int loose(void *heap, void *mem, void *pobj)
 	{
 		DMEM	*cm = dmem_find_control(heap, mem);
 
@@ -197,7 +197,7 @@ void *csc_dmem_alloc(void *heap, size_t n)
 	}
 
 	found = NULL;
-	if (csc_dmem_scan(heap, NULL, loose)) {
+	if (csc_dmem_scan(heap, NULL, loose, NULL)) {
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
 	if (found == NULL) {
@@ -333,7 +333,7 @@ int csc_dmem_free(void *heap, void *mem)
    \remark The prototype of the callback functions are: int func(void *)
            The scan process will stop in middle if func() returns non-zero.
 */
-void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
+void *csc_dmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj)
 {
 	DMEM	*cm;
 
@@ -342,11 +342,11 @@ void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 			return cm;
 		}
 		if (DMEM_OWNED(cm)) {
-			if (used && used(dmem_find_client(heap, cm, NULL))) {
+			if (used && used(heap, cm, pobj)) {
 				break;
 			}
 		} else {
-			if (loose && loose(dmem_find_client(heap, cm, NULL))) {
+			if (loose && loose(heap, cm, pobj)) {
 				break;
 			}
 		}
@@ -908,20 +908,20 @@ static void dmem_heap_status(DMHEAP *hman, size_t used, size_t freed)
 	size_t	s[4];
 	int	cond;
 
-	int f_used(void *mem)
+	int f_used(void *heap, void *mem, void *pobj)
 	{
 		DMEM *cm = dmem_find_control(hman, mem);
 		s[0]++; s[1] += ((DMEM*)cm)->size; return 0;
 	}
 	
-	int f_loose(void *mem)
+	int f_loose(void *heap, void *mem, void *pobj)
 	{
 		DMEM *cm = dmem_find_control(hman, mem);
 		s[2]++; s[3] += ((DMEM*)cm)->size; return 0;
 	}
 
 	memset(s, 0, sizeof(s));
-	csc_dmem_scan(hman, f_used, f_loose);
+	csc_dmem_scan(hman, f_used, f_loose, NULL);
 
 	cond = ((hman->al_num == used) && (hman->fr_num == freed) &&
 			(hman->al_num == s[0]) && (hman->al_size == s[1]) &&

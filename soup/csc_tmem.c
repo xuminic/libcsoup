@@ -167,7 +167,7 @@ void *csc_tmem_alloc(void *heap, size_t n)
 {
 	int	 *found, *next, config, unum;
 	
-	int loose(void *mem)
+	int loose(void *heap, void *mem, void *pobj)
 	{
 		int	*mb = tmem_find_control(heap, mem);
 
@@ -209,7 +209,7 @@ void *csc_tmem_alloc(void *heap, size_t n)
 	}
 
 	found = next = NULL;
-	if (csc_tmem_scan(heap, NULL, loose)) {
+	if (csc_tmem_scan(heap, NULL, loose, NULL)) {
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
 	if (found == NULL) {
@@ -252,7 +252,7 @@ int csc_tmem_free(void *heap, void *mem)
 {
 	int	*last, *found, rc;
 
-	int used(void *fmem)
+	int used(void *heap, void *fmem, void *pboj)
 	{
 		int	*mb;
 
@@ -273,7 +273,7 @@ int csc_tmem_free(void *heap, void *mem)
 		}
 		return 0;
 	}
-	int loose(void *mb)
+	int loose(void *heap, void *mb, void *pobj)
 	{
 		last = tmem_find_control(heap, mb);
 		return 0;
@@ -294,7 +294,7 @@ int csc_tmem_free(void *heap, void *mem)
 	}
 
 	last = found = NULL;
-	if (csc_tmem_scan(heap, used, loose)) {
+	if (csc_tmem_scan(heap, used, loose, NULL)) {
 		return CSC_MERR_BROKEN;	/* memory chain broken */
 	}
 
@@ -327,7 +327,7 @@ int csc_tmem_free(void *heap, void *mem)
    \remark The prototype of the callback functions are: int func(void *)
            The scan process will stop in middle if func() returns non-zero.
 */
-void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
+void *csc_tmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj)
 {
 	int	*mb, *cw;
 
@@ -340,11 +340,11 @@ void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 			return (void*)mb;	/* chain broken */
 		}
 		if (TMEM_TEST_USED(*mb)) {
-			if (used && used(tmem_find_client(heap, mb, NULL))) {
+			if (used && used(heap, mb, pobj)) {
 				break;
 			}
 		} else {
-			if (loose && loose(tmem_find_client(heap, mb, NULL))) {
+			if (loose && loose(heap, mb, pobj)) {
 				break;
 			}
 		}
@@ -671,7 +671,7 @@ static void tmem_test_empty_memory(void *buf, int len)
 	int	n, *p, *ctl;
 	size_t	msize;
 	
-	int memc(void *mem)
+	int memc(void *heap, void *mem, void *pobj)
 	{
 		int	*mb = tmem_find_control(buf, mem);
 
@@ -788,7 +788,7 @@ static void tmem_test_empty_memory(void *buf, int len)
 	n += csc_tmem_alloc(buf, 0) ? 1 : 0;
 	cclog(n == 3, "Allocated %d empty memories: ", n);
 	csc_tmem_free(buf, p);
-	csc_tmem_scan(buf, memc, memc);
+	csc_tmem_scan(buf, memc, memc, NULL);
 	cslog("\n");
 }
 
@@ -958,14 +958,14 @@ static void tmem_test_fitness(void *buf, int len)
 {
 	int	u = 0, f = 0;
 
-	int used(void *mem)
+	int used(void *heap, void *mem, void *pobj)
 	{
 		int	*mb = tmem_find_control(buf, mem);
 		u = (u << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(buf)); 
 		return 0;
 	}
 
-	int loose(void *mem)
+	int loose(void *heap, void *mem, void *pobj)
 	{
 		int	*mb = tmem_find_control(buf, mem);
 		f = (f << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(buf)); 
@@ -996,7 +996,7 @@ static void tmem_test_fitness(void *buf, int len)
 		csc_tmem_free(heap, p[2]);
 
 		u = f = 0;
-		csc_tmem_scan(heap, used, loose);
+		csc_tmem_scan(heap, used, loose, NULL);
 		cclog((u==0x111)&&(f==0x142b), "Create heap(%d,%d) with 4 holes [%x %x]\n", 
 			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), u, f);
 		return heap;
@@ -1007,19 +1007,19 @@ static void tmem_test_fitness(void *buf, int len)
 	if (memory_set_pattern(buf, CSC_MEM_FIRST_FIT) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
 	u = f = 0;
-	csc_tmem_scan(buf, used, loose);
+	csc_tmem_scan(buf, used, loose, NULL);
 	cclog(u == 0x1211 && f == 0x112b, "Allocated 2 words by First Fit method [%x %x]\n", u, f);
 
 	if (memory_set_pattern(buf, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2)) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
 	u = f = 0;
-	csc_tmem_scan(buf, used, loose);
+	csc_tmem_scan(buf, used, loose, NULL);
 	cclog(u == 0x1121 && f == 0x14b, "Allocated 2 words by Best Fit method [%x %x]\n", u, f);
 
 	if (memory_set_pattern(buf, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1)) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
 	u = f = 0;
-	csc_tmem_scan(buf, used, loose);
+	csc_tmem_scan(buf, used, loose, NULL);
 	cclog(u == 0x111b && f == 0x142, "Allocated 2 words by Worst Fit method [%x %x]\n", u, f);
 }
 

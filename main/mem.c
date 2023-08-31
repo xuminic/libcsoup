@@ -46,7 +46,7 @@ static	struct	cliopt	clist[] = {
 static void *(*csc_mem_init)(void *heap, size_t len, int flags);
 static void *(*csc_mem_alloc)(void *heap, size_t n);
 static int (*csc_mem_free)(void *heap, void *mem);
-static void *(*csc_mem_scan)(void *heap, int (*used)(void*), int (*loose)(void*));
+static void *(*csc_mem_scan)(void *heap, F_MEM used, F_MEM loose, void *pobj);
 static size_t (*csc_mem_attrib)(void *heap, void *mem, int *state);
 static void *(*csc_mem_front_guard)(void *heap, void *mem, int *xsize);
 static void *(*csc_mem_back_guard)(void *heap, void *mem, int *xsize);

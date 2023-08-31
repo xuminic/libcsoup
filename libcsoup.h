@@ -498,6 +498,8 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MERR_RANGE		-4
 #define CSC_MERR_TYPE		-5
 
+typedef int	(*F_MEM)(void *heap, void *memc, void *pobj);
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -506,7 +508,7 @@ extern "C"
 void *csc_tmem_init(void *heap, size_t len, int flags);
 void *csc_tmem_alloc(void *heap, size_t n);
 int csc_tmem_free(void *heap, void *mem);
-void *csc_tmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
+void *csc_tmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj);
 size_t csc_tmem_attrib(void *heap, void *mem, int *state);
 void *csc_tmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_tmem_back_guard(void *heap, void *mem, int *xsize);
@@ -515,7 +517,7 @@ void *csc_tmem_back_guard(void *heap, void *mem, int *xsize);
 void *csc_dmem_init(void *heap, size_t len, int flags);
 void *csc_dmem_alloc(void *heap, size_t n);
 int csc_dmem_free(void *heap, void *mem);
-void *csc_dmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
+void *csc_dmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj);
 size_t csc_dmem_attrib(void *heap, void *mem, int *state);
 void *csc_dmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_dmem_back_guard(void *heap, void *mem, int *xsize);
@@ -524,7 +526,7 @@ void *csc_dmem_back_guard(void *heap, void *mem, int *xsize);
 void *csc_bmem_init(void *heap, size_t len, int flags);
 void *csc_bmem_alloc(void *heap, size_t n);
 int csc_bmem_free(void *heap, void *mem);
-void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*));
+void *csc_bmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj);
 size_t csc_bmem_attrib(void *heap, void *mem, int *state);
 void *csc_bmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_bmem_back_guard(void *heap, void *mem, int *xsize);

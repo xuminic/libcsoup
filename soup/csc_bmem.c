@@ -75,8 +75,16 @@ typedef	struct	_BMMCB	{
 	unsigned char	bitmap[1];
 } BMMCB;
 
+typedef	struct	{
+	int	pages;	/* required memory pages */
+	int	fnd_pages;	/* the memory pages in recent fit */
+	int	fnd_idx;	/* memory index of the recent fit */
+	int	config;
+} BMMFIT;
+
 
 static BMMPC *bmem_verify(BMMCB *bmc, void *mem, int *err);
+static int bmem_find_loose(void *heap, void *memc, void *pobj);
 static void bmem_page_alloc(BMMCB *bmc, int idx, int pages);
 static void bmem_page_free(BMMCB *bmc, int idx, int pages);
 static int bmem_page_find(BMMCB *bmc, int idx);
@@ -218,84 +226,52 @@ void *csc_bmem_alloc(void *heap, size_t size)
 {
 	BMMCB	*bmc = heap;
 	BMMPC	*mpc;
-	int	pages, config, padding;
-	int	fnd_idx, fnd_pages = -1;
-
-	int loose(void *mem)
-	{
-		mpc = bmem_find_control(bmc, mem);
-
-		/* when it's been called, the "pages" should've been set */
-		if (mpc->pages >= pages) {
-			if (fnd_pages == -1) {
-				fnd_pages = mpc->pages;
-				fnd_idx = bmem_addr_to_index(bmc, mpc);
-			}
-			switch (config & CSC_MEM_FITMASK) {
-			case CSC_MEM_BEST_FIT:
-				if (fnd_pages > mpc->pages) {
-					fnd_pages = mpc->pages;
-					fnd_idx = bmem_addr_to_index(bmc, mpc);
-				}
-				break;
-			case CSC_MEM_WORST_FIT:
-				if (fnd_pages < mpc->pages) {
-					fnd_pages = mpc->pages;
-					fnd_idx = bmem_addr_to_index(bmc, mpc);
-				}
-				break;
-			default:	/* CSC_MEM_FIRST_FIT */
-				/*printf("goose: now=%d prev=%d\n",  mpc->pages, pages);*/
-				return 1;
-			}
-			/*printf("loose: now=%d prev=%d found=%d\n", mpc->pages, pages, fnd_pages);*/
-		}
-		return 0;
-	}
+	BMMFIT	fit;
+	int	padding;
 
 	if (!bmem_verify(bmc, (void*)-1, NULL)) {
 		return NULL;
 	}
-	config = (int)bmem_config_get(bmc);
+	fit.fnd_pages = fit.fnd_idx = -1;
+	fit.config = (int)bmem_config_get(bmc);
 
-	pages = bmem_size_to_page(bmc, size);
-	if (!pages && !(config & CSC_MEM_ZERO)) {
+	fit.pages = bmem_size_to_page(bmc, size);
+	if (!fit.pages && !(fit.config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
 	/* find the size of the tail padding */
-	padding = bmem_page_to_size(bmc, pages) - size;
+	padding = bmem_page_to_size(bmc, fit.pages) - size;
 
 	/* add up the service pages: the BMMPC, front and back guards */
-	pages += bmem_service_pages(bmc);
-	if (pages > bmc->avail) {
+	fit.pages += bmem_service_pages(bmc);
+	if (fit.pages > bmc->avail) {
 		return NULL;	/* CSC_MERR_RANGE */
 	}
 
 	/* find a group of free pages where meets the requirement */
-	fnd_pages = -1;
-	if (csc_bmem_scan(heap, NULL, loose)) {
+	if (csc_bmem_scan(heap, NULL, bmem_find_loose, &fit)) {
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
-	if (fnd_pages == -1) {
+	if (fit.fnd_pages == -1) {
 		return NULL;	/* CSC_MERR_LOWMEM */
 	}
 
 	/* take the free pages */
-	bmem_page_alloc(bmc, fnd_idx, pages);
-	bmc->avail -= pages;
+	bmem_page_alloc(bmc, fit.fnd_idx, fit.pages);
+	bmc->avail -= fit.pages;
 	bmem_set_crc(bmc, bmem_page_to_size(bmc, bmc->pages));
 	
 	/* setup the Bitmap Memory Manager Page Controller */
-	mpc = (BMMPC*)bmem_index_to_addr(bmc, fnd_idx);
+	mpc = (BMMPC*)bmem_index_to_addr(bmc, fit.fnd_idx);
 	memset(mpc, 0, sizeof(BMMPC));
-	mpc->pages = pages;
+	mpc->pages = fit.pages;
 	bmem_pad_set(mpc, padding);
 	bmem_set_crc(mpc, sizeof(BMMPC));
 
 	/* initial the memory */
 	heap = bmem_find_client(bmc, mpc, NULL);	/* find client area */
- 	if (config & CSC_MEM_CLEAN) {
+ 	if (fit.config & CSC_MEM_CLEAN) {
 		memset(heap, 0, size);
 	}
 	return heap;
@@ -348,11 +324,10 @@ int csc_bmem_free(void *heap, void *mem)
    \remark The prototype of the callback functions are: int func(void *)
            The scan process will stop in middle if func() returns non-zero.
 */
-void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
+void *csc_bmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj)
 {
 	BMMCB	*bmc = heap;
 	BMMPC	*mpc;
-	void	*client;
 	int	i;
 
 	if (!bmem_verify(bmc, (void*)-1, NULL)) {
@@ -363,11 +338,11 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 		mpc = bmem_index_to_addr(bmc, i);
 		if (BM_CK_PAGE(bmc->bitmap, i)) {
 			/* found an allocated memory block */
-			client = bmem_find_client(bmc, mpc, NULL);
+			void *client = bmem_find_client(bmc, mpc, NULL);
 			if (!bmem_verify(bmc, client, NULL)) {
 				return mpc;
 			}
-			if (used && used(client)) {
+			if (used && used(bmc, mpc, pobj)) {
 				return NULL;
 			}
 		} else {
@@ -375,8 +350,7 @@ void *csc_bmem_scan(void *heap, int (*used)(void*), int (*loose)(void*))
 			memset(mpc, 0, sizeof(BMMPC));
 			mpc->pages = bmem_page_find(bmc, i);
 			bmem_set_crc(mpc, sizeof(BMMPC));
-			client = bmem_find_client(bmc, mpc, NULL);
-			if (loose && loose(client)) {
+			if (loose && loose(bmc, mpc, pobj)) {
 				return NULL;
 			}
 		}
@@ -578,6 +552,40 @@ static BMMPC *bmem_verify(BMMCB *bmc, void *mem, int *err)
 	}
 	*err = 0;
 	return mem;
+}
+
+static int bmem_find_loose(void *heap, void *memc, void *pobj)
+{
+	BMMCB	*bmc = heap;
+	BMMPC	*mpc = memc;
+	BMMFIT	*fit = pobj;
+
+	/* when it's been called, the "pages" should've been set */
+	if (mpc->pages >= fit->pages) {
+		if (fit->fnd_pages == -1) {
+			fit->fnd_pages = mpc->pages;
+			fit->fnd_idx = bmem_addr_to_index(bmc, mpc);
+		}
+		switch (fit->config & CSC_MEM_FITMASK) {
+		case CSC_MEM_BEST_FIT:
+			if (fit->fnd_pages > mpc->pages) {
+				fit->fnd_pages = mpc->pages;
+				fit->fnd_idx = bmem_addr_to_index(bmc, mpc);
+			}
+			break;
+		case CSC_MEM_WORST_FIT:
+			if (fit->fnd_pages < mpc->pages) {
+				fit->fnd_pages = mpc->pages;
+				fit->fnd_idx = bmem_addr_to_index(bmc, mpc);
+			}
+			break;
+		default:	/* CSC_MEM_FIRST_FIT */
+			/*printf("goose: now=%d prev=%d\n",  mpc->pages, pages);*/
+			return 1;	/* break the scan */
+		}
+		/*printf("loose: now=%d prev=%d found=%d\n", mpc->pages, pages, fnd_pages);*/
+	}
+	return 0;	/* continue the scan */
 }
 
 static void bmem_page_alloc_slow(BMMCB *bmc, int idx, int pages)
