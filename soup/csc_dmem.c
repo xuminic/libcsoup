@@ -58,7 +58,14 @@ typedef	struct	_DMHEAP	{
 	size_t	fr_num;		/* number of free blocks */
 } DMHEAP;
 
+typedef	struct	{
+	size_t	realn;		/* real size which allocated, including padding */
+	DMEM	*found;
+	int	config;
+} DMFIT;
+
 static int dmem_verify(void *heap, DMEM *cm);
+static int dmem_find_loose(void *heap, void *memc, void *pobj);
 static void *dmem_find_client(void *heap, DMEM *cm, size_t *osize);
 static DMEM *dmem_find_control(void *heap, void *mem);
 
@@ -150,93 +157,68 @@ void *csc_dmem_init(void *heap, size_t len, int flags)
 */
 void *csc_dmem_alloc(void *heap, size_t n)
 {
-	DMHEAP	*hman;
-	DMEM	*found, *next;
-	size_t	realn, nextlen, min;
+	DMHEAP	*hman = heap;
+	DMEM	*next;
+	DMFIT	fit;
+	size_t	nextlen, min;
 	char	*mem;
-	int	config;
-
-	int loose(void *heap, void *mem, void *pobj)
-	{
-		DMEM	*cm = dmem_find_control(heap, mem);
-
-		if (cm->size >= realn) {
-			found = (found == NULL) ? cm : found;
-			switch (config & CSC_MEM_FITMASK) {
-			case CSC_MEM_BEST_FIT:
-				if (found->size > cm->size) {
-					found = cm;
-				}
-				break;
-			case CSC_MEM_WORST_FIT:
-				if (found->size < cm->size) {
-					found = cm;
-				}
-				break;
-			default:	/* CSC_MEM_FIRST_FIT */
-				return 1;
-			}
-		}
-		return 0;
-	}
 
 	if (dmem_verify(heap, (void*)-1) < 0) {
 		return NULL;
 	}
 
-	hman = heap;
-	config = dmem_config_get(hman);
+	fit.config = dmem_config_get(hman);
 
-	realn = (n + sizeof(int) - 1) / sizeof(int) * sizeof(int); /* round up */
-	realn += DMEM_GUARD(config);	/* add up the guarding area */
+	fit.realn = (n + sizeof(int) - 1) / sizeof(int) * sizeof(int); /* round up */
+	fit.realn += DMEM_GUARD(fit.config);	/* add up the guarding area */
 
-	if (realn > hman->fr_size) {
+	if (fit.realn > hman->fr_size) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if (((int)realn == DMEM_GUARD(config)) && !(config & CSC_MEM_ZERO)) {
+	} else if (((int)fit.realn == DMEM_GUARD(fit.config)) && !(fit.config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
-	found = NULL;
-	if (csc_dmem_scan(heap, NULL, loose, NULL)) {
+	fit.found = NULL;
+	if (csc_dmem_scan(heap, NULL, dmem_find_loose, &fit)) {
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
-	if (found == NULL) {
+	if (fit.found == NULL) {
 		return NULL;	/* CSC_MERR_LOWMEM */
 	}
 
-	nextlen = found->size - realn;
-	min = sizeof(DMEM) + DMEM_GUARD(config);
+	nextlen = fit.found->size - fit.realn;
+	min = sizeof(DMEM) + DMEM_GUARD(fit.config);
 
-	if ((nextlen > min) || ((nextlen == min) && (config & CSC_MEM_ZERO))) {
+	if ((nextlen > min) || ((nextlen == min) && (fit.config & CSC_MEM_ZERO))) {
 		/* go split */
-		next = (DMEM*)((char*)found + sizeof(DMEM) + realn);
-		next->prev = found;
-		next->next = found->next;
+		next = (DMEM*)((char*)fit.found + sizeof(DMEM) + fit.realn);
+		next->prev = fit.found;
+		next->next = fit.found->next;
 		next->size = nextlen - sizeof(DMEM);
 		next->magic[2] = (char) DMEM_FREE;
 		next->magic[3] = 0;
 		dmem_set_crc(next, sizeof(DMEM));
 
-		found->next = next;
-		found->size -= nextlen;
+		fit.found->next = next;
+		fit.found->size -= nextlen;
 
-		hman->fr_size -= found->size + sizeof(DMEM);
+		hman->fr_size -= fit.found->size + sizeof(DMEM);
 		hman->next = hman->next < next ? next : hman->next;
 	} else {
-		hman->fr_size -= found->size;
+		hman->fr_size -= fit.found->size;
 		hman->fr_num--;
 	}
 
-	found->magic[2] = (unsigned char)(realn - DMEM_GUARD(config) - n);
-	found->magic[2] |= DMEM_USED;
-	dmem_set_crc(found, sizeof(DMEM));
+	fit.found->magic[2] = (unsigned char)(fit.realn - DMEM_GUARD(fit.config) - n);
+	fit.found->magic[2] |= DMEM_USED;
+	dmem_set_crc(fit.found, sizeof(DMEM));
 
-	hman->al_size += found->size;
+	hman->al_size += fit.found->size;
 	hman->al_num++;
 	dmem_set_crc(hman, sizeof(DMHEAP));
 
-	mem = (char*)(found+1) + CSC_MEM_GETPG(config);
-	if (config & CSC_MEM_CLEAN) {
+	mem = (char*)(fit.found+1) + CSC_MEM_GETPG(fit.config);
+	if (fit.config & CSC_MEM_CLEAN) {
 		memset(mem, 0, n);
 	}
 	return mem;
@@ -519,6 +501,32 @@ static int dmem_verify(void *heap, DMEM *mblock)
 	return 0;
 }
 
+static int dmem_find_loose(void *heap, void *memc, void *pobj)
+{
+	DMFIT	*fit = pobj;
+	DMEM	*cm = memc;
+
+	(void) heap;
+	if (cm->size >= fit->realn) {
+		fit->found = (fit->found == NULL) ? cm : fit->found;
+		switch (fit->config & CSC_MEM_FITMASK) {
+		case CSC_MEM_BEST_FIT:
+			if (fit->found->size > cm->size) {
+				fit->found = cm;
+			}
+			break;
+		case CSC_MEM_WORST_FIT:
+			if (fit->found->size < cm->size) {
+				fit->found = cm;
+			}
+			break;
+		default:	/* CSC_MEM_FIRST_FIT */
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void *dmem_find_client(void *heap, DMEM *cm, size_t *osize)
 {
 	char	*p;
@@ -789,40 +797,40 @@ static int dmem_test_minimum(void *buf, int len)
 	return 0;
 }
 
+static void *dmem_memory_set_pattern(void *heap, int len, int config, char *ref[])
+{
+	size_t	msize;
+	char	*fitness[] = { "FIRSTFIT", "BESTFIT", "WORSTFIT", "" };
+
+	if ((heap = csc_dmem_init(heap, len, config)) == NULL) {
+		return NULL;
+	}
+	ref[0] = csc_dmem_alloc(heap, 32);	/* trap */
+	csc_dmem_alloc(heap, 1);
+	ref[1] = csc_dmem_alloc(heap, 128);	/* for first fit */
+	csc_dmem_alloc(heap, 1);
+	ref[2] = csc_dmem_alloc(heap, 61);	/* for best fit */
+	csc_dmem_alloc(heap, 1);
+	ref[3] = dmem_find_client(heap, ((DMHEAP *)heap)->next, NULL); /* for worst fit */
+	csc_dmem_free(heap, ref[0]);
+	csc_dmem_free(heap, ref[1]);
+	csc_dmem_free(heap, ref[2]);
+
+	msize = csc_dmem_attrib(heap, ref[3], &len);
+	cclog((msize > 128) && (len == 0), 
+		"Create heap(%d,%d) with %s method: used=%d free=%d.\n",
+		CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
+		fitness[config & CSC_MEM_FITMASK], 
+		((DMHEAP *)heap)->al_num, ((DMHEAP *)heap)->fr_num);
+	return heap;
+}
+
 static int dmem_test_fitness(void *buf, int len)
 {
 	DMHEAP	*hman;
 	size_t	msize;
 	char	*p[8], *ref[4];
 	int	s[4];
-
-	void *memory_set_pattern(void *heap, int len, int config)
-	{
-		size_t	msize;
-		char	*fitness[] = { "FIRSTFIT", "BESTFIT", "WORSTFIT", "" };
-
-		if ((heap = csc_dmem_init(heap, len, config)) == NULL) {
-			return NULL;
-		}
-		ref[0] = csc_dmem_alloc(heap, 32);	/* trap */
-		csc_dmem_alloc(heap, 1);
-		ref[1] = csc_dmem_alloc(heap, 128);	/* for first fit */
-		csc_dmem_alloc(heap, 1);
-		ref[2] = csc_dmem_alloc(heap, 61);	/* for best fit */
-		csc_dmem_alloc(heap, 1);
-		ref[3] = dmem_find_client(heap, ((DMHEAP *)heap)->next, NULL); /* for worst fit */
-		csc_dmem_free(heap, ref[0]);
-		csc_dmem_free(heap, ref[1]);
-		csc_dmem_free(heap, ref[2]);
-
-		msize = csc_dmem_attrib(heap, ref[3], &len);
-		cclog((msize > 128) && (len == 0), 
-			"Create heap(%d,%d) with %s method: used=%d free=%d.\n",
-			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), 
-			fitness[config & CSC_MEM_FITMASK], 
-			((DMHEAP *)heap)->al_num, ((DMHEAP *)heap)->fr_num);
-		return heap;
-	}
 
 	hman = csc_dmem_init(buf, len, CSC_MEM_DEFAULT);
 	if (hman == NULL) return 0;
@@ -884,22 +892,42 @@ static int dmem_test_fitness(void *buf, int len)
 	dmem_heap_status(hman, 0, 1);
 
 	/* testing the first fit */
-	hman = memory_set_pattern(buf, len, CSC_MEM_FIRST_FIT);
+	hman = dmem_memory_set_pattern(buf, len, CSC_MEM_FIRST_FIT, ref);
 	if (hman == NULL) return -1;
 	p[0] = csc_dmem_alloc(hman, 64);
 	cclog(p[0] == ref[1], "First Fit: allocated 64 bytes at +%d\n", BMEM_SPAN(buf, p[0]));
 
 	/* testing the best fit */
-	hman = memory_set_pattern(buf, len, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2));
+	hman = dmem_memory_set_pattern(buf, len, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2), ref);
 	if (hman == NULL) return -1;
 	p[0] = csc_dmem_alloc(hman, 64);
 	cclog(p[0] == ref[2], "Best Fit: allocated 64 bytes at +%d\n", BMEM_SPAN(buf, p[0]));
 
 	/* testing the worst fit */
-	hman = memory_set_pattern(buf, len, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1));
+	hman = dmem_memory_set_pattern(buf, len, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1), ref);
 	if (hman == NULL) return -1;
 	p[0] = csc_dmem_alloc(hman, 64);
 	cclog(p[0] == ref[3], "Worst Fit: allocated 64 bytes at +%d\n", BMEM_SPAN(buf, p[0]));
+	return 0;
+}
+
+static int dmem_heap_used(void *heap, void *memc, void *pobj)
+{
+	size_t	*s = pobj;
+	DMEM	*cm = memc;
+
+	s[0]++; 
+	s[1] += cm->size; 
+	return 0;
+}
+	
+static int dmem_heap_loose(void *heap, void *memc, void *pobj)
+{
+	size_t	*s = pobj;
+	DMEM	*cm = memc;
+	
+	s[2]++; 
+	s[3] += cm->size; 
 	return 0;
 }
 
@@ -908,20 +936,8 @@ static void dmem_heap_status(DMHEAP *hman, size_t used, size_t freed)
 	size_t	s[4];
 	int	cond;
 
-	int f_used(void *heap, void *mem, void *pobj)
-	{
-		DMEM *cm = dmem_find_control(hman, mem);
-		s[0]++; s[1] += ((DMEM*)cm)->size; return 0;
-	}
-	
-	int f_loose(void *heap, void *mem, void *pobj)
-	{
-		DMEM *cm = dmem_find_control(hman, mem);
-		s[2]++; s[3] += ((DMEM*)cm)->size; return 0;
-	}
-
 	memset(s, 0, sizeof(s));
-	csc_dmem_scan(hman, f_used, f_loose, NULL);
+	csc_dmem_scan(hman, dmem_heap_used, dmem_heap_loose, s);
 
 	cond = ((hman->al_num == used) && (hman->fr_num == freed) &&
 			(hman->al_num == s[0]) && (hman->al_size == s[1]) &&
