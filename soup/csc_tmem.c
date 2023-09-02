@@ -322,8 +322,9 @@ void *csc_tmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj)
    \param[out] osize the size of the memory block without padding and guard. 
 
    \return    the address of the memory related to the memory control block.
-   \remark    the memory control block is the second parameter in the callback function of
-              csc_tmem_scan()
+   \remark    the memory control block is the second parameter in the callback 
+              function of csc_tmem_scan(). This function is to map the memory 
+              control block to the allocated or unused memory block.
 */
 void *csc_tmem_memory(void *heap, void *mctl, size_t *osize)
 {

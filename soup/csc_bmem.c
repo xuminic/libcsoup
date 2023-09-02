@@ -359,6 +359,22 @@ void *csc_bmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj)
 	return NULL;
 }
 
+/*!\brief find the related memory by the memory control block
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  mctl the memory control block.
+   \param[out] osize the size of the memory block without padding and guard.
+
+   \return    the address of the memory related to the memory control block.
+   \remark    the memory control block is the second parameter in the callback 
+              function of csc_bmem_scan(). This function is to map the memory 
+	      control block to the allocated or unused memory block.
+*/
+void *csc_bmem_memory(void *heap, void *mctl, size_t *osize)
+{
+	return bmem_find_client(heap, mctl, osize);
+}
+
 /*!\brief find the attribution of the memory block.
 
    \param[in]  heap the memory heap.

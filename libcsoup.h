@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	2		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	4		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	5		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -519,6 +519,7 @@ void *csc_dmem_init(void *heap, size_t len, int flags);
 void *csc_dmem_alloc(void *heap, size_t n);
 int csc_dmem_free(void *heap, void *mem);
 void *csc_dmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj);
+void *csc_dmem_memory(void *heap, void *mctl, size_t *osize);
 size_t csc_dmem_attrib(void *heap, void *mem, int *state);
 void *csc_dmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_dmem_back_guard(void *heap, void *mem, int *xsize);
@@ -528,6 +529,7 @@ void *csc_bmem_init(void *heap, size_t len, int flags);
 void *csc_bmem_alloc(void *heap, size_t n);
 int csc_bmem_free(void *heap, void *mem);
 void *csc_bmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj);
+void *csc_bmem_memory(void *heap, void *mctl, size_t *osize);
 size_t csc_bmem_attrib(void *heap, void *mem, int *state);
 void *csc_bmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_bmem_back_guard(void *heap, void *mem, int *xsize);
