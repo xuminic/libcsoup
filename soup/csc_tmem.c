@@ -77,12 +77,27 @@
 #define TMEM_OVERHEAD		4	/* reserved for attribution of the heap */
 #define TMEM_GUARD(c)		(CSC_MEM_GETPG(c) * 2)
 
+typedef	struct	{
+	int	unum;	/* required memory size includes padding and guards */
+	int	*found;	/* point to the memory controller */
+	int	config;
+} TMMFIT;
+
+typedef	struct	{
+	int	*last;
+	int	*found;
+	void	*memc;	/* the memory waiting for free */
+} TMMFREE;
+
 
 static int tmem_parity(int cw);
 static int tmem_verify(void *heap, int *mb);
 static int tmem_cword(int uflag, int size);
+static int tmem_find_loose(void *heap, void *memc, void *pobj);
 static void *tmem_find_client(void *heap, int *mb, size_t *osize);
 static int *tmem_find_control(void *heap, void *mem);
+static int tmem_free_used(void *heap, void *mb, void *pobj);
+static int tmem_free_loose(void *heap, void *mb, void *pobj);
 
 static inline void tmem_config_set(unsigned char *heap, int config)
 {
@@ -165,75 +180,50 @@ void *csc_tmem_init(void *hmem, size_t len, int flags)
 */
 void *csc_tmem_alloc(void *heap, size_t n)
 {
-	int	 *found, *next, config, unum;
-	
-	int loose(void *heap, void *mem, void *pobj)
-	{
-		int	*mb = tmem_find_control(heap, mem);
-
-		if (TMEM_SIZE(*mb) >= unum) {
-			if (found == NULL) {
-				found = mb;
-			}
-			switch (config & CSC_MEM_FITMASK) {
-			case CSC_MEM_BEST_FIT:
-				if (TMEM_SIZE(*found) > TMEM_SIZE(*mb)) {
-					found = mb;
-				}
-				break;
-			case CSC_MEM_WORST_FIT:
-				if (TMEM_SIZE(*found) < TMEM_SIZE(*mb)) {
-					found = mb;
-				}
-				break;
-			default:	/* CSC_MEM_FIRST_FIT */
-				return 1;
-			}
-		}
-		return 0;
-	}
+	TMMFIT	fit;
+	int	*next;
 
 	if (tmem_verify(heap, (int*)-1) < 0) {
 		return NULL;	/* CSC_MERR_INIT: memory heap not available */
 	}
 
 	/* find the request size in unit of int */
-	config = tmem_config_get(heap);
-	unum = (int) TMEM_UPWORD(n + TMEM_GUARD(config));
+	fit.config = tmem_config_get(heap);
+	fit.unum = (int) TMEM_UPWORD(n + TMEM_GUARD(fit.config));
 
 	/* make sure the request is NOT out of size */
-	if (unum > TMEM_SIZE(*tmem_start(heap))) {
+	if (fit.unum > TMEM_SIZE(*tmem_start(heap))) {
 		return NULL;	/* CSC_MERR_LOWMEM */
-	} else if (unum == (int)TMEM_DNWORD(TMEM_GUARD(config)) && !(config & CSC_MEM_ZERO)) {
+	} else if (fit.unum == (int)TMEM_DNWORD(TMEM_GUARD(fit.config)) && !(fit.config & CSC_MEM_ZERO)) {
 		return NULL;	/* CSC_MERR_RANGE: not allow empty allocation */
 	}
 
-	found = next = NULL;
-	if (csc_tmem_scan(heap, NULL, loose, NULL)) {
+	fit.found = next = NULL;
+	if (csc_tmem_scan(heap, NULL, tmem_find_loose, &fit)) {
 		return NULL;	/* CSC_MERR_BROKEN: chain broken */
 	}
-	if (found == NULL) {
+	if (fit.found == NULL) {
 		return NULL;	/* CSC_MERR_LOWMEM: out of memory */
 	}
 
-	n = (config & CSC_MEM_ZERO) ? 0 : 1;	/* reuse the 'n' for size test */
-	n += TMEM_DNWORD(TMEM_GUARD(config));	/* make sure the remain no less than guarding area */
-	if (TMEM_SIZE(*found) <= unum + n) {	
+	n = (fit.config & CSC_MEM_ZERO) ? 0 : 1;	/* reuse the 'n' for size test */
+	n += TMEM_DNWORD(TMEM_GUARD(fit.config));	/* make sure the remain no less than guarding area */
+	if (TMEM_SIZE(*fit.found) <= fit.unum + n) {	
 		/* not worth to split this block */
-		*found = tmem_cword(1, *found);
+		*fit.found = tmem_cword(1, *fit.found);
 	} else {
 		/* split this memory block */
-		next = found + unum + 1;
-		*next = tmem_cword(0, TMEM_SIZE(*found) - unum - 1);
-		*found = tmem_cword(1, unum);
+		next = fit.found + fit.unum + 1;
+		*next = tmem_cword(0, TMEM_SIZE(*fit.found) - fit.unum - 1);
+		*fit.found = tmem_cword(1, fit.unum);
 	}
 
 	/* return the client area */
-	found = tmem_find_client(heap, found, &n);
-	if (config & CSC_MEM_CLEAN) {
-		memset(found, 0, n);
+	next = tmem_find_client(heap, fit.found, &n);
+	if (fit.config & CSC_MEM_CLEAN) {
+		memset(next, 0, n);
 	}
-	return (void*)found;
+	return (void*)next;
 }
 
 /*!\brief free the allocated memory block.
@@ -250,62 +240,35 @@ void *csc_tmem_alloc(void *heap, size_t n)
 */
 int csc_tmem_free(void *heap, void *mem)
 {
-	int	*last, *found, rc;
-
-	int used(void *heap, void *fmem, void *pboj)
-	{
-		int	*mb;
-
-		if (fmem == mem) {
-			found = tmem_find_control(heap, fmem);
-			*found = tmem_cword(0, *found);	/* free itself */
-			
-			/* try to down-merge the next memory block */
-			mb = TMEM_NEXT(found);
-			if (tmem_verify(heap, mb) < 0) {
-				return 1;
-			}
-			if (!TMEM_TEST_USED(*mb)) {
-				*found = tmem_cword(0, TMEM_SIZE(*found + *mb + 1));
-				*mb = 0;	/* liquidate the control word in middle */
-			}
-			return 1;
-		}
-		return 0;
-	}
-	int loose(void *heap, void *mb, void *pobj)
-	{
-		last = tmem_find_control(heap, mb);
-		return 0;
-	}
-
+	TMMFREE	tfr;
+	int	rc;
 
 	if (mem == NULL) {
 		return CSC_MERR_RANGE;
 	}
 
-	found = tmem_find_control(heap, mem);
-	if ((rc = tmem_verify(heap, found)) < 0) {
+	tfr.memc = tmem_find_control(heap, mem);
+	if ((rc = tmem_verify(heap, tfr.memc)) < 0) {
 		return rc;	/* memory heap not available */
 	}
 
-	if (!TMEM_TEST_USED(*found)) {
+	if (!TMEM_TEST_USED(*((int*)tfr.memc))) {
 		return 0;	/* freeing a freed memory */
 	}
 
-	last = found = NULL;
-	if (csc_tmem_scan(heap, used, loose, NULL)) {
+	tfr.last = tfr.found = NULL;
+	if (csc_tmem_scan(heap, tmem_free_used, tmem_free_loose, &tfr)) {
 		return CSC_MERR_BROKEN;	/* memory chain broken */
 	}
 
-	if (found == NULL) {
+	if (tfr.found == NULL) {
 		return CSC_MERR_RANGE;	/* memory not found */
 	}
 
 	/* try to up-merge the previous memory block */
-	if (last && (TMEM_NEXT(last) == found)) {
-		*last = tmem_cword(0, TMEM_SIZE(*last + *found + 1));
-		*found = 0;	/* liquidate the control word in middle */
+	if (tfr.last && (TMEM_NEXT(tfr.last) == tfr.found)) {
+		*tfr.last = tmem_cword(0, TMEM_SIZE(*tfr.last + *tfr.found + 1));
+		*tfr.found = 0;	/* liquidate the control word in middle */
 	}
 	return 0;
 }
@@ -350,6 +313,21 @@ void *csc_tmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj)
 		}
 	}
 	return NULL;
+}
+
+/*!\brief find the related memory by the memory control block
+
+   \param[in]  heap the memory heap for allocation.
+   \param[in]  mctl the memory control block.
+   \param[out] osize the size of the memory block without padding and guard. 
+
+   \return    the address of the memory related to the memory control block.
+   \remark    the memory control block is the second parameter in the callback function of
+              csc_tmem_scan()
+*/
+void *csc_tmem_memory(void *heap, void *mctl, size_t *osize)
+{
+	return tmem_find_client(heap, mctl, osize);
 }
 
 /*!\brief find the attribution of an allocated memory.
@@ -563,6 +541,33 @@ static int tmem_cword(int uflag, int size)
 	return tmem_parity(size);
 }
 
+static int tmem_find_loose(void *heap, void *memc, void *pobj)
+{
+	TMMFIT	*fit = pobj;
+	int	*mb = memc;
+
+	if (TMEM_SIZE(*mb) >= fit->unum) {
+		if (fit->found == NULL) {
+			fit->found = mb;
+		}
+		switch (fit->config & CSC_MEM_FITMASK) {
+		case CSC_MEM_BEST_FIT:
+			if (TMEM_SIZE(*(fit->found)) > TMEM_SIZE(*mb)) {
+				fit->found = mb;
+			}
+			break;
+		case CSC_MEM_WORST_FIT:
+			if (TMEM_SIZE(*(fit->found)) < TMEM_SIZE(*mb)) {
+				fit->found = mb;
+			}
+			break;
+		default:	/* CSC_MEM_FIRST_FIT */
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void *tmem_find_client(void *heap, int *mb, size_t *osize)
 {
 	int	guards;
@@ -581,6 +586,38 @@ static int *tmem_find_control(void *heap, void *mem)
 	guard = TMEM_GUARD(tmem_config_get(heap)) >> 1;
 	return (int*)mem - guard / sizeof(int) - 1;
 }
+
+static int tmem_free_used(void *heap, void *memc, void *pboj)
+{
+	TMMFREE	*tfr = pboj;
+	int	*mb;
+
+	if (tfr->memc == memc) {
+		tfr->found = memc;
+		*tfr->found = tmem_cword(0, *tfr->found);	/* free itself */
+	
+		/* try to down-merge the next memory block */
+		mb = TMEM_NEXT(tfr->found);
+		if (tmem_verify(heap, mb) < 0) {
+			return 1;
+		}
+		if (!TMEM_TEST_USED(*mb)) {
+			*tfr->found = tmem_cword(0, TMEM_SIZE(*tfr->found + *mb + 1));
+			*mb = 0;	/* liquidate the control word in middle */
+		}
+		return 1;
+	}
+	return 0;
+}
+
+static int tmem_free_loose(void *heap, void *mb, void *pobj)
+{
+	TMMFREE	*tfr = pobj;
+
+	tfr->last = mb;
+	return 0;
+}
+
 
 #ifdef	CFG_UNIT_TEST
 
@@ -607,24 +644,24 @@ int csc_tmem_unittest(void)
 	return 0;
 }
 
+static short tmem_parity16(short cw)
+{
+	unsigned short  x = (unsigned short)cw & ~0x8000;
+
+	x = x - ((x >> 1) & 0x5555);
+	x = (x & 0x3333) + ((x >> 2) & 0x3333);
+	x = (x + (x >> 4)) & 0x0F0F;
+	x = x + (x >> 8);
+	x &= 0x1f;
+	x++;	/* make odd bit even */
+	return (cw & ~0x8000) | (x << 15);
+}
+
 static void tmem_test_function(void *buf, int len)
 {
 	int	plist[] = { -1, 0, 1, 0xf0f0f0f0, 0x55555555, 0x0f0f0f0f, 0x66666666 };
 	int	i;
 	unsigned char	*p;
-
-	short tmem_parity16(short cw)
-	{
-		unsigned short  x = (unsigned short)cw & ~0x8000;
-
-		x = x - ((x >> 1) & 0x5555);
-		x = (x & 0x3333) + ((x >> 2) & 0x3333);
-		x = (x + (x >> 4)) & 0x0F0F;
-		x = x + (x >> 8);
-		x &= 0x1f;
-		x++;	/* make odd bit even */
-		return (cw & ~0x8000) | (x << 15);
-	}
 
 	for (i = 0; i < (int)(sizeof(plist)/sizeof(int)); i++) {
 		cclog(tmem_parity(plist[i]) == tmem_parity(tmem_parity(plist[i])),
@@ -666,20 +703,20 @@ static void tmem_test_function(void *buf, int len)
 	cslog("freemem=%d(%d)\n", len, i);
 }
 
+static int tmem_tem_memc(void *heap, void *memc, void *pobj)
+{
+	int	*mb = memc;
+
+	cslog("(+%d:%c:%lu)", BMEM_SPAN(heap, mb), 
+			TMEM_TEST_USED(*mb)?'u':'f', TMEM_BYTES(*mb));
+	return 0;
+}
+
 static void tmem_test_empty_memory(void *buf, int len)
 {
 	int	n, *p, *ctl;
 	size_t	msize;
 	
-	int memc(void *heap, void *mem, void *pobj)
-	{
-		int	*mb = tmem_find_control(buf, mem);
-
-		cslog("(+%d:%c:%lu)", BMEM_SPAN(buf,mb), 
-				TMEM_TEST_USED(*mb)?'u':'f', TMEM_BYTES(*mb));
-		return 0;
-	}
-
 	/* create a smallest heap where has only one heap control and 
 	 * one block control */
 	len = CSC_MEM_DEFAULT;
@@ -788,7 +825,7 @@ static void tmem_test_empty_memory(void *buf, int len)
 	n += csc_tmem_alloc(buf, 0) ? 1 : 0;
 	cclog(n == 3, "Allocated %d empty memories: ", n);
 	csc_tmem_free(buf, p);
-	csc_tmem_scan(buf, memc, memc, NULL);
+	csc_tmem_scan(buf, tmem_tem_memc, tmem_tem_memc, NULL);
 	cslog("\n");
 }
 
@@ -954,73 +991,76 @@ static void tmem_test_misc_memory(void *buf, int len)
 	cclog(*p == -1, "Memory is not initialized. [%x]\n", *p);
 }
 
+static int tmem_tfit_used(void *heap, void *memc, void *pobj)
+{
+	int	*mb = memc;
+	int	*uf = pobj;
+
+	uf[0] = (uf[0] << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(heap)); 
+	return 0;
+}
+
+static int tmem_tfit_loose(void *heap, void *memc, void *pobj)
+{
+	int	*mb = memc;
+	int	*uf = pobj;
+
+	uf[1] = (uf[1] << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(heap)); 
+	return 0;
+}
+
+static void *tmem_set_pattern(void *heap, int config, int *uf)
+{
+	int	*p[4], len;
+
+	/* the memory pattern will be: F1+U1+F4+U1+F2+U1+F8
+	 * total 7 section so 7 set of guarding areas.
+	 * The target memory is 2 words */
+
+	len = sizeof(int)*30 + TMEM_GUARD(config)*7;
+	if (csc_tmem_init(heap, len, config) == NULL) {
+		return NULL;
+	}
+
+	p[0] = csc_tmem_alloc(heap, sizeof(int));
+	csc_tmem_alloc(heap, sizeof(int));
+	p[1] = csc_tmem_alloc(heap, sizeof(int)*4);
+	csc_tmem_alloc(heap, sizeof(int));
+	p[2] = csc_tmem_alloc(heap, sizeof(int)*2);
+	csc_tmem_alloc(heap, sizeof(int));
+	csc_tmem_free(heap, p[0]);
+	csc_tmem_free(heap, p[1]);
+	csc_tmem_free(heap, p[2]);
+
+	uf[0] = uf[1] = 0;
+	csc_tmem_scan(heap, tmem_tfit_used, tmem_tfit_loose, uf);
+	cclog((uf[0]==0x111)&&(uf[1]==0x142b), "Create heap(%d,%d) with 4 holes [%x %x]\n", 
+		CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), uf[0], uf[1]);
+	return heap;
+}
+
 static void tmem_test_fitness(void *buf, int len)
 {
-	int	u = 0, f = 0;
-
-	int used(void *heap, void *mem, void *pobj)
-	{
-		int	*mb = tmem_find_control(buf, mem);
-		u = (u << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(buf)); 
-		return 0;
-	}
-
-	int loose(void *heap, void *mem, void *pobj)
-	{
-		int	*mb = tmem_find_control(buf, mem);
-		f = (f << 4) | (TMEM_SIZE(*mb) - GUARD_WORD(buf)); 
-		return 0;
-	}
-
-	void *memory_set_pattern(void *heap, int config)
-	{
-		int	*p[4];
-
-		/* the memory pattern will be: F1+U1+F4+U1+F2+U1+F8
-		 * total 7 section so 7 set of guarding areas.
-		 * The target memory is 2 words */
-
-		len = sizeof(int)*30 + TMEM_GUARD(config)*7;
-		if (csc_tmem_init(heap, len, config) == NULL) {
-			return NULL;
-		}
-
-		p[0] = csc_tmem_alloc(heap, sizeof(int));
-		csc_tmem_alloc(heap, sizeof(int));
-		p[1] = csc_tmem_alloc(heap, sizeof(int)*4);
-		csc_tmem_alloc(heap, sizeof(int));
-		p[2] = csc_tmem_alloc(heap, sizeof(int)*2);
-		csc_tmem_alloc(heap, sizeof(int));
-		csc_tmem_free(heap, p[0]);
-		csc_tmem_free(heap, p[1]);
-		csc_tmem_free(heap, p[2]);
-
-		u = f = 0;
-		csc_tmem_scan(heap, used, loose, NULL);
-		cclog((u==0x111)&&(f==0x142b), "Create heap(%d,%d) with 4 holes [%x %x]\n", 
-			CSC_MEM_PAGE(config), CSC_MEM_GUARD(config), u, f);
-		return heap;
-	}
-
+	int	uf[2];
 
 	cclog(-1, "Fitness test of the allocation\n");
-	if (memory_set_pattern(buf, CSC_MEM_FIRST_FIT) == NULL) return;
+	if (tmem_set_pattern(buf, CSC_MEM_FIRST_FIT, uf) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
-	u = f = 0;
-	csc_tmem_scan(buf, used, loose, NULL);
-	cclog(u == 0x1211 && f == 0x112b, "Allocated 2 words by First Fit method [%x %x]\n", u, f);
+	uf[0] = uf[1] = 0;
+	csc_tmem_scan(buf, tmem_tfit_used, tmem_tfit_loose, uf);
+	cclog(uf[0] == 0x1211 && uf[1] == 0x112b, "Allocated 2 words by First Fit method [%x %x]\n", uf[0], uf[1]);
 
-	if (memory_set_pattern(buf, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2)) == NULL) return;
+	if (tmem_set_pattern(buf, CSC_MEM_BEST_FIT | CSC_MEM_SETPG(1,2), uf) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
-	u = f = 0;
-	csc_tmem_scan(buf, used, loose, NULL);
-	cclog(u == 0x1121 && f == 0x14b, "Allocated 2 words by Best Fit method [%x %x]\n", u, f);
+	uf[0] = uf[1] = 0;
+	csc_tmem_scan(buf, tmem_tfit_used, tmem_tfit_loose, uf);
+	cclog(uf[0] == 0x1121 && uf[1] == 0x14b, "Allocated 2 words by Best Fit method [%x %x]\n", uf[0], uf[1]);
 
-	if (memory_set_pattern(buf, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1)) == NULL) return;
+	if (tmem_set_pattern(buf, CSC_MEM_WORST_FIT | CSC_MEM_SETPG(0,1), uf) == NULL) return;
 	csc_tmem_alloc(buf, sizeof(int)*2);
-	u = f = 0;
-	csc_tmem_scan(buf, used, loose, NULL);
-	cclog(u == 0x111b && f == 0x142, "Allocated 2 words by Worst Fit method [%x %x]\n", u, f);
+	uf[0] = uf[1] = 0;
+	csc_tmem_scan(buf, tmem_tfit_used, tmem_tfit_loose, uf);
+	cclog(uf[0] == 0x111b && uf[1] == 0x142, "Allocated 2 words by Worst Fit method [%x %x]\n", uf[0], uf[1]);
 }
 
 #endif	/* CFG_UNIT_TEST */

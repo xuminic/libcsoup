@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	2		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	3		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	4		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -498,7 +498,7 @@ void *csc_pack_hex_index(void *pachex);
 #define CSC_MERR_RANGE		-4
 #define CSC_MERR_TYPE		-5
 
-typedef int	(*F_MEM)(void *heap, void *memc, void *pobj);
+typedef int	(*F_MEM)(void *heap, void *mctl, void *pobj);
 
 #ifdef __cplusplus
 extern "C"
@@ -509,6 +509,7 @@ void *csc_tmem_init(void *heap, size_t len, int flags);
 void *csc_tmem_alloc(void *heap, size_t n);
 int csc_tmem_free(void *heap, void *mem);
 void *csc_tmem_scan(void *heap, F_MEM used, F_MEM loose, void *pobj);
+void *csc_tmem_memory(void *heap, void *mctl, size_t *osize);
 size_t csc_tmem_attrib(void *heap, void *mem, int *state);
 void *csc_tmem_front_guard(void *heap, void *mem, int *xsize);
 void *csc_tmem_back_guard(void *heap, void *mem, int *xsize);
