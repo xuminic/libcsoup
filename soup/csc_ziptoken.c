@@ -30,24 +30,23 @@
 #include <string.h>
 #include "libcsoup.h"
 
-/* This function splits the string into tokens. It extracts everything
-   between delimiter.
-
-   Unlike fixtoken(), it treats continous delimiters as one single delimter.
+/* !\brief breaks a string into tokens
  
-   sour  - the input string 
-   idx   - the string array for storing tokens
-   ids   - the maximem number of tokens, the size of "idx"
-   delim - the delimiter array, each character in the array is a delimiter.
+   This function splits the string into tokens and stores the pointers to tokens
+   into the index array 'idx'. It extracts everything between delimiter.
 
-   It returns the number of token extracted.
+   Unlike csc_fixtoken(), it treats continous delimiters as one single delimter.
+ 
+   \param[in]  sour   the source string
+   \param[out] idx    the string array for storing tokens
+   \param[in]  ids    the maximem allowed number of tokens, which is the size of 'idx'
+   \param[in]  delim  the delimiter array, each character in the array is a delimiter
 
-   For example, fixtoken("#abc  wdc:have:::#:debug", idx, 16, "# :") returns
+   \return the number of extracted tokens.
+   \remark the source string 'sour' will be changed.
+   \remark csc_ziptoken("#abc  wdc:have:::#:debug", idx, 16, "# :") returns
    4 tokens "abc", "wdc", "have" and "debug".
-   
-   NOTE:  'sour' will be changed.
 */
-
 int csc_ziptoken(char *sour, char **idx, int ids, char *delim)
 {
 	int	i, ss;
@@ -66,7 +65,27 @@ int csc_ziptoken(char *sour, char **idx, int ids, char *delim)
 	return i;
 }
 
-char **csc_ziptoken_copy(char *sour, char *delim, int *ids)
+/* !\brief breaks a string into tokens
+ 
+   This function splits the string into tokens and stores the pointers to tokens
+   into the index array 'idx'. It extracts everything between delimiter.
+   The difference to csc_ziptoken() is it will allocate a piece of memory large 
+   enough to store the source string and the delimited tokens without changing the 
+   source string.
+
+   Unlike csc_fixtoken_alloc(), it treats continous delimiters as one single delimter.
+ 
+   \param[in]   sour   the source string
+   \param[in]   delim  the delimiter array, each character in the array is a delimiter
+   \param[in]   ids    the maximem allowed number of tokens
+   \param[out]  ids    the number of received tokens
+
+   \return the number of extracted tokens.
+   \remark 
+       idx = csc_fixtoken_alloc("#abc  wdc:have:::#:debug", "# :", &ids);
+       return 4 tokens: "abc", "wdc", "have" and "debug".
+*/
+char **csc_ziptoken_alloc(char *sour, char *delim, int *ids)
 {
 	char	**token;
 	int	i, n;

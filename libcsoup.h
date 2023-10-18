@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	2		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	5		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	6		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -553,6 +553,7 @@ char *csc_extname_filter_export_alloc(void *efft);
 
 size_t csc_strlcat(char *dst, const char *src, size_t siz);
 size_t csc_strlcpy(char *dst, const char *src, size_t siz);
+void *csc_strlmove(void *dest, size_t dlen, const void *sour, size_t slen);
 char *csc_strcpy_alloc(const char *src, int extra);
 char *csc_strfill(char *s, int padto, int ch);
 int csc_memcpy(char *dest, int dlen, char *from, char *to);
@@ -579,9 +580,9 @@ int csc_strcmp_list(char *dest, char *src, ...);
 int csc_strcmp_list_nc(char *dest, char *src, ...);
 
 int csc_fixtoken(char *sour, char **idx, int ids, char *delim);
-char **csc_fixtoken_copy(char *sour, char *delim, int *ids);
+char **csc_fixtoken_alloc(char *sour, char *delim, int *ids);
 int csc_ziptoken(char *sour, char **idx, int ids, char *delim);
-char **csc_ziptoken_copy(char *sour, char *delim, int *ids);
+char **csc_ziptoken_alloc(char *sour, char *delim, int *ids);
 int csc_isdelim(char *delim, int ch);
 char *csc_cuttoken(char *sour, char **token, char *delim);
 char *csc_gettoken(char *sour, char *buffer, int blen, char *delim);

@@ -31,22 +31,21 @@
 #include "libcsoup.h"
 
 
-/* This function splits the string into tokens. It extracts everything 
-   between delimiter.
+/* !\brief breaks a string into tokens
  
-   sour  - the input string
-   idx   - the string array for storing tokens
-   ids   - the maximem number of tokens, the size of "idx"
-   delim - the delimiter array, each character in the array is a delimiter.
+   This function splits the string into tokens and stores the pointers to tokens
+   into the index array 'idx'. It extracts everything between delimiter.
+ 
+   \param[in]  sour   the source string
+   \param[out] idx    the string array for storing tokens
+   \param[in]  ids    the maximem allowed number of tokens, which is the size of 'idx'
+   \param[in]  delim  the delimiter array, each character in the array is a delimiter
 
-   It returns the number of extracted tokens.
-
-   For example, fixtoken("#abc  wdc:have:::#:debug", idx, 16, "# :") returns
-   10 tokens "", "abc", "", "wdc", "have", "", "", "", "" and "debug".
-   
-   NOTE:  'sour' will be changed.
+   \return the number of extracted tokens.
+   \remark the source string 'sour' will be changed.
+   \remark csc_fixtoken("#abc  wdc:have:::#:debug", idx, 16, "# :") returns
+   10 tokens: "", "abc", "", "wdc", "have", "", "", "", "" and "debug".
 */
-
 int csc_fixtoken(char *sour, char **idx, int ids, char *delim)
 {
 	int	i;
@@ -63,7 +62,26 @@ int csc_fixtoken(char *sour, char **idx, int ids, char *delim)
 	return i;
 }
 
-char **csc_fixtoken_copy(char *sour, char *delim, int *ids)
+/* !\brief breaks a string into tokens with allocated memory
+ 
+   This function splits the string into tokens and stores the pointers to tokens
+   into the index array 'idx'. It extracts everything between delimiter.
+   The difference to csc_fixtoken() is it will allocate a piece of memory large 
+   enough to store the source string and the delimited tokens without changing the 
+   source string.
+ 
+   \param[in]   sour   the source string
+   \param[in]   delim  the delimiter array, each character in the array is a delimiter
+   \param[in]   ids    the maximem allowed number of tokens
+   \param[out]  ids    the number of received tokens
+
+   \return the pointer to the string array of the extracted tokens.
+   \remark the allocated memory should be freed by the caller.
+   \remark 
+       idx = csc_fixtoken_alloc("#abc  wdc:have:::#:debug", "# :", &ids);
+       returns 10 tokens: "", "abc", "", "wdc", "have", "", "", "", "" and "debug".
+*/
+char **csc_fixtoken_alloc(char *sour, char *delim, int *ids)
 {
 	char	**token;
 	int	i, n;

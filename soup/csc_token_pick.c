@@ -40,14 +40,12 @@
    csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 3, ...) points to "g"
    csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 4, ...) points to "1958342"
 
-   index out of range returns NULL.
-
    \param[in]   s    The source string
    \param[in]   sep  The delimiter to seperate the tokens
    \param[in]   idx  The index to the tokens
    \param[out]  len  The effective lenght of the string
 
-   \return The pointer to the token.
+   \return The pointer to the token, or NULL if index out of token.
    \remark This function does not change the source string.
 */
 char *csc_token_pick_ro(char *s, int sep, int idx, int *len)
@@ -73,19 +71,11 @@ char *csc_token_pick_ro(char *s, int sep, int idx, int *len)
    The csc_token_pick() is similar to csc_token_pick_ro() except it will
    chop off everything after the token.
 
-   csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 0,...) returns "https:"
-   csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 1, ...) returns ""
-   csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 2, ...) returns "libzip.org"
-   csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 3, ...) returns "g"
-   csc_token_pick_ro("https://libzip.org/g/1958342/016a3b968d/", '/', 4, ...) returns "1958342"
-
-   index out of range returns NULL.
-
    \param[in]   s    The source string
    \param[in]   sep  The delimiter to seperate the tokens
    \param[in]   idx  The index to the tokens
 
-   \return The pointer to the token.
+   \return The pointer to the token, or NULL if index out of token.
    \remark This function changes the source string.
 */
 char *csc_token_pick(char *s, int sep, int idx)
@@ -137,21 +127,16 @@ char *csc_token_pick_alloc(char *s, int sep, int idx, int extra)
    \param[in]  buf    Caller supplied buffer for copying the token
    \param[in]  blen   The length of the 'buf'
 
-   \return 'buf' where the token being copied to.
+   \return The pointer to the token in the source string 's'.
    \remark This function doesn't change the source string.
 */
 char *csc_token_pick_copy(char *s, int sep, int idx, char *buf, int blen)
 {
 	int	len;
 
-	if ((s = csc_token_pick_ro(s, sep, idx, &len)) == NULL) {
-		return NULL;
+	if ((s = csc_token_pick_ro(s, sep, idx, &len)) != NULL) {
+		csc_strlmove(buf, blen, s, len);
 	}
-
-	blen--;
-	len = len < blen ? len : blen;
-	memcpy(buf, s, len);
-	s[len] = 0;
-	return buf;
+	return s;
 }
 

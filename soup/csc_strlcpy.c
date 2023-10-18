@@ -74,3 +74,12 @@ size_t csc_strlcpy(char *dst, const char *src, size_t siz)
  * vim600: sw=4 ts=4 fdm=marker
  * vim<600: sw=4 ts=4
  */
+
+void *csc_strlmove(void *dest, size_t dlen, const void *sour, size_t slen)
+{
+	dlen--;		/* save for asc-0 */
+	dlen = dlen < slen ? dlen : slen;	/* minimum copy */
+	memmove(dest, sour, dlen);
+	((char*)dest)[dlen] = 0;
+	return dest;
+}

@@ -124,7 +124,7 @@ char *csc_token_tail_alloc(char *s, int sep, int extra)
    \param[in]  buf   Caller supplied buffer for copying the trimmer string
    \param[in]  blen  The length of the 'buf'
 
-   \return 'buf' where the token being copied to.
+   \return The pointer to the token in the source string 's'.
    \remark This function doesn't changes the source string.
 */
 char *csc_token_tail_copy(char *s, int sep, char *buf, int blen)
@@ -132,10 +132,7 @@ char *csc_token_tail_copy(char *s, int sep, char *buf, int blen)
 	int	len;
 
 	s = csc_token_tail_ro(s, sep, &len);
-	blen--;
-	len = len < blen ? len : blen;
-	memcpy(buf, s, len);
-	s[len] = 0;
-	return buf;
+	csc_strlmove(buf, blen, s, len);
+	return s;
 }
 

@@ -124,7 +124,7 @@ char *csc_trim_body_alloc(char *s, char *cset, int extra)
    \param[in]  buf   Caller supplied buffer for copying the trimmer string
    \param[in]  blen  The length of the 'buf'
 
-   \return 'buf' where the trimmed string being copied to.
+   \return The pointer to the trimmed string in the source string 's'.
    \remark This function doesn't changes the source string.
 */
 char *csc_trim_body_copy(char *s, char *cset, char *buf, int blen)
@@ -132,10 +132,7 @@ char *csc_trim_body_copy(char *s, char *cset, char *buf, int blen)
 	int	len;
 
 	s = csc_trim_body_ro(s, cset, &len);
-	blen--;		/* space for asc-0 */
-	len = len < blen ? len : blen;
-	memcpy(buf, s, len);
-	s[len] = 0;
-	return buf;
+	csc_strlmove(buf, blen, s, len);
+	return s;
 }
 
