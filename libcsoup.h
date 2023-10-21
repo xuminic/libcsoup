@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	2		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	6		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	7		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -304,15 +304,30 @@ int csc_cdl_list_state(CSCLNK **anchor);
 #define CSC_MEMDUMP_TYPE_EE	0x50	/* float, size depend on BIT_MASK */
 #define CSC_MEMDUMP_TYPE_MASK	0xf0	
 
-#define CSC_MEMDUMP_WID_MASK	0xf00	/* always plus 2 */
-#define CSC_MEMDUMP_WIDTH(n)	(((n)<<8) & CSC_MEMDUMP_WID_MASK)
+#define CSC_MEMDUMP_NO_GLYPH	0x0100	/* don't show ASC glyphes */
+#define CSC_MEMDUMP_NO_ADDR	0x0200	/* don't show address */
+#define CSC_MEMDUMP_NO_FILLING	0x0400	/* don't fill leading 0 */
+#define CSC_MEMDUMP_NO_SPACE	0x0800	/* don't fill space between numbers */
+#define CSC_MEMDUMP_ALIGN_LEFT	0x1000	/* align to left */
+#define CSC_MEMDUMP_REVERSE	0x2000	/* reverse display */
+#define CSC_MEMDUMP_CTL_MASK	0xff00
 
-#define CSC_MEMDUMP_NO_GLYPH	0x1000	/* don't show ASC glyphes */
-#define CSC_MEMDUMP_NO_ADDR	0x2000	/* don't show address */
-#define CSC_MEMDUMP_NO_FILLING	0x4000	/* don't fill leading 0 */
-#define CSC_MEMDUMP_NO_SPACE	0x8000	/* don't fill space between numbers */
-#define CSC_MEMDUMP_ALIGN_LEFT	0x10000	/* align to left */
-#define CSC_MEMDUMP_REVERSE	0x20000	/* reverse display */
+/* the width mask is used to make up the width in the last line of the print,
+ * like 16 hex number a line, but the last line has only 5 members.
+ * the limit of the make up is 8 bit, 255 members */
+#if	(UINT_MAX > 65536)	/* only for 32-bit or 64-bit C */
+#define CSC_MEMDUMP_WID_MASK	0xf0000
+#define CSC_MEMDUMP_WIDTH(n)	(((n)<<16) & CSC_MEMDUMP_WID_MASK)
+#define CSC_MEMDUMP_WIDGET(f)	(((f) & CSC_MEMDUMP_WID_MASK) >> 16)
+#define CSC_MEMDUMP_MKUP_MSK	0xff00000
+#define CSC_MEMDUMP_SETMKUP(f,n)  ((((n)<<20) & CSC_MEMDUMP_MKUP_MSK) | ((f) & ~CSC_MEMDUMP_MKUP_MSK))
+#define CSC_MEMDUMP_GETMKUP(f)	(((f)&CSC_MEMDUMP_MKUP_MSK) >> 20)
+#else
+#define CSC_MEMDUMP_WIDTH(n)	0
+#define CSC_MEMDUMP_WIDGET(f)	0
+#define CSC_MEMDUMP_SETMKUP(f,n) (f)
+#define CSC_MEMDUMP_GETMKUP(f)	0
+#endif
 
 #ifdef __cplusplus
 extern "C"

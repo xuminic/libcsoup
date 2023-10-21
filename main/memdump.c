@@ -26,7 +26,7 @@
 
 int memdump_main(void *rtime, int argc, char **argv)
 {
-	char	user[384], buf[256];
+	char	user[380], buf[256];
 	int	i, len;
 	int	flags[] = {
 		CSC_MEMDUMP_BIT_16,
@@ -34,7 +34,7 @@ int memdump_main(void *rtime, int argc, char **argv)
 		CSC_MEMDUMP_BIT_64,
 		CSC_MEMDUMP_BIT_FLOAT | CSC_MEMDUMP_TYPE_EE,
 		CSC_MEMDUMP_BIT_DOUBLE | CSC_MEMDUMP_TYPE_EE,
-		CSC_MEMDUMP_TYPE_HEXL | CSC_MEMDUMP_WIDTH(3) | 
+		CSC_MEMDUMP_TYPE_HEXL | CSC_MEMDUMP_WIDTH(4) |
 			CSC_MEMDUMP_ALIGN_LEFT | CSC_MEMDUMP_NO_FILLING,
 		CSC_MEMDUMP_TYPE_UDEC,
 		CSC_MEMDUMP_TYPE_IDEC | CSC_MEMDUMP_BIT_64,

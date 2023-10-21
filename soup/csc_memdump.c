@@ -17,7 +17,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,8 +64,8 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 		strcat(format, "-");
 	}
 	/* define the display width of each number */
-	n = (flags & CSC_MEMDUMP_WID_MASK) >> 8;
-	if (n > 0) {	/* if the width is explicitly given */
+	if ((n = CSC_MEMDUMP_WIDGET(flags)) > 0) {
+		/* if the width is explicitly given for decimal display */
 		if (flags & CSC_MEMDUMP_NO_FILLING) {
 			sprintf(tmp, "%d", n);
 		} else {
@@ -117,7 +117,9 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 
 	//printf("%s %d\n", format, step);
 	
-	/* begin to print; try print the address first */
+	/* begin to print; try to print the address first */
+	/* Note that the buf/blen are allowed to be NULL/0, which means a psudo-dump.
+	 * The function should return the length of the psudo-dump */
 	amnt = 0;
 	if ((flags & CSC_MEMDUMP_NO_ADDR) == 0) {
 		n = sprintf(tmp, "%lX: ", (unsigned long) mem);
@@ -168,12 +170,11 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 			if (CSC_MEMDUMP_TYPE_SIGNED(flags)) {
 				n = sprintf(tmp, format, *mp);
 			} else {
-				n = sprintf(tmp, format, 
-						*((unsigned char *)mp));
+				n = sprintf(tmp, format, *((unsigned char *)mp));
 			}
 			break;
 		}
-		if (buf && blen >= n) {
+		if (buf && (blen > n)) {
 			strcpy(buf, tmp);
 			buf  += n;
 			blen -= n;
@@ -187,24 +188,39 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 		}
 		sp -= step;
 	}
+	
+	/* make up the width */
+	memset(tmp, ' ', n);	/* unit length 'n' derived from the previous dumping */
+	tmp[n] = 0;
+	for (sp = CSC_MEMDUMP_GETMKUP(flags); sp > 0; sp--) {
+		if (buf && (blen > n)) {
+			strcpy(buf, tmp);
+			buf  += n;
+			blen -= n;
+		}
+		amnt += n;
+	}
+
 	if (flags & CSC_MEMDUMP_NO_GLYPH) {
 		return amnt;
 	}
 
-	if (buf && blen > 0) {
-		strcpy(buf, " ");
-		buf++;
+	/* adding 1 white space between hex number and glyph */
+	if (buf && (blen > 1)) {
+		*buf++ = ' ';
 		blen--;
 	}
 	amnt++;
+
+	/* dump the glyph part */
 	mp = mem;
 	sp = msize;
 	while (sp) {
-		if (buf && blen > 0) {
-			if ((*mp < ' ') || (*mp > 0x7e)) {
-				*buf++ = '.';
-			} else {
+		if (buf && (blen > 1)) {
+			if (isprint(*mp)) {
 				*buf++ = *mp;
+			} else {
+				*buf++ = '.';
 			}
 			blen--;
 		}
@@ -216,8 +232,10 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 		sp--;
 		amnt++;
 	}
-	if (buf && blen > 0) {
-		*buf++ = 0;
+
+	/* the final asc-0 should be always available */
+	if (buf && (blen > 0)) {
+		*buf = 0;
 	}
 	return amnt;
 }
@@ -235,7 +253,12 @@ int csc_memdump(void *mem, int msize, int column, int flags)
 
 	mp = mem;
 	while (msize) {
-		len = csize < msize ? csize : msize;
+		if (csize < msize) {
+			len = csize;
+		} else {
+			len = msize;
+			flags = CSC_MEMDUMP_SETMKUP(flags, csize - msize);
+		}
 		csc_memdump_line(mp, len, flags, buf, bsize);
 		CDB_SHOW(("%s\n", buf));
 
