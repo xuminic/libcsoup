@@ -35,6 +35,7 @@
 struct	clirt	{
 	int	optind;
 	int	optopt;
+	char	*optlast;
 	char	*optarg;
 	int	argc;
 	char	**argv;
@@ -96,6 +97,18 @@ int csc_cli_qopt_optind(void *ropt)
 int csc_cli_qopt_optopt(void *ropt)
 {
 	return ((struct clirt *)ropt)->optopt;
+}
+
+/*!\brief Retrieve the last option string.
+
+   \param[in]  ropt The previous allocated data structure for parsing 
+                    command line arguments.
+
+   \return The last option string.
+*/
+char *csc_cli_qopt_optlast(void *ropt)
+{
+	return ((struct clirt *)ropt)->optlast;
 }
 
 /*!\brief Retrieve the required argument.
@@ -181,8 +194,15 @@ int csc_cli_qopt(void *ropt, struct cliopt *optbl)
 			}
 		}
 	}
+	
+	/* preload optopt and optlast in case error option or next argument missing */
+	rtbuf->optopt = opt[1];		
+	rtbuf->optlast = *rtbuf->argv;
+
 	if (rc == CLI_EOL) {
-		rtbuf->optopt = opt[1];
+		/* getopt(3): By default, getopt() prints an error message on standard error, 
+		 * places the erroneous option character in optopt, and returns '?' as the 
+		 * function result. */
 		if (*opt == '+') {
 			rtbuf->optarg = opt;
 			return -5;	/* end of scan by dead break */
@@ -201,16 +221,22 @@ int csc_cli_qopt(void *ropt, struct cliopt *optbl)
 		/* one argument required */
 		opt = *rtbuf->argv;
 
+		/* getopt(3): If the first character (following any optional '+' or '-' 
+		 * described above) of optstring is a colon (':'), then getopt() likewise 
+		 * does not print an error message. In addition, it returns ':' instead  
+		 * of '?' to indicate a missing option argument.  This allows the caller 
+		 * to distinguish the two different types of errors. */
 		if (rtbuf->optind >= rtbuf->argc) {
 			rtbuf->optopt = ':';
-			return '?';	/* end of scan by lost argument */
+			return ':';	/* end of scan by lost argument */
 		}
 		if ((*opt == '-') || (*opt == '+')) {
 			rtbuf->optopt = ':';
-			return '?';	/* miss an argument */
+			return ':';	/* miss an argument */
 		}
 		rtbuf->optarg = *rtbuf->argv++;
 		rtbuf->optind++;
+		rtbuf->optopt = 0;	/* not error occurred */
 	} else if ((CSC_CLI_PARAM(optbl) == 2) || (CSC_CLI_PARAM(optbl) == 4)) {
 		/* one optional argument required */
 		if (opt[1] != '-') {	/* short form */
@@ -223,6 +249,7 @@ int csc_cli_qopt(void *ropt, struct cliopt *optbl)
 				rtbuf->optarg = ++opt;
 			}
 		}
+		rtbuf->optopt = 0;	/* not error occurred */
 	}
 	return optbl->opt_char;
 }

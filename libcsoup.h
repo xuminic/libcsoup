@@ -32,7 +32,7 @@
 #define LIBCSOUP_VERSION(x,y,z)	(((x)<<24)|((y)<<12)|(z))
 #define LIBCSOUP_VER_MAJOR	1		/* 0-255 */
 #define LIBCSOUP_VER_MINOR	2		/* 0-4095 */
-#define LIBCSOUP_VER_BUGFIX	7		/* 0-4095 */
+#define LIBCSOUP_VER_BUGFIX	8		/* 0-4095 */
 
 
 /* Forward declaration the structure of circular doubly linked list to hide
@@ -97,6 +97,7 @@ void *csc_cli_qopt_open(int argc, char **argv);
 int csc_cli_qopt_close(void *ropt);
 int csc_cli_qopt_optind(void *ropt);
 int csc_cli_qopt_optopt(void *ropt);
+char *csc_cli_qopt_optlast(void *ropt);
 char *csc_cli_qopt_optarg(void *ropt);
 int csc_cli_qopt(void *ropt, struct cliopt *optbl);
 
