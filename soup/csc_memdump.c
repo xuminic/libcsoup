@@ -122,7 +122,7 @@ int csc_memdump_line(void *mem, int msize, int flags, char *buf, int blen)
 	 * The function should return the length of the psudo-dump */
 	amnt = 0;
 	if ((flags & CSC_MEMDUMP_NO_ADDR) == 0) {
-		n = sprintf(tmp, "%lX: ", (unsigned long) mem);
+		n = sprintf(tmp, "%p: ", mem);
 		if (buf && (blen > n)) {
 			strcpy(buf, tmp);
 			buf  += n;

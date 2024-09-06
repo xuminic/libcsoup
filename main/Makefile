@@ -25,7 +25,7 @@ TARGET	= csoup
 .PHONY: all clean
 all: $(TARGET)
 
-csoup: $(SRCS) main_define.h packhex.h libcsoup
+csoup: $(SRCS) main_define.h packhex.h
 	$(CC) $(CFLAGS) -L.. -o $@ $(SRCS) -lcsoup $(EXLIBS)
 
 main_define.h: mkclicmd
