@@ -694,10 +694,14 @@ static int mem_copy(char **dest, int *room, char *s)
 		 * 692 |    strncpy(*dest, s, n);
 		 *     |    ^~~~~~~~~~~~~~~~~~~~ */
 		if (s) {
+#if	__GNUC__ > 10
 			#pragma GCC diagnostic push
 			#pragma GCC diagnostic ignored "-Wstringop-truncation"
 			strncpy(*dest, s, n);
 			#pragma GCC diagnostic pop
+#else
+			strncpy(*dest, s, n);
+#endif
 		}
 	}
 	*dest += n;
